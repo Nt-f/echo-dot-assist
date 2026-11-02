@@ -6,6 +6,7 @@
 #include "display.h"
 #include "alarms.h"
 #include "board.h"
+#include "kiosk.h"
 #include "ring.h"
 #include <limits.h>
 #include <math.h>
@@ -24,9 +25,12 @@ int core_led_brightness(int set) { (void)set; return 100; }
 static float lux = NAN;
 float core_lux(void) { return lux; }
 void core_touch(int held) { (void)held; }
-static int last_brightness = -1, wakes;
+const char *core_name = "Echo Show 5 3fce9a";
+int core_oobe(void) { return 0; }
+static int last_brightness = -1, wakes, am_starts;
 void core_spawn(char *const argv[])
 {
+    if (!strcmp(argv[0], "/system/bin/am")) am_starts++;
     if (!strcmp(argv[0], "/system/bin/settings") && !strcmp(argv[3], "screen_brightness")) last_brightness = atoi(argv[4]);
     if (!strcmp(argv[0], "/system/bin/service") && !strcmp(argv[3], "9")) wakes++;
 }
@@ -98,6 +102,12 @@ int main(void)
     WAIT(nframes() >= 1);
     check(nframes() >= 1 && !last_frame(), "a frame of 320 x 170 above a band of 10");
     check(last_brightness == 80 * 255 / 100, "the backlight at the day level (80 %)");
+    check(pix(5, 0) == 0x00caff, "before Home Assistant: the boot's status (the bar along the top)");
+    if (font) check(lit(35, 65, NULL) > 200, "the status: what the Echo waits for");
+    { long k = nframes(); ms(2300); check(nframes() >= k + 2, "the status: drawn again each second (its dots)"); }
+    display_link(1);
+    WAIT((last_frame(), pix(5, 0) != 0x00caff));
+    check(pix(5, 0) != 0x00caff, "Home Assistant there: the status gone");
     int red;
     if (font) check(lit(25, 65, NULL) > 300 && lit(0, 15, NULL) == 0, "idle: the clock big in the middle, nothing at the top");
 
@@ -159,6 +169,38 @@ int main(void)
     display_setting(DS_MODE, DISPLAY_AWAKE);
     WAIT(nframes() > n0);
     check(nframes() > n0, "on again: the renderer started anew");
+
+    /* off and Home Assistant gone: the status anyway */
+    display_setting(DS_MODE, DISPLAY_OFF); ms(400);
+    display_link(0); n0 = nframes();
+    WAIT(nframes() > n0);
+    WAIT((last_frame(), pix(5, 0) == 0x00caff));
+    check(nframes() > n0 && pix(5, 0) == 0x00caff, "off, Home Assistant gone: the status shows anyway");
+    display_link(1); ms(400); n0 = nframes(); ms(1200);
+    check(nframes() == n0, "off again once it is back");
+    display_setting(DS_MODE, DISPLAY_AWAKE);
+
+    /* the kiosk: the app started, the screen its while it is in front and nothing of ours shows */
+    char err[100];
+    check(!kiosk_store("ha http://192.168.1.5:8123\nscreen Home\thttp://192.168.1.5:8123/hassmic/wall.html\nscreen Music\thttp://192.168.1.5:8123/music\n", err, sizeof err), "kiosk: two screens stored");
+    check(kiosk_store("screen Bad\tjavascript:alert(1)\n", err, sizeof err) && strstr(err, "http"), "kiosk: only http(s) screens");
+    check(kiosk_configured(), "kiosk: still the two screens after a refused config");
+    { size_t jn; char *j = kiosk_json(0, 1, &jn); check(j && strstr(j, "\"name\":\"Music\"") && !strstr(j, "\"token\":\""), "kiosk: its JSON, no token unless asked"); free(j); }
+    display_setting(DS_KIOSK, 1);
+    WAIT(am_starts > 0);
+    check(am_starts == 1, "kiosk on: the app started");
+    kiosk_polled(1); display_changed();
+    ms(600); n0 = nframes(); ms(1500);
+    check(nframes() == n0, "the app in front: our layer gone (no frames)");
+    display_ringing("Alarm 7 AM");
+    WAIT(nframes() > n0);
+    check(nframes() > n0, "a ring over the kiosk: our layer back");
+    display_ringing(NULL); ms(600); n0 = nframes(); ms(1500);
+    check(nframes() == n0, "the ring over: the kiosk's again");
+    kiosk_polled(0); display_changed();
+    WAIT(nframes() > n0);
+    check(nframes() > n0 && am_starts == 1, "the app paused: the clock, the app not started again within the minute");
+    display_setting(DS_KIOSK, 0);
 
     char c[400]; snprintf(c, sizeof c, "rm -rf '%s'", dir); if (system(c)) {}
     printf(fails ? "display: %d FAILED\n" : "display: all ok\n", fails);

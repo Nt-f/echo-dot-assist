@@ -14,3 +14,5 @@ void display_ringing(const char *what) { (void)what; }
 void display_changed(void) {}
 int  display_screen_timeout(int stock_ms) { return stock_ms; }
 int  display_keeps_awake(void) { return 0; }
+void display_link(int linked) { (void)linked; }
+int  display_splash(const char *file) { (void)file; return 1; }

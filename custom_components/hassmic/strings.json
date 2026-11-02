@@ -51,5 +51,25 @@
     "delete_alarm": { "name": "Delete alarm", "description": "Deletes an alarm (its switch entity) from the Echo." },
     "snooze": { "name": "Snooze", "description": "Snoozes the alarm ringing on an Echo.", "fields": { "device_id": { "name": "Echo", "description": "Which Echo." } } },
     "stop": { "name": "Stop", "description": "Stops what rings on an Echo, alarms and timers.", "fields": { "device_id": { "name": "Echo", "description": "Which Echo." } } }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "The Echo Show's screen",
+        "description": "Home Assistant on the Echo Show's screen, in hassmic's kiosk app. The Echo logs in as a user of its own, made for it here (local only, removed with this entry). Home Assistant's address as the Echo reaches it: {url}. The Echo reaches local addresses only.",
+        "data": {
+          "kiosk": "Show Home Assistant on the screen",
+          "kiosk_screens": "Screens (a handle at the top of the screen switches)",
+          "kiosk_default": "Start on, and go back to",
+          "kiosk_dashboard": "Dashboard (its path: lovelace is Overview)",
+          "kiosk_music": "Music Assistant (its panel's path or an address)",
+          "kiosk_custom_name": "Your page's name",
+          "kiosk_custom_url": "Your page's address",
+          "kiosk_return": "Back to the start screen after untouched for (0: never)",
+          "kiosk_admin": "The Echo's user is an administrator (Home Assistant's settings on the Echo)",
+          "kiosk_ha_url": "Home Assistant's address for the Echo (empty: the one found)"
+        }
+      }
+    }
   }
 }

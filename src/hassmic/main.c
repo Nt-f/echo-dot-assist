@@ -40,6 +40,7 @@
 #include "audio.h"
 #include "alarms.h"
 #include "display.h"
+#include "kiosk.h"
 #include "a2dp.h"
 #include "arb.h"
 #include "ble.h"
@@ -1027,6 +1028,7 @@ void core_link(int up, int ready)
 {
     int was = satellite_running;
     connected = up; satellite_running = up && ready; link_paused = 0;
+    display_link(up);
     if (satellite_running) adopted();
     if (!satellite_running) core_pipeline_finish();
     else if (!was && !core_local_wake && state == IDLE) pipeline_start(0);
@@ -3423,8 +3425,13 @@ int main(int argc, char **argv)
 {
     const char *manifest = NULL, *input = board.keypad; int port = 0, print_mdns = 0, o;
     micgain_init(&mic_gain, MICGAIN_LEVEL);            /* until the protocol has its saved settings (Wyoming: always) */
-    while ((o = getopt(argc, argv, "P:p:n:w:m:b:z:o:a:i:W:G:LEVSTB")) != -1) switch (o) {
+    while ((o = getopt(argc, argv, "P:p:n:w:m:b:z:o:a:i:W:G:Y:LEVSTB")) != -1) switch (o) {
         case 'G': return ring_generate(optarg);     /* root, at the satellite's start (main.sh leds) */
+        case 'Y': {                                 /* the boot's splash (main.sh satellite, display.h) */
+            char v[16];
+            if (!settings_peek("light_band", v, sizeof v)) ring_band_rows(atoi(v));
+            return display_splash(optarg);
+        }
         case 'P': proto = !strcmp(optarg, "wyoming") ? &proto_wyoming : &proto_esphome; break;
         case 'p': port = atoi(optarg); break;
         case 'n': core_name = optarg; break;
@@ -3519,6 +3526,7 @@ int main(int argc, char **argv)
     pthread_mutex_lock(&core_lock); core_timer_sound_default(); settings_load(); settings_preset(); pthread_mutex_unlock(&core_lock);    /* whatever the protocol */
     static const struct alarms_hooks alarm_hooks = { core_alarm_ring, core_alarms_changed };
     alarms_start(&alarm_hooks);                               /* the Echo's own alarms (alarms.h), whatever the protocol */
+    kiosk_load();                                             /* the kiosk's screens (kiosk.h), set from Home Assistant */
     display_start();                                          /* the clock on a screen (display.h); nothing without one */
     davs_start();                                             /* Amazon login for artifact downloads (settings page) */
     static const struct web_hooks web_hooks = { web_attention, web_approved };

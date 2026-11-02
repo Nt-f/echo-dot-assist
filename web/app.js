@@ -213,7 +213,7 @@ const LAYOUT = {
   wake: [['Engine', 'wake_engine'], ['How it hears you', 'speech_language', 'wake_word_adaptation']],
   lights: [['Brightness', 'led_auto_brightness', 'led_brightness'], ['Position', 'ring_rotation', 'light_band']],
   clock: [['Ringing', 'alarm_sound', 'alarm_ring', 'alarm_snooze', 'alarm_ramp', 'alarm_louder', 'alarm_keys'], ['Asking for them', 'alarm_voice', 'clock_format', 'alarms'],
-          ['Screen', 'display', 'display_text', 'display_text_seconds'],
+          ['Screen', 'display', 'display_text', 'display_text_seconds', 'display_kiosk'],
           ['Brightness', 'display_brightness', 'display_night_brightness', 'display_night_start', 'display_night_end', 'display_dark_room']],
 };
 
@@ -259,6 +259,7 @@ const HELP = {
   display_night_brightness: { help: 'The backlight at night, with "Always on, dimmed at night". 0 is the lowest it goes, not off. Default 10 %.' },
   display_night_start: { help: 'When the night starts (the Echo\'s local time, from Home Assistant). The same hour as its end: no night by the clock, only a dark room. Default 22:00.' },
   display_night_end: { help: 'When the night ends. Default 07:00.' },
+  display_kiosk: { help: 'Home Assistant on the screen, in hassmic\'s kiosk app: a wall panel of your rooms, Home Assistant\'s own dashboards, Music Assistant or a page of your own, switched by the handle at the top of the screen. The screens and the Echo\'s login are set up in Home Assistant: the hassmic integration\'s options (Settings › Devices & services › hassmic › Configure), which also switch this on. The clock, the words of a request and a ringing alarm still show over it. Needs an install of this version or later (the app and Android\'s WebView on the system partition).' },
   display_dark_room: { help: 'Night also while the room is dark, under 3 lux by the Echo\'s light sensor: a bedroom with the lights off at 9 pm. On by default.' },
   speaker_gain: { help: 'Makes the Echo\'s own speaker louder at every volume, for an Echo that is too quiet at full volume. It raises the amplifier stage in front of the speaker, which a stock Echo leaves at +0 dB (an Echo Dot 3\'s amplifier has only 2 dB more to give; an Echo Show 5 goes in steps of 1.5 dB, the nearest one to what you pick). Owners of an Echo Dot 2 heard +6 dB loud and clean at full volume; above that, loud music near full volume can distort, and a speaker that plays distorted for long can be damaged. Raise it a step at a time and turn it down at the first crackle. The 3.5 mm jack and Bluetooth speakers are not affected. An Echo Show 8 (1st gen) is loud already at +0 dB and goes down to −6 dB for that; a 2nd gen goes up to +9 dB, below where its amplifier distorts. Default +0 dB.' },
   even_volume: { help: 'Makes every step of the volume the same: each point is 0.5 dB, each press of the volume buttons 5 dB, from 1 (quiet, about 50 dB under full) to 100 (as loud as before). Without it the Echo plays a volume as a stock Echo does, where most of the change happens at one end: on an Echo Show the bottom half covers more than twice the range of the top half, and a step of one point often does nothing at all. The Echo keeps its own volume setting at the nearest step above, and turns the sound down the rest of the way itself. 0 is silent either way. A Bluetooth speaker that sets its own volume still does. Exported with the settings. On by default.' },
@@ -479,6 +480,7 @@ const SUB = {
   display_night_start: 'When the night starts',
   display_night_end: 'When it ends',
   display_dark_room: 'By the light sensor, whatever the hour',
+  display_kiosk: 'Home Assistant\'s pages, set up from the integration',
   drop_in_answer: 'How a call connects',
 };
 const CHOICE_NAMES = {

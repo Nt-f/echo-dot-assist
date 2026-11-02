@@ -2250,6 +2250,47 @@ Run in this order. Each step says what it proves.
       Open: reminders; alarm sentences in other languages; Pico TTS (libttspico.so, AOSP's, on checkers) for answers
       without Home Assistant; the screen's touch beyond a ring (dismiss the words, a tap for the time).
       Not worth mapping: Matter (`ace_chip_service`), Sidewalk/BLE mesh, calling outside the house (`commsd`), stereo pairs.
+- [~] Echo Show: the start's status on the screen and Home Assistant on it (asked 2026-11-02: "full Home Assistant app
+      ... a custom card renderer ... like a Shelly Wall Display or Apple's Home display", all of it under 512 MB).
+      Boot: boot.log of the Show 5 (2026-11-02): firewall at boot+9, `== satellite start` at +26 (the boot animation
+      ends about then), hassmic's first frame at +46: 20 s of black, mostly lockdown/alexa-off stopping services.
+      `hassmic -Y <file>` (`display_splash`): fonts, ringbar's screen mode, main.sh's `stage` line from
+      /data/local/hassmic/boot-status (root's, 644), its pid in state/splash.pid; the real display ends it once its own
+      layer is up (`splash_end`), else 180 s.  Then the status screen in display_screen.c until `display_link(1)`
+      (core_link) and again while the link is down, whatever "display" says (off: shown, then off again): not set up
+      (`core_oobe`: the name to add in HA, the page's address), no IPv4 (getifaddrs), waiting for HA / HA went away;
+      redrawn each second (dots).  display_test: status first, gone with the link, shown with display off.
+      Kiosk: the stock WebView is Amazon's `com.amazon.webview.chromium` 118.0.5993 (V8 11.8; framework-res's
+      config_webview_packages names only it), sdk 24, needs nothing else; it was in STOCK_APPS_OUT, now kept (back on
+      the partition by sysinstall's stock_apps).  MemAvailable with hassmic running: 650 MB of 997 MB.  No IME on the
+      Echo (bluestone-proxy-ime gone, no LatinIME): no typing a login, hence the integration's own user + LLAT
+      (local_only, group system-users or admin by option, removed with the entry), POST /api/kiosk with the token
+      sealed as the Wi-Fi password is (`unseal`), state/kiosk 0600, GET /kiosk/config only from loopback.  The app
+      (`tools/kiosk`, Java built with the SDK by build.sh: the dexasm.py way does not reach a subclass of Activity, a
+      WebViewClient, lambdas; the APK is checked in as hassmic-home.apk is) injects `hassTokens` into HA's origin
+      through loadDataWithBaseURL, polls its config every 5 s (/front, /back on pause), the handle and switcher, back
+      to the default after `return` s untouched; hassmic `am start`s it (at most once a minute) while display_kiosk is
+      on and it is not in front, and closes its own layer while the app is in front and nothing of ours shows (a
+      ring, the words, the status take it back: ringbar's screen process ~1.2 s to come up).  Memory: the wall panel
+      (frontend/wall.html + wall.js, vanilla, subscribe_entities + list_for_display + call_service; laid out as Apple's
+      HomeView, asked 2026-11-02: square cells, as many as fit (Show 5: 6 x 3 of 139 px), 2x2 for thermostat and what
+      plays, pages Home + one per area swiped with scroll-snap, sizes in --u = a cell's hundredth (container units
+      resolve against the widget's ancestor, not itself), the ambient clock after 120 s) instead of an HA
+      dashboard (HA's frontend in Chromium: 150-250 MB); one page at a time; no WebView while off; freeMemory on
+      TRIM_MEMORY_RUNNING_LOW.  tests/ha_real_kiosk.py (real HA 2026.10 + demo, headless Chrome renders the wall,
+      a tap toggles, build/test-logs/wall.png).
+      On the user's Show 5 (2026-11-02, push + reboot): the splash from boot+21 to boot+41 (`display: the boot's splash
+      ended` as hassmic's display came up), AmazonWebView back and org.hassmic.kiosk installed at the boot, hassmic
+      `am start`ed it and gave up its layer ("display: the kiosk's"), Amazon's WebView in our app (its
+      WebViewExtAmazon config lines: low-memory device, MSE buffers cut), HA's login page full screen above the band.
+      The kiosk process: 91 MB PSS (Graphics 37 MB, native 9 MB, Java 5 MB; one process: the renderer runs in it on
+      Android 7), MemAvailable 605 -> 484 MB.  Keyboard (asked the same day: "Needs osk"): no IME on the Echo, so
+      Kiosk.Keys: FOCUS_JS (focusin/focusout through shadow roots) -> bridge typing(on, kind) -> a keyboard below the
+      WebView (the page shrinks, the field scrolled into view), keys as KeyCharacterMap VIRTUAL_KEYBOARD events into
+      the WebView (insertText for what the map lacks); typed "Abc1" into HA's login (mwc fields in shadow DOM),
+      shift, ?123, ⌫.  Not yet measured: HA's full UI logged in, the wall panel there (the user's HA has no
+      integration of this version yet), a tap on the kiosk while a ring shows (passes through?).  Open: kiosk entities in HA (screen select); the wall's choice of rooms/entities (now: every
+      area, registry-hidden ones left out); the screen waking on a touch while dark (the panel's touch controller).
 - [x] Drop In between Echos (2026-10-08, asked by a user with ten Echos who used Alexa's as an intercom). `dropin.c`:
       calls signed on the arbitration network (new arb type `T_MSG`, `arb_tell`, broadcast like the rest, repeated:
       invite every 250 ms until answered), audio unicast UDP 28932 (`-i`), Opus 16 kHz 20 ms 24 kbit/s inband FEC (stock

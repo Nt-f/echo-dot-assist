@@ -13,7 +13,9 @@ enum { DISPLAY_OFF, DISPLAY_AWAKE, DISPLAY_ALWAYS, DISPLAY_DIM, DISPLAY_MODES };
 extern const char *const display_modes[DISPLAY_MODES];
 
 /* the settings it keeps (settings.c reads and sets them through display_setting) */
-enum display_setting { DS_MODE, DS_TEXT, DS_TEXT_S, DS_BRIGHT, DS_NIGHT_BRIGHT, DS_NIGHT_START, DS_NIGHT_END, DS_DARK_ROOM, DS_COUNT };
+enum display_setting { DS_MODE, DS_TEXT, DS_TEXT_S, DS_BRIGHT, DS_NIGHT_BRIGHT, DS_NIGHT_START, DS_NIGHT_END, DS_DARK_ROOM,
+                       DS_KIOSK,       /* 1: the kiosk app (kiosk.h) has the screen while nothing of ours is to show */
+                       DS_COUNT };
 int  display_setting(enum display_setting which, int set);     /* set < 0 (INT_MIN for none): reads */
 
 int  display_present(void);                     /* 1: a screen to draw on */
@@ -23,6 +25,13 @@ void display_reply(const char *text);           /* what the assistant answered *
 void display_run(int active);                   /* a request runs (1) or is over (0): its words stay a while after */
 void display_ringing(const char *what);         /* an alarm or timer rings ("Alarm 7:30 AM", "Pasta"); NULL: none */
 void display_changed(void);                     /* alarms, the clock's format, a setting: draw again */
+/* Home Assistant's link (core_link): until the first, and while it is down, the screen says what the Echo waits for
+ * (the boot's status), whatever the display setting; the kiosk only once it is up */
+void display_link(int linked);
+/* hassmic -Y: the boot's status before hassmic runs (main.sh satellite's ~20 s of stopping Amazon's services): the
+ * text of `file` (one line, rewritten by main.sh) on the screen until the real display takes the screen (it ends this
+ * process through state/splash.pid) or 180 s.  0 when it showed anything */
+int  display_splash(const char *file);
 /* ring_band.c: the screen_off_timeout the band's power policy is to set, given stock's for now (ms) */
 int  display_screen_timeout(int stock_ms);
 int  display_keeps_awake(void);                 /* 1: the screen must not sleep now (always on, or something rings) */

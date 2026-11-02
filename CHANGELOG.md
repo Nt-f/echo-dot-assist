@@ -4,6 +4,19 @@ What changed for people using the Echo, newest first. Details and measurements a
 
 ## 2026-11-02
 
+- **Home Assistant on the Echo Show's screen.** A kiosk app of hassmic's own shows a wall panel in the manner of Apple's
+  HomeView (glass widgets over a wallpaper: clock, weather, the thermostat's big number, what plays, a camera, then a
+  page of tiles per room; tap to switch, hold for brightness, position, volume, temperature; a big clock when idle), Home Assistant's
+  own dashboards, Music Assistant or a page of your own, switched by a handle at the top of the screen. Set up in Home
+  Assistant: the hassmic integration's options, which also give the Echo a login of its own. The wall panel is light
+  enough for the Echo Show 5's memory. An update to this version and a restart of the Echo bring it (the update
+  puts Android's WebView back on the Echo, which Android only finds at a start).
+  See the guide's "Home Assistant on the screen".
+- **A keyboard on the Echo Show's screen.** The kiosk has an on-screen keyboard of its own (the Echo has none): it
+  comes up when you tap a text field, for a login, a search or a name.
+- **The Echo Show says what it is doing while it starts.** The 20 seconds of black screen after the boot animation now
+  show each step, then what the Echo waits for (Wi-Fi, Home Assistant, or how to add it to Home Assistant).
+
 - **Alarms nobody answers get louder.** After coming up to the timer volume, a ringing alarm keeps getting louder, 10
   points of volume a minute up to the loudest the Echo plays ("Unanswered alarms get louder" on the "Clock & alarms"
   page). Stopped or snoozed, everything is back at its own volume.

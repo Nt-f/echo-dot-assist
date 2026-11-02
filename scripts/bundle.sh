@@ -15,5 +15,5 @@ python3 scripts/otatool.py pack "$1" "$2" $OUT/hassmic.bundle \
     $(for k in wakealign/*.wa wakealign/*.was; do echo "$k:644"; done) \
     scripts/system/main.sh scripts/system/boot.sh scripts/system/sysinstall.sh $DDIR/hassmic.rc:644 \
     scripts/device/lockdown.sh scripts/device/alexa-off.sh scripts/device/alexa-on.sh scripts/device/artifact-install.sh scripts/device/wifi.sh \
-    $([ -z "$HOME_APK" ] || echo scripts/device/$HOME_APK:644) \
+    $([ -z "$HOME_APK" ] || echo scripts/device/$HOME_APK:644) $([ -z "${KIOSK_APK:-}" ] || echo scripts/device/$KIOSK_APK:644) \
     $([ -n "$ANDROID" ] && echo scripts/device/wifictl.dex:644) $([ -n "$SCREEN_BAND" ] && echo scripts/device/ringbar.dex:644)    # wifictl: WifiService's client (wifi.sh), Android models only (device.conf ANDROID); ringbar: the light band's renderer (ring_band.c, SCREEN_BAND); HOME_APK: the home screen (sysinstall.sh)

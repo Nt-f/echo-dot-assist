@@ -69,6 +69,8 @@ aioesphomeapi, wyoming, aiosendspin, noiseprotocol, aiohttp):
 .venv/bin/python tests/ha_real_end.py         # the Echo's end of audio in a real Home Assistant (stand-in STT and TTS as a
                                              # custom component): HA's STT stream ends with it, intent and reply follow
 .venv/bin/python tests/ha_real_alarms.py      # custom_components/hassmic (alarms integration and card) in a real HA
+.venv/bin/python tests/ha_real_kiosk.py       # the Echo Show's kiosk set up from the integration: user, token, screens,
+                                             # the wall panel in headless Chrome (build/test-logs/wall.png)
 .venv/bin/python tests/ha_real_dropin.py      # the blueprint in a real Home Assistant (build/ha-venv, made by --setup;
                                              # skips without it) with four Echos, one the released build: replies, timing.
                                              # All of it in an `unshare -rn` namespace with only lo
@@ -272,6 +274,16 @@ No model `#ifdef`s in shared code: new differences become a board field, a `devi
   through ring_band.c's power policy (`display_screen_timeout`), the backlight via `settings put system
   screen_brightness`.  `board.touch` (checkers: goodix-ts, not grabbed): a tap snoozes, 1.5 s stops (`core_touch`).
   The Makefile variable is SCREEN, not DISPLAY (X11's environment variable would win over `?=`).
+- **Kiosk** (`kiosk.c`, `kiosk.h`; app `tools/kiosk/`, `build.sh` with the Android SDK -> `scripts/device/hassmic-kiosk.apk`,
+  device.conf `KIOSK_APK`, /system/app/HassmicKiosk): Home Assistant's pages on the Echo Show's screen in a WebView on
+  the firmware's Amazon WebView (kept on the partition for it).  The integration (`custom_components/hassmic/kiosk.py`,
+  options flow) makes a local-only HA user + long-lived token per Echo and POSTs `/api/kiosk` (token sealed as the Wi-Fi
+  password is), `state/kiosk` 0600; the app reads `GET /kiosk/config[/front|/back]` from 127.0.0.1 only and injects
+  `hassTokens` into HA's origin.  Setting `display_kiosk`: display_screen.c `am start`s the app (`kiosk_tick`) and closes
+  its own layer while the app is in front and it has nothing to show.  The wall panel is `frontend/wall.html`+`wall.js`
+  (its own page on HA's websocket, not a dashboard: memory, the Show 5 under 512 MB for all of it).  The start's status:
+  `hassmic -Y <file>` (`display_splash`, main.sh `stage`), then display_screen.c's status screen until HA's link
+  (`display_link`).
 - **Sound packs** (`soundpack.c`, `soundpack.h`): sets of the Sounds card's sounds in `state/sound-packs/<id>/` (`name`,
   `<sound>.wav`), `/api/sound-pack`, page `packsCard`, a `.soundpack` file = a tar of `pack.json` + WAVs (`web/tar.js`).
   A pack is a whole set; 16 packs, 30 MB, 32 MB left on the partition (`HASSMIC_SOUNDPACK_MAX`, `_FREE_MIN` for tests).

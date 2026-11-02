@@ -262,6 +262,10 @@ jobs:
         env:
           HASSMIC_HA_REQUIRED: '1'
         run: .venv/bin/python tests/ha_real_alarms.py
+      - name: The Echo Show's kiosk set up from Home Assistant, its wall panel
+        env:
+          HASSMIC_HA_REQUIRED: '1'
+        run: .venv/bin/python tests/ha_real_kiosk.py
 
   release:
     needs: [version, build, test]

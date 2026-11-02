@@ -23,7 +23,8 @@ from homeassistant.helpers.typing import ConfigType
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .api import DEFAULT_PORT, Echo, EchoAuthError, EchoError
-from .const import CARD_URL, CONF_KEY, DAY_KEYS, DOMAIN, SCAN_INTERVAL_S
+from . import kiosk
+from .const import CARD_URL, CONF_KEY, DAY_KEYS, DOMAIN, SCAN_INTERVAL_S, WALL_URL
 
 _LOGGER = logging.getLogger(__name__)
 PLATFORMS = [Platform.SWITCH]
@@ -75,7 +76,11 @@ class HassmicCoordinator(DataUpdateCoordinator[dict]):
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     # the dashboard card, served from here and loaded on every dashboard
-    await hass.http.async_register_static_paths([StaticPathConfig(CARD_URL, str(Path(__file__).parent / "frontend" / "hassmic-alarms-card.js"), False)])
+    fe = Path(__file__).parent / "frontend"
+    # the wall panel: no login to fetch it (it is only a page), its data then over the websocket with the kiosk's token
+    await hass.http.async_register_static_paths([StaticPathConfig(CARD_URL, str(fe / "hassmic-alarms-card.js"), False),
+                                                 StaticPathConfig(WALL_URL, str(fe / "wall.html"), False),
+                                                 StaticPathConfig("/hassmic/wall.js", str(fe / "wall.js"), False)])
     from homeassistant.components.frontend import add_extra_js_url
     add_extra_js_url(hass, CARD_URL)
     add_extra_js_url(hass, CARD_URL, es5=True)      # the legacy build too (older browsers); defined once either way
@@ -122,7 +127,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await coordinator.async_config_entry_first_refresh()
     entry.runtime_data = coordinator
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    if entry.options.get(kiosk.OPT_KIOSK) or entry.data.get(kiosk.DATA_USER):
+        try:
+            await kiosk.push(hass, entry, echo)
+        except EchoError:
+            pass                            # logged; the next start or options change sends it again
     return True
+
+
+async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    await kiosk.remove(hass, entry)
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:

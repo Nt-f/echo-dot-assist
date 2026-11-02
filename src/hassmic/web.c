@@ -44,6 +44,8 @@
 #include "web.h"
 #include "core.h"
 #include "alarms.h"
+#include "display.h"
+#include "kiosk.h"
 #include "adbwifi.h"
 #include "arb.h"
 #include "dropin.h"
@@ -74,6 +76,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
+#include <netinet/in.h>
 #include <sys/time.h>
 #include <time.h>
 #include <unistd.h>
@@ -289,17 +292,20 @@ static int send_all(int fd, const void *p, size_t n)
     return 0;
 }
 
-static void respond(int fd, int code, const char *type, const char *extra, const void *body, size_t len)
+/* cors 0: no Access-Control headers, so that no page's script may read the answer (the kiosk's config: the token) */
+static void respond_c(int fd, int cors, int code, const char *type, const char *extra, const void *body, size_t len)
 {
     char h[1024];
     const char *msg = code == 200 ? "OK" : code == 204 ? "No Content" : code == 400 ? "Bad Request" : code == 401 ? "Unauthorized"
                     : code == 404 ? "Not Found" : code == 409 ? "Conflict" : code == 413 ? "Payload Too Large" : code == 503 ? "Service Unavailable" : "Error";
     int n = snprintf(h, sizeof h, "HTTP/1.1 %d %s\r\nContent-Type: %s\r\nContent-Length: %zu\r\nConnection: close\r\nCache-Control: no-store\r\n"
-                     "Access-Control-Allow-Origin: *\r\nAccess-Control-Allow-Headers: X-HM-Pub, X-HM-Ctr, X-HM-Mac, Content-Type\r\n"
-                     "Access-Control-Allow-Methods: GET, POST, OPTIONS\r\nAccess-Control-Allow-Private-Network: true\r\n%s\r\n",
-                     code, msg, type, len, extra ? extra : "");
+                     "%s%s\r\n", code, msg, type, len,
+                     cors ? "Access-Control-Allow-Origin: *\r\nAccess-Control-Allow-Headers: X-HM-Pub, X-HM-Ctr, X-HM-Mac, Content-Type\r\n"
+                            "Access-Control-Allow-Methods: GET, POST, OPTIONS\r\nAccess-Control-Allow-Private-Network: true\r\n" : "",
+                     extra ? extra : "");
     if (send_all(fd, h, (size_t)n) == 0 && len) send_all(fd, body, len);
 }
+static void respond(int fd, int code, const char *type, const char *extra, const void *body, size_t len) { respond_c(fd, 1, code, type, extra, body, len); }
 
 static void respond_json(int fd, int code, const char *json) { respond(fd, code, "application/json", NULL, json, strlen(json)); }
 
@@ -631,6 +637,62 @@ static void sound_api(int fd, struct req *r)
  * /api/sound-pack/<id>/apply      POST  its sounds in use, Alexa's where it has none
  * /api/sound-pack/<id>/delete     POST
  * Signed.  Not in exports, as the sounds. */
+/* The kiosk (kiosk.h): Home Assistant's integration sets it up, the Echo Show's app reads it.
+ * /api/kiosk         GET   the config without the token (signed)
+ *                    POST  "key value" lines (kiosk.c), "token <sealed hex>" sealed with K as a Wi-Fi password is
+ * /kiosk/config[/front|/back]  GET  for the app on this Echo alone: from 127.0.0.1, the token in it; front/back: its
+ *                    activity is resumed or paused (whether the display gives it the screen) */
+static int from_loopback(int fd)
+{
+    struct sockaddr_storage a; socklen_t n = sizeof a;
+    if (getpeername(fd, (struct sockaddr *)&a, &n)) return 0;
+    if (a.ss_family == AF_INET) return ((struct sockaddr_in *)&a)->sin_addr.s_addr == htonl(INADDR_LOOPBACK);
+    if (a.ss_family == AF_INET6) {
+        const struct in6_addr *x = &((struct sockaddr_in6 *)&a)->sin6_addr;
+        static const uint8_t mapped[16] = { 0,0,0,0,0,0,0,0,0,0,0xff,0xff,127,0,0,1 };
+        return IN6_IS_ADDR_LOOPBACK(x) || !memcmp(x->s6_addr, mapped, 16);
+    }
+    return 0;
+}
+
+static int unseal(const struct req *r, const uint8_t *in, size_t n, uint8_t *out);
+
+static void kiosk_api(int fd, struct req *r)
+{
+    int write = !strcmp(r->method, "POST");
+    if (!signed_ok(r, write)) { respond_json(fd, 401, "{\"error\":\"not logged in\"}"); return; }
+    if (!write) {
+        size_t n; char *j = kiosk_json(0, display_setting(DS_KIOSK, -1) > 0 && display_setting(DS_MODE, -1) != DISPLAY_OFF, &n);
+        if (!j) { respond_sjson(fd, r, 503, "{\"error\":\"out of memory\"}"); return; }
+        respond_s(fd, r, 200, "application/json", NULL, j, n); free(j); return;
+    }
+    /* the token's line unsealed in place of its sealed one; every other line as it came */
+    size_t cap = r->blen + 1024; char *t = malloc(cap), err[160], ej[200], o[260]; size_t n = 0;
+    if (!t) { respond_sjson(fd, r, 503, "{\"error\":\"out of memory\"}"); return; }
+    const char *p = r->body ? r->body : "";
+    while (*p) {
+        const char *e = strchr(p, '\n'); size_t len = e ? (size_t)(e - p) : strlen(p);
+        if (len > 6 && !strncmp(p, "token ", 6)) {
+            uint8_t sealed[256], plain[257]; char h[520]; int sl;
+            snprintf(h, sizeof h, "%.*s", (int)(len - 6), p + 6); h[strcspn(h, "\r")] = 0;
+            if (strcmp(h, "-")) {
+                if ((sl = unhex_any(sealed, sizeof sealed, h)) < 0 || unseal(r, sealed, (size_t)sl, plain)) {
+                    free(t); respond_sjson(fd, r, 400, "{\"error\":\"token: not sealed for this Echo\"}"); return;
+                }
+                plain[sl] = 0;
+                n += (size_t)snprintf(t + n, cap - n, "token %s\n", (char *)plain);
+                crypto_wipe(plain, sizeof plain);
+            }
+        } else n += (size_t)snprintf(t + n, cap - n, "%.*s\n", (int)len, p);
+        p = e ? e + 1 : p + len;
+    }
+    int bad = kiosk_store(t, err, sizeof err);
+    crypto_wipe(t, cap); free(t);
+    if (bad) { jesc(ej, sizeof ej, err); snprintf(o, sizeof o, "{\"error\":\"%s\"}", ej); respond_sjson(fd, r, 400, o); return; }
+    display_changed();
+    respond_sjson(fd, r, 200, "{\"ok\":true}");
+}
+
 /* The Echo's own alarms (alarms.h): GET /api/alarms the list; POST /api/alarms/put "id hour min days enabled label" (id 0
  * adds one), /api/alarms/<id>/delete, /api/alarms/snooze, /api/alarms/stop (what rings now) */
 static void alarms_api(int fd, struct req *r)
@@ -1035,7 +1097,17 @@ static void handle(int fd)
     if ((e = read_request(fd, &r))) { if (e == -2) respond_json(fd, 413, "{\"error\":\"too large\"}"); return; }
     char *q = strchr(r.path, '?'); if (q) *q = 0;       /* no query strings in what we serve */
 
-    if (!strcmp(r.method, "OPTIONS")) respond(fd, 204, "text/plain", NULL, NULL, 0);
+    if (!strcmp(r.method, "OPTIONS")) respond_c(fd, strncmp(r.path, "/kiosk/", 7) != 0, 204, "text/plain", NULL, NULL, 0);
+    else if (!strcmp(r.method, "GET") && !strncmp(r.path, "/kiosk/config", 13)) {
+        /* the token's way to the app: only from this Echo, and with no CORS headers: the pages the kiosk shows run here
+         * too (127.0.0.1), and a page's script must not read it.  The app's HttpURLConnection does not ask for CORS */
+        if (!from_loopback(fd)) respond_c(fd, 0, 404, "application/json", NULL, "{}", 2);
+        else {
+            if (!strcmp(r.path + 13, "/front")) kiosk_polled(1); else if (!strcmp(r.path + 13, "/back")) kiosk_polled(0);
+            size_t n; char *j = kiosk_json(1, display_setting(DS_KIOSK, -1) > 0 && display_setting(DS_MODE, -1) != DISPLAY_OFF, &n);
+            if (j) { respond_c(fd, 0, 200, "application/json", NULL, j, n); free(j); } else respond_c(fd, 0, 503, "application/json", NULL, "{}", 2);
+        }
+    }
     else if (!strcmp(r.method, "GET") && strncmp(r.path, "/api/", 5)) {
         int found = 0;
         for (int i = 0; i < web_nassets; i++) if (!strcmp(web_assets[i].path, r.path)) {
@@ -1132,6 +1204,7 @@ static void handle(int fd)
     else if (!strncmp(r.path, "/api/sound/", 11)) sound_api(fd, &r);
     else if (!strncmp(r.path, "/api/sound-pack", 15)) sound_pack_api(fd, &r);
     else if (!strncmp(r.path, "/api/alarms", 11)) alarms_api(fd, &r);
+    else if (!strcmp(r.path, "/api/kiosk")) kiosk_api(fd, &r);
     else if (!strcmp(r.method, "GET") && !strncmp(r.path, "/api/log/", 9)) log_api(fd, &r);
     else respond_json(fd, 404, "{\"error\":\"not found\"}");
     free(r.body);

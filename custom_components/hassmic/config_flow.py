@@ -7,12 +7,15 @@ from typing import Any
 
 import voluptuous as vol
 
-from homeassistant.config_entries import ConfigFlow, ConfigFlowResult
+from homeassistant.config_entries import ConfigEntry, ConfigFlow, ConfigFlowResult, OptionsFlowWithReload
+from homeassistant.core import callback
+from homeassistant.helpers import selector
 from homeassistant.const import CONF_HOST, CONF_PORT
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.service_info.zeroconf import ZeroconfServiceInfo
 
 from .api import DEFAULT_PORT, Echo, EchoError, new_key
+from . import kiosk as k
 from .const import CONF_KEY, CONF_MAC, CONF_NODE, DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
@@ -20,6 +23,11 @@ _LOGGER = logging.getLogger(__name__)
 
 class HassmicConfigFlow(ConfigFlow, domain=DOMAIN):
     VERSION = 1
+
+    @staticmethod
+    @callback
+    def async_get_options_flow(entry: ConfigEntry) -> HassmicOptionsFlow:
+        return HassmicOptionsFlow()
 
     def __init__(self) -> None:
         self.host: str | None = None
@@ -110,3 +118,34 @@ class HassmicConfigFlow(ConfigFlow, domain=DOMAIN):
         except EchoError:
             return self.async_abort(reason="cannot_connect")
         return await self.async_step_approve()
+
+
+class HassmicOptionsFlow(OptionsFlowWithReload):
+    """The Echo Show's screen (kiosk.py): Home Assistant on it, which screens, where it starts.  The entry reloads on
+    Submit, and its setup sends it all to the Echo."""
+
+    async def async_step_init(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
+        o = self.config_entry.options
+        if user_input is not None:
+            return self.async_create_entry(data={**o, **user_input})
+        kinds = [selector.SelectOptionDict(value=v, label=l) for v, l in (
+            ("wall", "Wall panel (rooms and tiles, light on memory)"), ("dashboard", "Home Assistant's own UI"),
+            ("music", "Music Assistant"), ("custom", "A page of your own"))]
+        music = k.music_panel(self.hass)
+        schema = vol.Schema({
+            vol.Required(k.OPT_KIOSK, default=o.get(k.OPT_KIOSK, False)): bool,
+            vol.Required(k.OPT_SCREENS, default=o.get(k.OPT_SCREENS, ["wall", "dashboard"] + (["music"] if music else []))):
+                selector.SelectSelector(selector.SelectSelectorConfig(options=kinds, multiple=True)),
+            vol.Required(k.OPT_DEFAULT, default=o.get(k.OPT_DEFAULT, "wall")):
+                selector.SelectSelector(selector.SelectSelectorConfig(options=kinds, mode=selector.SelectSelectorMode.DROPDOWN)),
+            vol.Optional(k.OPT_DASHBOARD, default=o.get(k.OPT_DASHBOARD, "lovelace")): str,
+            vol.Optional(k.OPT_MUSIC, default=o.get(k.OPT_MUSIC, music)): str,
+            vol.Optional(k.OPT_CUSTOM_NAME, default=o.get(k.OPT_CUSTOM_NAME, "")): str,
+            vol.Optional(k.OPT_CUSTOM_URL, default=o.get(k.OPT_CUSTOM_URL, "")): str,
+            vol.Required(k.OPT_RETURN, default=o.get(k.OPT_RETURN, 120)):
+                selector.NumberSelector(selector.NumberSelectorConfig(min=0, max=3600, step=10, unit_of_measurement="s", mode=selector.NumberSelectorMode.BOX)),
+            vol.Required(k.OPT_ADMIN, default=o.get(k.OPT_ADMIN, False)): bool,
+            vol.Optional(k.OPT_URL, default=o.get(k.OPT_URL, "")): str,
+        })
+        return self.async_show_form(step_id="init", data_schema=schema,
+                                    description_placeholders={"url": k.ha_url(self.hass, self.config_entry)})

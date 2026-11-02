@@ -4,7 +4,9 @@
 checkers`). The unlock is public (below); the install is `scripts/install-system.sh`, which hands over to
 `scripts/install-boot.sh`. No light ring here: hassmic shows the ring as a band along the bottom of the screen
 (setting "Light band"); above it the screen shows a clock, what you said and the answer, and ringing alarms (setting
-"Screen", page "Clock & alarms"; [the guide](../../docs/GUIDE.md#clock-and-alarms)).
+"Screen", page "Clock & alarms"; [the guide](../../docs/GUIDE.md#clock-and-alarms)), and, set up from Home Assistant's
+hassmic integration, Home Assistant itself in hassmic's kiosk app (`tools/kiosk`, on the firmware's Amazon WebView,
+which the install therefore keeps; [the guide](../../docs/GUIDE.md#home-assistant-on-the-screen-kiosk)).
 Findings, and what works and what is open: [docs/re-checkers.md](../../docs/re-checkers.md). Porting guide:
 [devices/README.md](../README.md).
 

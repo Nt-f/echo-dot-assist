@@ -119,6 +119,7 @@ fi
 # boot, not REMOVED, so a package moved there is gone from the next boot on, whatever its enabled state said.
 REMOVED=/system/hassmic-removed
 HOMEDIR=/system/app/HassmicHome
+KIOSKDIR=/system/app/HassmicKiosk
 stock_apps() {      # stock_apps "LIST": those in REMOVED, the rest back where they were
     set -- " $(echo $1) "                   # one line: device.conf spreads a long list over several
     for d in $REMOVED/*/*; do
@@ -148,7 +149,7 @@ if [ "$MODE" = uninstall ]; then
         staged=; new $LR/layer_config_common.json $LSTOCK 644 0:0 $SYSLABEL; commit; rm $LSTOCK
     fi
     rm -f $LR/hassmic_*.animation /system/etc/hassmic-leds.digest
-    rm -rf $H $RC $HOMEDIR; sync
+    rm -rf $H $RC $HOMEDIR $KIOSKDIR; sync
     say "hassmic removed from the system partition"
     exit 0
 fi
@@ -185,6 +186,13 @@ home=$(. "$SRC/device.conf" 2>/dev/null && echo "$HOME_APK")
 if [ -n "$home" ] && [ -s "$SRC/$home" ]; then
     mkdir -p $HOMEDIR; chown 0:0 $HOMEDIR; chmod 755 $HOMEDIR; chcon $SYSLABEL $HOMEDIR
     new $HOMEDIR/HassmicHome.apk "$SRC/$home" 644 0:0 $SYSLABEL
+fi
+# the kiosk (KIOSK_APK, tools/kiosk: Home Assistant on the screen, kiosk.c) as a system app too: Android's WebView
+# provider takes system apps' pages only from a provider on the partition, which STOCK_APPS_OUT then leaves there
+kiosk=$(. "$SRC/device.conf" 2>/dev/null && echo "$KIOSK_APK")
+if [ -n "$kiosk" ] && [ -s "$SRC/$kiosk" ]; then
+    mkdir -p $KIOSKDIR; chown 0:0 $KIOSKDIR; chmod 755 $KIOSKDIR; chcon $SYSLABEL $KIOSKDIR
+    new $KIOSKDIR/HassmicKiosk.apk "$SRC/$kiosk" 644 0:0 $SYSLABEL
 fi
 if [ "$MODE" = install ] && [ -f "$SRC/sepolicy" ]; then
     # The policy as boot-root left it stays beside it, for --uninstall; staged first, so commit() renames it into place

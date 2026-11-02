@@ -27,9 +27,16 @@
 #include "alarms.h"
 #include "board.h"
 #include "core.h"
+#include "kiosk.h"
 #include "ring.h"
+#include "statefile.h"
+#include <arpa/inet.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <ifaddrs.h>
+#include <net/if.h>
+#include <netinet/in.h>
+#include <signal.h>
 #include <limits.h>
 #include <linux/input.h>
 #include <math.h>
@@ -54,10 +61,11 @@ const char *const display_modes[DISPLAY_MODES] = { "off", "awake", "always", "al
 static pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t cv = PTHREAD_COND_INITIALIZER;
 static int ds[DS_COUNT] = { [DS_MODE] = DISPLAY_AWAKE, [DS_TEXT] = 1, [DS_TEXT_S] = 20, [DS_BRIGHT] = 80, [DS_NIGHT_BRIGHT] = 10,
-                            [DS_NIGHT_START] = 22, [DS_NIGHT_END] = 7, [DS_DARK_ROOM] = 1 };
-static const int ds_min[DS_COUNT] = { 0, 0, 3, 1, 0, 0, 0, 0 }, ds_max[DS_COUNT] = { DISPLAY_MODES - 1, 1, 120, 100, 100, 23, 23, 1 };
+                            [DS_NIGHT_START] = 22, [DS_NIGHT_END] = 7, [DS_DARK_ROOM] = 1, [DS_KIOSK] = 0 };
+static const int ds_min[DS_COUNT] = { 0, 0, 3, 1, 0, 0, 0, 0, 0 }, ds_max[DS_COUNT] = { DISPLAY_MODES - 1, 1, 120, 100, 100, 23, 23, 1, 1 };
 static char heard[600], reply[1200], ringing[160];          /* lock held */
 static int running, dirty, started;                         /* lock held */
+static int linked, ever_linked;                             /* lock held: Home Assistant's link now, ever since the start */
 static long long words_until;                               /* lock held: mono ms the words go (0: while running) */
 
 static long long mono_ms(void) { struct timespec t; clock_gettime(CLOCK_MONOTONIC, &t); return t.tv_sec * 1000LL + t.tv_nsec / 1000000; }
@@ -105,6 +113,13 @@ void display_ringing(const char *what)
 }
 
 void display_changed(void) { pthread_mutex_lock(&lock); poke(); pthread_mutex_unlock(&lock); }
+
+void display_link(int up)
+{
+    pthread_mutex_lock(&lock);
+    if (up != linked) { linked = up; if (up) ever_linked = 1; poke(); }
+    pthread_mutex_unlock(&lock);
+}
 
 int display_keeps_awake(void)
 {
@@ -260,7 +275,20 @@ static int wrapped(const struct font *f, float size, int x, int y, int maxw, int
 #define CYAN  0x00caff                  /* stock's attention colour */
 #define NIGHT 0x9a2a10                  /* a red that leaves the night dark */
 
-struct look { int night, mode; int h24; time_t now; struct tm tm; char heard[600], reply[1200], ringing[160]; int words, running; };
+struct look { int night, mode; int h24; time_t now; struct tm tm; char heard[600], reply[1200], ringing[160]; int words, running;
+              int status, oobe, ever, tick; char ip[48], line[200]; };
+
+/* the Wi-Fi's IPv4 address (the first not loopback's), "" without one */
+static void local_ip(char *out, size_t cap)
+{
+    struct ifaddrs *ifs, *i; out[0] = 0;
+    if (getifaddrs(&ifs)) return;
+    for (i = ifs; i; i = i->ifa_next)
+        if (i->ifa_addr && i->ifa_addr->sa_family == AF_INET && !(i->ifa_flags & IFF_LOOPBACK) && (i->ifa_flags & IFF_UP)) {
+            inet_ntop(AF_INET, &((struct sockaddr_in *)i->ifa_addr)->sin_addr, out, (socklen_t)cap); break;
+        }
+    freeifaddrs(ifs);
+}
 
 static void clock_text(const struct look *l, char *hm, size_t cap, char *ampm, size_t acap)
 {
@@ -296,6 +324,33 @@ static void draw(const struct look *l)
         if (l->heard[0]) y = wrapped(&f_text, 8 * u, margin, y, W - 2 * margin, 2, (int)(10 * u), 0, l->heard, dim) + (int)(4 * u);
         else if (l->running) { text(&f_text, 8 * u, margin, y, "Listening\xe2\x80\xa6", accent); y += (int)(14 * u); }
         if (l->reply[0]) wrapped(&f_text, 10 * u, margin, y + (int)(2 * u), W - 2 * margin, (int)((92 * u - y) / (12.5f * u)), (int)(12.5f * u), 0, l->reply, main_c);
+        return;
+    }
+    if (l->status) {                                        /* the boot's status: what the Echo waits for */
+        static const char *const dots[4] = { "", ".", "..", "..." };
+        char t[240];
+        fill(0, 0, W, (int)(1.2f * u), accent);
+        if (l->line[0]) {                                   /* main.sh's (the splash, hassmic -Y) */
+            centred(&f_bold, 11 * u, (int)(44 * u), "Starting", main_c);
+            snprintf(t, sizeof t, "%s%s", l->line, dots[l->tick & 3]);
+            centred(&f_text, 7 * u, (int)(62 * u), t, dim);
+        } else if (l->oobe) {
+            centred(&f_bold, 10 * u, (int)(30 * u), "Set up in Home Assistant", main_c);
+            snprintf(t, sizeof t, "Settings \xe2\x80\xba Devices & services: add \xe2\x80\x9c%s\xe2\x80\x9d (ESPHome)", core_name ? core_name : "this Echo");
+            wrapped(&f_text, 6.5f * u, margin, (int)(50 * u), W - 2 * margin, 2, (int)(9 * u), 1, t, dim);
+            if (l->ip[0]) { snprintf(t, sizeof t, "Its settings: http://%s:28931", l->ip); centred(&f_text, 6.5f * u, (int)(72 * u), t, dim); }
+            else centred(&f_text, 6.5f * u, (int)(72 * u), "Not on Wi-Fi yet: set it up with a phone (Improv) or the setup script", dim);
+        } else if (!l->ip[0]) {
+            centred(&f_bold, 10 * u, (int)(44 * u), "Waiting for Wi-Fi", main_c);
+            snprintf(t, sizeof t, "No network%s", dots[l->tick & 3]); centred(&f_text, 7 * u, (int)(62 * u), t, dim);
+        } else {
+            centred(&f_bold, 10 * u, (int)(44 * u), l->ever ? "Home Assistant went away" : "Connecting to Home Assistant", main_c);
+            snprintf(t, sizeof t, "Waiting%s", dots[l->tick & 3]); centred(&f_text, 7 * u, (int)(60 * u), t, accent);
+        }
+        if (!l->line[0] && l->ip[0]) {
+            snprintf(t, sizeof t, "%s  \xc2\xb7  %s", core_name ? core_name : "", l->ip);
+            centred(&f_text, 5.5f * u, (int)(90 * u), t, dim);
+        }
         return;
     }
     /* idle: the clock */
@@ -380,17 +435,71 @@ static int write_all_(int fd, const void *p, size_t n)
     return 0;
 }
 
-static void *display_thread(void *arg)
+static void state_path(char *out, size_t cap, const char *file)
 {
-    (void)arg;
-    int fd = -1, have_rows = -1, have_mode = -1, light = -1, night_was = -1, fails = 0;
-    long long next_try = 0;
+    const char *e = getenv("HASSMIC_STATE");
+    snprintf(out, cap, "%s/%s", e ? e : "/data/local/hassmic/state", file);
+}
+
+/* the splash (hassmic -Y, main.sh) ends once this display has the screen: its layer goes with it */
+static void splash_end(void)
+{
+    char p[300]; FILE *f; int pid = 0;
+    state_path(p, sizeof p, "splash.pid");
+    if (!(f = fopen(p, "r"))) return;
+    if (fscanf(f, "%d", &pid) != 1) pid = 0;
+    fclose(f); unlink(p);
+    /* only a splash: a pid file left by one that died may name a process of the same user by now */
+    char cl[300], cmd[256] = ""; snprintf(cl, sizeof cl, "/proc/%d/cmdline", pid);
+    if ((f = fopen(cl, "r"))) { size_t n = fread(cmd, 1, sizeof cmd - 1, f); fclose(f); for (size_t i = 0; i < n; i++) if (!cmd[i]) cmd[i] = ' '; cmd[n] = 0; }
+    if (!strstr(cmd, " -Y ")) return;
+    if (pid > 1 && pid != getpid() && !kill(pid, SIGTERM)) fprintf(stderr, "display: the boot's splash ended\n");
+}
+
+static int tick;
+
+static void fonts_load(void)
+{
     static const char *const clock_fonts[] = { "AmazonEmberDisplay_Lt.ttf", "AmazonEmberDisplay_Rg.ttf", "Amazon-Ember-Light.ttf", "Roboto-Light.ttf", "DejaVuSans-ExtraLight.ttf", "DejaVuSans.ttf", NULL };
     static const char *const text_fonts[] = { "Amazon-Ember-Regular.ttf", "Roboto-Regular.ttf", "DroidSans.ttf", "DejaVuSans.ttf", NULL };
     static const char *const bold_fonts[] = { "Amazon-Ember-Bold.ttf", "Roboto-Bold.ttf", "DroidSans-Bold.ttf", "DejaVuSans-Bold.ttf", NULL };
     if (font_load(&f_text, text_fonts)) fprintf(stderr, "display: no font found: the screen stays black\n");
     if (font_load(&f_clock, clock_fonts)) f_clock = f_text;
     if (font_load(&f_bold, bold_fonts)) f_bold = f_text;
+}
+
+int display_splash(const char *file)
+{
+    char p[300]; int fd = -1, w = 0, h = 0, rows = ring_band_rows(-1);
+    if (rows < 0) rows = 0;
+    signal(SIGPIPE, SIG_IGN);
+    fonts_load();
+    if (ring_band_screen(rows, &fd, &w, &h) < 0 || w <= 0 || h <= 0 || w > 4096 || h > 4096) return 1;
+    if (!(px = malloc((size_t)w * h * 4))) return 1;
+    W = w; H = h;
+    state_path(p, sizeof p, "splash.pid");
+    { char t[16]; int n = snprintf(t, sizeof t, "%d\n", (int)getpid()); statefile_write(p, 0644, t, (size_t)n); }
+    for (long long until = mono_ms() + 180000; mono_ms() < until; ) {
+        struct look l; memset(&l, 0, sizeof l);
+        FILE *f = fopen(file, "r");
+        if (f) { if (!fgets(l.line, sizeof l.line, f)) l.line[0] = 0; fclose(f); }
+        l.line[strcspn(l.line, "\r\n")] = 0;
+        if (!l.line[0]) snprintf(l.line, sizeof l.line, "Starting the voice satellite");
+        l.status = 1; l.tick = tick++;
+        draw(&l);
+        if (write_all_(fd, px, (size_t)W * H * 4) < 0) break;
+        usleep(500000);
+    }
+    close(fd);
+    return 0;
+}
+
+static void *display_thread(void *arg)
+{
+    (void)arg;
+    int fd = -1, have_rows = -1, have_mode = -1, light = -1, night_was = -1, fails = 0;
+    long long next_try = 0;
+    fonts_load();
     for (;;) {
         struct look l; memset(&l, 0, sizeof l);
         pthread_mutex_lock(&lock);
@@ -400,17 +509,31 @@ static void *display_thread(void *arg)
         l.running = running; l.words = ds[DS_TEXT] && (running || words_until || heard[0] || reply[0]);
         snprintf(l.heard, sizeof l.heard, "%s", heard); snprintf(l.reply, sizeof l.reply, "%s", reply);
         snprintf(l.ringing, sizeof l.ringing, "%s", ringing);
+        int lk = linked, kiosk_on = ds[DS_KIOSK];
+        l.ever = ever_linked;
         dirty = 0;
         pthread_mutex_unlock(&lock);
+        l.oobe = core_oobe();
+        l.status = !lk && !l.ringing[0];
+        if (l.status) local_ip(l.ip, sizeof l.ip);
+        l.tick = tick++;
+        /* until Home Assistant is there the screen says what the Echo waits for, whatever the setting */
+        int show = l.status && mode == DISPLAY_OFF ? DISPLAY_AWAKE : mode;
+        /* the kiosk app has the screen while nothing of ours is to show: a ring, a request's words, the status */
+        int kiosk = kiosk_on && lk && !l.oobe && mode != DISPLAY_OFF;     /* off: black, the app blank too (web.c) */
+        int to_kiosk = kiosk && kiosk_tick(1) && !l.ringing[0] && !l.words;
         int rows = ring_band_rows(-1); if (rows < 0) rows = 0;
-        if (mode == DISPLAY_OFF || rows != have_rows) { if (fd >= 0) { close(fd); fd = -1; fprintf(stderr, "display: off\n"); } have_rows = -1; }
+        if (show == DISPLAY_OFF || to_kiosk || rows != have_rows) {
+            if (fd >= 0) { close(fd); fd = -1; fprintf(stderr, "display: %s\n", to_kiosk ? "the kiosk's" : "off"); }
+            have_rows = -1;
+        }
         if (mode != have_mode) {
             if (mode == DISPLAY_ALWAYS || mode == DISPLAY_DIM) screen_wake();
             if (mode != DISPLAY_OFF && have_mode <= DISPLAY_OFF) light = -1;      /* the backlight set anew */
             fprintf(stderr, "display: %s\n", display_modes[mode]);
             have_mode = mode;
         }
-        if (mode != DISPLAY_OFF && fd < 0 && now_ms_ >= next_try) {
+        if (show != DISPLAY_OFF && !to_kiosk && fd < 0 && now_ms_ >= next_try) {
             int w = 0, h = 0;
             if (ring_band_screen(rows, &fd, &w, &h) < 0 || w <= 0 || h <= 0 || w > 4096 || h > 4096) {
                 if (fd >= 0) close(fd);
@@ -420,7 +543,7 @@ static void *display_thread(void *arg)
                 fails = 0; have_rows = rows;
                 if (w != W || h != H) { free(px); px = malloc((size_t)w * h * 4); W = w; H = h; }
                 if (!px) { close(fd); fd = -1; W = H = 0; }
-                else fprintf(stderr, "display: %d x %d above the band\n", W, H);
+                else { fprintf(stderr, "display: %d x %d above the band\n", W, H); splash_end(); }
             }
         }
         l.now = alarms_now();
@@ -428,7 +551,7 @@ static void *display_thread(void *arg)
         l.h24 = alarms_h24(); l.mode = mode;
         int night = mode == DISPLAY_DIM && is_night(&l, dark);
         l.night = night && !l.ringing[0] && !(l.words && (l.reply[0] || l.running));    /* a ring and an answer are read in full light */
-        if (mode != DISPLAY_OFF) {                          /* the backlight: Android's, in its 0..255 */
+        if (show != DISPLAY_OFF) {                          /* the backlight: Android's, in its 0..255 */
             int want = (night && !l.ringing[0] ? nbright : bright) * 255 / 100;
             if (want < 1) want = 1;
             if (want != light) { if (light < 0) spawn_settings("screen_brightness_mode", 0); spawn_settings("screen_brightness", want); light = want; }
@@ -446,6 +569,8 @@ static void *display_thread(void *arg)
             long wait_s = 60 - l.tm.tm_sec; if (wait_s < 1) wait_s = 1;
             if (words_until) { long left = (long)((words_until - mono_ms() + 999) / 1000); if (left < wait_s) wait_s = left < 1 ? 1 : left; }
             if (fd < 0 && mode != DISPLAY_OFF && wait_s > 30) wait_s = 30;
+            if (l.status) wait_s = 1;                           /* the status's dots */
+            else if (kiosk && wait_s > 5) wait_s = 5;           /* whether the app is in front, from its polls */
             ts.tv_sec += wait_s;
             pthread_cond_timedwait(&cv, &lock, &ts);
         }

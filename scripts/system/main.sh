@@ -508,14 +508,27 @@ firewall)
 satellite)
     # The installer that unpacked us may have been an older one running with umask 077: make sure the daemon's user gets in.
     [ "$D" != "$SYS" ] && chmod 755 $D
+    # A screen (SCREEN_BAND): what this start does, on it from the end of the boot animation on, ~20 s before hassmic's
+    # own display can show anything (Amazon's services stopping take most of it).  hassmic -Y draws the line in
+    # $STATUS until hassmic's display has the screen and ends it (display.h display_splash).
+    STATUS=/data/local/hassmic/boot-status
+    stage() { [ -n "$SCREEN_BAND" ] && echo "$*" > $STATUS; }
+    if [ -n "$SCREEN_BAND" ]; then
+        stage "Starting the voice satellite"; chmod 644 $STATUS
+        $D/runas $DAEMON_USER $DAEMON_GROUPS $BIN -Y $STATUS 2>&1 > /dev/null | stamped >> $LOG &
+    fi
     {
         rotate_log
         echo "== satellite start, uptime $(cut -d. -f1 /proc/uptime)s, $(cat $D/VERSION 2>/dev/null || echo factory) from $D"
+        stage "Stopping Amazon's cloud services"
         sh $D/lockdown.sh services        # stops the cloud daemons that were not up yet at "on boot"; the firewall is the watcher's
         # wake word sets under a short name (echo-de) from installs by hand: the name scripts/artifacts.sh gives them
         [ -f $D/artifact-install.sh ] && sh $D/artifact-install.sh migrate /data/local/hassmic/state /data/local/hassmic
+        stage "Setting up the light band"
         leds                              # before alexa-off.sh: a ledcontroller that started again may want Alexa back
+        stage "Turning Alexa off"
         sh $D/alexa-off.sh; quiet
+        stage "Starting hassmic"
         # Android models: with the screen off Android lets the SoC suspend once no wake lock is held (autosleep), and the
         # satellite must keep listening: a kernel wake lock of root's, for as long as the satellite runs
         [ -n "$WAKE_LOCK" ] && echo "$WAKE_LOCK" > /sys/power/wake_lock

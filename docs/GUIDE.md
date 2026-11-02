@@ -518,6 +518,46 @@ stops it.
 
 "Screen brightness" is the backlight by day (the light band has its own level on the Lights page).
 
+**While it starts**, the screen says what the Echo is doing, whatever "Screen" is set to: right after Amazon's boot
+animation ("Starting", then stopping Amazon's services, turning Alexa off, starting hassmic: about 20 seconds that were
+black before), then what it waits for until Home Assistant is there: Wi-Fi, Home Assistant, or, not set up yet, the
+name to add it under in Home Assistant and the address of its settings page. Should Home Assistant go away later, the
+screen says so until it is back.
+
+### Home Assistant on the screen (kiosk)
+
+An Echo Show can show Home Assistant itself, in hassmic's kiosk app: a **wall panel** in the manner of Apple's
+HomeView (square glass widgets over an amber wallpaper; `?theme=dusk` or `?theme=light` for others): a Home page with
+an analog clock, the date and weather, the thermostat's temperature big with arrows to change it, what plays (its
+cover, title, buttons), a camera, your scenes and locks; then a page per room with a tile per light, switch, fan,
+cover, lock, speaker and door or motion sensor, swiped sideways. A tap switches, a long press opens the controls
+(brightness, position, volume, temperature). Left alone for 2 minutes it shows the time in big glass digits; a touch
+brings the widgets back. Also **Home Assistant's own dashboards**, **Music Assistant**, and a page of your own. A small handle at the top
+edge of the screen switches between them; left alone on another screen for 2 minutes, it goes back to the first.
+
+It is set up from Home Assistant, in the hassmic integration (the one for the Echo's alarms): *Settings › Devices &
+services › hassmic › Configure* on the Echo Show. Tick "Show Home Assistant on the screen", pick the screens and the
+one to start on. The Echo has no keyboard to log in with, so the integration makes a Home Assistant user for it
+("Echo Show 5 … kiosk": local network only, not an administrator unless you tick that) and hands the Echo a token of
+it, sealed for that Echo on the way; deleting the integration's entry deletes the user. The screen setting "Home
+Assistant on the screen" (Clock & alarms page) switches it off and on again.
+
+The Echo has no keyboard of its own, so the kiosk brings one: it slides up when you tap a text field (Home Assistant's
+login, a search, a name) and goes again with ⌄ or when the field loses the focus; ⇧ for one capital, ?123 for digits
+and signs, ⌫ held deletes on. A screen whose login you would rather type by hand (or a Home Assistant without the
+integration) can be logged into that way, "Keep me logged in" ticked.
+
+The Echo's own pictures still come first: the words of a request, a ringing alarm (tap to snooze) and the start's
+status show over the kiosk and go again. The Echo reaches local addresses only, so Home Assistant's address for it is
+its local one (the options show which; Home Assistant Cloud's is not reachable from the Echo).
+
+The wall panel is a page of its own, not a dashboard, so that the Echo Show 5 stays well within its memory: Home
+Assistant's full interface takes 150–250 MB in the browser, the wall panel a small part of that, and only one screen
+is loaded at a time. It shows the rooms (areas) that have something to show, each with its temperature and humidity
+under the page dots where a sensor in it has them. In the address: `?favorites=light.desk,lock.front` picks Home's
+tiles, `?thermostat=`, `?camera=`, `?weather=` which entity those widgets show, `?ambient=0` turns the big clock off. It works in any browser too:
+`http://<home assistant>:8123/hassmic/wall.html`, once logged into Home Assistant there with "Keep me logged in".
+
 ## Music
 
 Said to an Echo that plays music itself (Music Assistant or a phone), "pause", "resume", "next", "previous",

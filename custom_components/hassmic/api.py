@@ -74,10 +74,22 @@ class Echo:
         self._ctr = max(self._ctr + 1, int(time.time() * 1e6))
         return self._ctr
 
-    async def call(self, method: str, path: str, body: bytes = b"") -> bytes:
+    def seal(self, ctr: int, data: bytes) -> bytes:
+        """web.c unseal's other half (web/crypto.js seal): XOR with BLAKE2b-512 blocks keyed with EK over the request's
+        counter, "\n" and the block's index; EK = BLAKE2b-256 keyed with K over "hassmic seal 1"."""
+        ek = hashlib.blake2b(b"hassmic seal 1", key=self.k, digest_size=32).digest()
+        out = bytearray(len(data))
+        for i in range(0, (len(data) + 63) // 64):
+            ks = hashlib.blake2b(f"{ctr}\n".encode() + bytes([i]), key=ek, digest_size=64).digest()
+            for j in range(64):
+                if i * 64 + j < len(data):
+                    out[i * 64 + j] = data[i * 64 + j] ^ ks[j]
+        return bytes(out)
+
+    async def call(self, method: str, path: str, body: bytes = b"", ctr: int | None = None) -> bytes:
         if self.k is None:
             await self.get_hello()
-        ctr = self._counter()
+        ctr = ctr if ctr is not None else self._counter()
         mac = hashlib.blake2b(f"{method}\n{path}\n{ctr}\n".encode() + body, key=self.k, digest_size=16).hexdigest()
         st, h, data = await self._req(method, path, body, {"X-HM-Pub": self.pub.hex(), "X-HM-Ctr": str(ctr), "X-HM-Mac": mac})
         if st == 401:
@@ -110,3 +122,27 @@ class Echo:
 
     async def stop(self) -> None:
         await self.call("POST", "/api/alarms/stop")
+
+    # ---------------------------------------------------------------- the kiosk (kiosk.h, /api/kiosk)
+
+    async def kiosk(self) -> dict:
+        return json.loads(await self.call("GET", "/api/kiosk"))
+
+    async def put_kiosk(self, ha: str, screens: list[tuple[str, str]], default: int, return_s: int, token: str | None) -> None:
+        """the screens the Echo Show's kiosk app offers; the token sealed for this Echo (the request is plain HTTP)"""
+        if self.k is None:
+            await self.get_hello()
+        ctr = self._counter()
+        lines = [f"ha {ha}"]
+        if token:
+            raw = token.encode()
+            if len(raw) > 256:
+                raise EchoError("the kiosk's token is longer than the Echo takes")
+            lines.append("token " + self.seal(ctr, raw).hex())
+        lines += [f"screen {n}\t{u}" for n, u in screens]
+        lines += [f"default {default}", f"return {return_s}"]
+        await self.call("POST", "/api/kiosk", ("\n".join(lines) + "\n").encode(), ctr=ctr)
+
+    async def set(self, text: str) -> dict:
+        """settings as an export has them ("name=value" lines)"""
+        return json.loads(await self.call("POST", "/api/set", text.encode()))

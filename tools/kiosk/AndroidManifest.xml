@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- hassmic's kiosk (Kiosk.java): started by hassmic (am start, kiosk.c) once the kiosk is on, never a home screen
+     itself: Android 7 starts the home before user 0 is unlocked, and a WebView cannot run then (mkhome.py's codeless
+     home stays for that). -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="org.hassmic.kiosk"
+    android:versionCode="1" android:versionName="1">
+    <uses-sdk android:minSdkVersion="24" android:targetSdkVersion="25" />
+    <uses-permission android:name="android.permission.INTERNET" />
+    <application android:label="hassmic kiosk" android:allowBackup="false" android:largeHeap="false"
+        android:usesCleartextTraffic="true" android:hardwareAccelerated="true">
+        <activity android:name=".Kiosk" android:exported="true" android:launchMode="singleTask"
+            android:excludeFromRecents="true" android:stateNotNeeded="true"
+            android:theme="@android:style/Theme.Black.NoTitleBar.Fullscreen"
+            android:configChanges="orientation|screenSize|keyboardHidden|keyboard|navigation|screenLayout|uiMode" />
+    </application>
+</manifest>
