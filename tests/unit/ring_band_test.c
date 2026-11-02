@@ -26,6 +26,14 @@ void core_spawn(char *const argv[])
     if (!strcmp(argv[0], "/system/bin/service") && !strcmp(argv[3], "9")) spawns_wake++;
     if (!strcmp(argv[0], "/system/bin/settings")) { spawns_timeout++; last_timeout = atoi(argv[4]); }
 }
+/* the screen's timeout goes through core_run now (one writer, each write waited for): the same count; a get answers
+ * what was put last */
+void core_run(char *const argv[], char *out, size_t n)
+{
+    if (n) out[0] = 0;
+    if (!strcmp(argv[0], "/system/bin/settings") && !strcmp(argv[1], "put")) { usleep(30000); spawns_timeout++; last_timeout = atoi(argv[4]); }
+    else if (!strcmp(argv[0], "/system/bin/settings") && !strcmp(argv[1], "get")) snprintf(out, n, "%d\n", last_timeout);
+}
 
 static int fails;
 static void check(int ok, const char *what) { printf("%s %s\n", ok ? "ok  " : "FAIL", what); if (!ok) fails++; }
@@ -114,6 +122,7 @@ int main(int argc, char **argv)
     { char p[320], fdn[16], l[16]; int seen = 0; snprintf(p, sizeof p, "%s/fds", dir); snprintf(fdn, sizeof fdn, "%d\n", extra);
       f = fopen(p, "r"); while (f && fgets(l, sizeof l, f)) seen |= !strcmp(l, fdn); if (f) fclose(f);
       check(extra > 2 && f && !seen, "the renderer gets its stdin and stdout, none of hassmic's other files"); }
+    for (int i = 0; i < 100 && !spawns_timeout; i++) ms(20);      /* its own writer: each write waited for */
     check(spawns_timeout == 1 && last_timeout == 300000, "the screen sleeps after 5 min, as stock's");
 
     ring_set("active-start");

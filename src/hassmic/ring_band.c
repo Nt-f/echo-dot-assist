@@ -414,6 +414,8 @@ static void light_draw(const struct ring_light *l, int blink, struct rgb *led, l
 /* ---------------------------------------------------------------- the screen: power, and the renderer process */
 
 static void run_quiet(char *const argv[]) { core_spawn(argv); }
+static void *timeout_thread(void *arg);
+static void timeout_start(void) { pthread_t t; if (!pthread_create(&t, NULL, timeout_thread, NULL)) pthread_detach(t); }
 
 static void screen_wake(void)
 {
@@ -423,12 +425,43 @@ static void screen_wake(void)
     run_quiet(wake); run_quiet(act_);
 }
 
+/* The screen's timeout, one writer: `settings` is a Java tool (~2 s to start on an Echo Show 5), and two started a
+ * second apart (stock's 5 min at the start, then the display's "never" for "always on") finished the wrong way round:
+ * the screen slept with "always on" set (2026-11-02, 21:13).  So the latest wanted value, applied by this thread alone,
+ * each write waited for; and every 5 min it is read back and written again if something else changed it. */
+static atomic_int timeout_want = -1;
+
+static void *timeout_thread(void *arg)
+{
+    (void)arg;
+    int applied = -1; long long verify_at = 0;
+    for (;;) {
+        int w = atomic_load(&timeout_want);
+        if (w >= 0 && (w != applied || now_ms() >= verify_at)) {
+            char v[16], out[64] = ""; snprintf(v, sizeof v, "%d", w);
+            if (w == applied) {                 /* still ours? */
+                char *get[] = { "/system/bin/settings", "get", "system", "screen_off_timeout", NULL };
+                core_run(get, out, sizeof out);
+                if (atoi(out) == w || !out[0]) { verify_at = now_ms() + 300000; continue; }
+                out[strcspn(out, "\r\n")] = 0;
+                fprintf(stderr, "band: the screen's timeout was changed to %s, set again\n", out);
+            }
+            char *put[] = { "/system/bin/settings", "put", "system", "screen_off_timeout", v, NULL };
+            core_run(put, out, sizeof out);
+            if (w != applied) fprintf(stderr, "band: the screen sleeps after %d s\n", w / 1000);
+            applied = w; verify_at = now_ms() + 300000;
+            continue;                           /* a newer one may have come meanwhile */
+        }
+        usleep(200000);
+    }
+    return NULL;
+}
+
 static void screen_timeout(int ms)
 {
-    char v[16]; snprintf(v, sizeof v, "%d", ms);
-    char *argv[] = { "/system/bin/settings", "put", "system", "screen_off_timeout", v, NULL };
-    run_quiet(argv);
-    fprintf(stderr, "band: the screen sleeps after %d s\n", ms / 1000);
+    static pthread_once_t once = PTHREAD_ONCE_INIT;
+    atomic_store(&timeout_want, ms);
+    pthread_once(&once, timeout_start);
 }
 
 static const char *dex_path(void)
