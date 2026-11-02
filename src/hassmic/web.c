@@ -666,8 +666,10 @@ static void kiosk_api(int fd, struct req *r)
         if (!j) { respond_sjson(fd, r, 503, "{\"error\":\"out of memory\"}"); return; }
         respond_s(fd, r, 200, "application/json", NULL, j, n); free(j); return;
     }
-    /* the token's line unsealed in place of its sealed one; every other line as it came */
-    size_t cap = r->blen + 1024; char *t = malloc(cap), err[160], ej[200], o[260]; size_t n = 0;
+    /* the token's line unsealed in place of its sealed one; "sealed <hex>": lines sealed together (the token and the
+     * screen app's settings, some of them secrets: one key stream for all of it, never one per line); every other
+     * line as it came */
+    size_t cap = r->blen + 4096; char *t = malloc(cap), err[160], ej[200], o[260]; size_t n = 0;
     if (!t) { respond_sjson(fd, r, 503, "{\"error\":\"out of memory\"}"); return; }
     const char *p = r->body ? r->body : "";
     while (*p) {
@@ -683,6 +685,15 @@ static void kiosk_api(int fd, struct req *r)
                 n += (size_t)snprintf(t + n, cap - n, "token %s\n", (char *)plain);
                 crypto_wipe(plain, sizeof plain);
             }
+        } else if (len > 7 && !strncmp(p, "sealed ", 7)) {
+            static uint8_t sealed[2048], plain[2049]; static char h[4100]; int sl;
+            snprintf(h, sizeof h, "%.*s", (int)(len - 7), p + 7); h[strcspn(h, "\r")] = 0;
+            if ((sl = unhex_any(sealed, sizeof sealed, h)) < 0 || unseal(r, sealed, (size_t)sl, plain)) {
+                free(t); respond_sjson(fd, r, 400, "{\"error\":\"sealed: not sealed for this Echo\"}"); return;
+            }
+            plain[sl] = 0;
+            n += (size_t)snprintf(t + n, cap - n, "%s\n", (char *)plain);
+            crypto_wipe(plain, sizeof plain);
         } else n += (size_t)snprintf(t + n, cap - n, "%.*s\n", (int)len, p);
         p = e ? e + 1 : p + len;
     }
@@ -984,7 +995,7 @@ static void vouch_api(int fd, struct req *r)
 static int unseal(const struct req *r, const uint8_t *in, size_t n, uint8_t *out)
 {
     uint8_t pub[32], k[32], ek[32], ks[64]; crypto_blake2b_ctx ctx; int bad;
-    if (n > 64 * 4 || unhex(pub, r->pub, 32)) return -1;
+    if (n > 64 * 32 || unhex(pub, r->pub, 32)) return -1;      /* the block index is one byte: 16 kB at most anyway */
     pthread_mutex_lock(&lk); bad = session_key(k, pub); pthread_mutex_unlock(&lk);
     if (bad) return -1;
     crypto_blake2b_keyed(ek, 32, k, 32, (const uint8_t *)"hassmic seal 1", 14);

@@ -68,7 +68,8 @@
           "kiosk_return": "Back to the start screen after untouched for (0: never)",
           "kiosk_admin": "The Echo's user is an administrator (Home Assistant's settings on the Echo)",
           "kiosk_ha_url": "Home Assistant's address for the Echo (empty: the one found)",
-          "kiosk_app": "Screen app: the package of an app of your own that shows the screens (empty: hassmic's own)"
+          "kiosk_app": "Screen app: the package of an app of your own that shows the screens (empty: hassmic's own)",
+          "kiosk_app_settings": "Screen app settings, one key=value a line (the HomeView's photos: immich.url=, immich.key=, immich.album=)"
         }
       },
       "wall": {
