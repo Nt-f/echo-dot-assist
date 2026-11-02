@@ -23,4 +23,6 @@ int   kiosk_configured(void);                   /* 1: at least one screen */
 /* the display thread's, with the kiosk switched on: the app started when it is gone (no poll for 90 s; at most once a
  * minute); 1 when it is in front */
 int   kiosk_tick(int enabled);
+/* 1: the connection on fd (loopback) is the screen app's own: its uid owns the app's data folder */
+int   kiosk_peer_ok(int fd);
 #endif
