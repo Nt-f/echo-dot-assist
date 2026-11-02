@@ -128,7 +128,8 @@ class Echo:
     async def kiosk(self) -> dict:
         return json.loads(await self.call("GET", "/api/kiosk"))
 
-    async def put_kiosk(self, ha: str, screens: list[tuple[str, str]], default: int, return_s: int, token: str | None) -> None:
+    async def put_kiosk(self, ha: str, screens: list[tuple[str, str]], default: int, return_s: int, token: str | None,
+                        app: str = "") -> None:
         """the screens the Echo Show's kiosk app offers; the token sealed for this Echo (the request is plain HTTP)"""
         if self.k is None:
             await self.get_hello()
@@ -141,6 +142,8 @@ class Echo:
             lines.append("token " + self.seal(ctr, raw).hex())
         lines += [f"screen {n}\t{u}" for n, u in screens]
         lines += [f"default {default}", f"return {return_s}"]
+        if app:
+            lines.append(f"app {app}")
         await self.call("POST", "/api/kiosk", ("\n".join(lines) + "\n").encode(), ctr=ctr)
 
     async def set(self, text: str) -> dict:

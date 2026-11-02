@@ -95,6 +95,16 @@ async def browser_wall(session, token, png):
         shutil.rmtree(prof, ignore_errors=True)
 
 
+async def api_kiosk_app(c, entry, app):
+    """the options again, with another screen app"""
+    o = await c.post("/api/config/config_entries/options/flow", {"handler": entry["entry_id"]})
+    o = await c.post(f"/api/config/config_entries/options/flow/{o['flow_id']}",
+                     {"kiosk": True, "kiosk_screens": ["wall", "dashboard"], "kiosk_default": "wall", "kiosk_return": 90, "kiosk_admin": False,
+                      "kiosk_app": app})
+    await c.post(f"/api/config/config_entries/options/flow/{o['flow_id']}", {"theme": "amber", "nowplaying": True, "ambient": 120, "favorites": [], "hidden": []})
+    await asyncio.sleep(2)
+
+
 async def run(tmp):
     import aiohttp
     conf = os.path.join(tmp, "ha")
@@ -103,6 +113,9 @@ async def run(tmp):
     echo = hr.Echo(tmp, "Echo Show 5 a1b2c3", "02:00:00:a1:b2:c3", 26190, net, os.path.join(hr.ROOT, "build", "hassmic-host"))
     halog = open(os.path.join(tmp, "ha.log"), "w")
     hass = subprocess.Popen([hr.HA_PY, "-m", "homeassistant", "-c", conf, "--skip-pip"], stdout=halog, stderr=subprocess.STDOUT, cwd=conf)
+    # the screen app's data folder (kiosk.c kiosk_peer_ok): its owner is the uid the config is handed to, this test's
+    apps = os.path.join(tmp, "apps"); os.makedirs(os.path.join(apps, "org.hassmic.kiosk"))
+    os.environ["HASSMIC_APP_DATA"] = apps
     echo.start()
     web = f"http://127.0.0.1:{echo.port + 10}"
     try:
@@ -167,6 +180,17 @@ async def run(tmp):
             st = open(os.path.join(echo.state, "kiosk")).read()
             check(oct(os.stat(os.path.join(echo.state, "kiosk")).st_mode & 0o777) == "0o600" and tok in st, "state/kiosk: 0600, the token in it")
             check(tok not in echo.text(), "the token is not in the log")
+            # another screen app (one of the owner's, not installed here): the config goes to nobody else
+            await api_kiosk_app(c, entry, "org.example.screen")
+            async with session.get(f"{web}/kiosk/config") as r:
+                check(r.status == 404, f"another screen app chosen: the config is not handed to this uid any more ({r.status})")
+            check("starting the screen app org.example.screen" in echo.text() or "screen app org.example.screen" in echo.text(),
+                  "hassmic took the new screen app")
+            os.makedirs(os.path.join(apps, "org.example.screen"))
+            async with session.get(f"{web}/kiosk/config") as r:
+                j = await r.json() if r.status == 200 else {}
+            check(r.status == 200 and j.get("app") == "org.example.screen" and j.get("token") == tok, f"its folder ours: handed to us again ({r.status}, {j.get('app')})")
+            await api_kiosk_app(c, entry, "")
             # the token only on loopback: the signed API (the integration's, the page's) never hands it out (display_test)
             async with session.get(f"{web}/api/kiosk") as r:
                 check(r.status == 401, f"GET /api/kiosk unsigned: refused ({r.status})")

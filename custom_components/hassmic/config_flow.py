@@ -146,6 +146,7 @@ class HassmicOptionsFlow(OptionsFlowWithReload):
                 selector.NumberSelector(selector.NumberSelectorConfig(min=0, max=3600, step=10, unit_of_measurement="s", mode=selector.NumberSelectorMode.BOX)),
             vol.Required(k.OPT_ADMIN, default=o.get(k.OPT_ADMIN, False)): bool,
             vol.Optional(k.OPT_URL, default=o.get(k.OPT_URL, "")): str,
+            vol.Optional(k.OPT_APP, default=o.get(k.OPT_APP, "")): str,
         })
         return self.async_show_form(step_id="init", data_schema=schema,
                                     description_placeholders={"url": k.ha_url(self.hass, self.config_entry)})

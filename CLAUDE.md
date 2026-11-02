@@ -278,7 +278,9 @@ No model `#ifdef`s in shared code: new differences become a board field, a `devi
   device.conf `KIOSK_APK`, /system/app/HassmicKiosk): Home Assistant's pages on the Echo Show's screen in a WebView on
   the firmware's Amazon WebView (kept on the partition for it).  The integration (`custom_components/hassmic/kiosk.py`,
   options flow) makes a local-only HA user + long-lived token per Echo and POSTs `/api/kiosk` (token sealed as the Wi-Fi
-  password is), `state/kiosk` 0600; the app reads `GET /kiosk/config[/front|/back]` from 127.0.0.1 only and injects
+  password is), `state/kiosk` 0600; the screen app (`app <package>`, docs/screen-apps.md: started by the intent
+  `org.hassmic.action.SCREEN`; the Java kiosk by default, or the owner's, e.g. the Flutter template Nt-f/hassmic-screen)
+  reads `GET /kiosk/config[/front|/back]` from 127.0.0.1 and only with its own uid (`kiosk_peer_ok`: /proc/net/tcp6) and injects
   `hassTokens` into HA's origin.  Setting `display_kiosk`: display_screen.c `am start`s the app (`kiosk_tick`) and closes
   its own layer while the app is in front and it has nothing to show.  The wall panel is `frontend/wall.html`+`wall.js`
   (its own page on HA's websocket, not a dashboard: memory, the Show 5 under 512 MB for all of it).  The start's status:

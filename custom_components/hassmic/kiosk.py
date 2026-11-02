@@ -32,6 +32,7 @@ OPT_DEFAULT = "kiosk_default"           # the kind it starts on
 OPT_RETURN = "kiosk_return"             # seconds untouched before going back to it (0 never)
 OPT_ADMIN = "kiosk_admin"               # the kiosk's user an administrator (Home Assistant's settings on the Echo)
 OPT_URL = "kiosk_ha_url"                # Home Assistant's address as the Echo reaches it; empty: get_url's
+OPT_APP = "kiosk_app"                   # the screen app's package (docs/screen-apps.md); empty: hassmic's Java kiosk
 
 SCREEN_KINDS = ["wall", "dashboard", "music", "custom"]
 DATA_USER, DATA_TOKEN = "kiosk_user", "kiosk_token"
@@ -116,7 +117,8 @@ async def push(hass: HomeAssistant, entry: ConfigEntry, echo: Echo) -> None:
         _LOGGER.warning("%s: the kiosk has no screen to show", entry.title)
     token = await login(hass, entry)
     try:
-        await echo.put_kiosk(ha_url(hass, entry), scr, default, int(o.get(OPT_RETURN, 120)), token)
+        await echo.put_kiosk(ha_url(hass, entry), scr, default, int(o.get(OPT_RETURN, 120)), token,
+                             (o.get(OPT_APP) or "").strip())
         await echo.set("display_kiosk=1\n")
     except EchoError as e:
         _LOGGER.warning("%s: the kiosk could not be set up: %s", entry.title, e)

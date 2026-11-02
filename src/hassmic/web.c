@@ -640,7 +640,7 @@ static void sound_api(int fd, struct req *r)
 /* The kiosk (kiosk.h): Home Assistant's integration sets it up, the Echo Show's app reads it.
  * /api/kiosk         GET   the config without the token (signed)
  *                    POST  "key value" lines (kiosk.c), "token <sealed hex>" sealed with K as a Wi-Fi password is
- * /kiosk/config[/front|/back]  GET  for the app on this Echo alone: from 127.0.0.1, the token in it; front/back: its
+ * /kiosk/config[/front|/back]  GET  for the screen app alone: from 127.0.0.1 and its uid, the token in it; front/back: its
  *                    activity is resumed or paused (whether the display gives it the screen) */
 static int from_loopback(int fd)
 {
@@ -1101,7 +1101,7 @@ static void handle(int fd)
     else if (!strcmp(r.method, "GET") && !strncmp(r.path, "/kiosk/config", 13)) {
         /* the token's way to the app: only from this Echo, and with no CORS headers: the pages the kiosk shows run here
          * too (127.0.0.1), and a page's script must not read it.  The app's HttpURLConnection does not ask for CORS */
-        if (!from_loopback(fd)) respond_c(fd, 0, 404, "application/json", NULL, "{}", 2);
+        if (!from_loopback(fd) || !kiosk_peer_ok(fd)) respond_c(fd, 0, 404, "application/json", NULL, "{}", 2);
         else {
             if (!strcmp(r.path + 13, "/front")) kiosk_polled(1); else if (!strcmp(r.path + 13, "/back")) kiosk_polled(0);
             size_t n; char *j = kiosk_json(1, display_setting(DS_KIOSK, -1) > 0 && display_setting(DS_MODE, -1) != DISPLAY_OFF, &n);
