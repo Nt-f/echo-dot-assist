@@ -5,10 +5,13 @@
 //   type: custom:hassmic-alarms-card
 //   device_id: <the Echo's device>     # optional with one Echo
 //   title: Bedroom alarms              # optional
+//
+// Written for old browsers too (no ?? or ?.): a wall tablet's or an old phone app's engine would refuse the whole
+// file over one of them, and Home Assistant then says only "Custom element not found".
 
 const DAYS = [['mon', 'Mon'], ['tue', 'Tue'], ['wed', 'Wed'], ['thu', 'Thu'], ['fri', 'Fri'], ['sat', 'Sat'], ['sun', 'Sun']];
 const PRESETS = [['Once', []], ['Weekdays', ['mon', 'tue', 'wed', 'thu', 'fri']], ['Weekends', ['sat', 'sun']], ['Every day', DAYS.map((d) => d[0])]];
-const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const esc = (s) => String(s === undefined || s === null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const pad = (n) => String(n).padStart(2, '0');
 
 function clock(h, m, h24) {
@@ -81,7 +84,8 @@ class HassmicAlarmsCard extends HTMLElement {
   _ringing(alarms) {
     const h = this._hass, twins = this._twins(this._deviceId(alarms));
     const live = Object.values(h.entities || {}).find((e) => twins.has(e.device_id) && /alarm_ringing$/.test(e.entity_id));
-    return live ? h.states[live.entity_id]?.state === 'on' : alarms.some((a) => a.attributes.ringing);
+    const st = live && h.states[live.entity_id];
+    return live ? !!st && st.state === 'on' : alarms.some((a) => a.attributes.ringing);
   }
 
   _call(service, data, target) {
@@ -96,7 +100,8 @@ class HassmicAlarmsCard extends HTMLElement {
     this._sig = sig;
     const h24 = alarms.length ? alarms[0].attributes.h24 : !(this._hass.locale && this._hass.locale.time_format === '12');
     const next = alarms.filter((a) => a.state === 'on' && a.attributes.next_ring).sort((a, b) => a.attributes.next_ring.localeCompare(b.attributes.next_ring))[0];
-    const title = this._config.title || (this._deviceId(alarms) && this._hass.devices?.[this._deviceId(alarms)]?.name_by_user) || this._hass.devices?.[this._deviceId(alarms)]?.name || 'Alarms';
+    const dv = (this._hass.devices || {})[this._deviceId(alarms)] || {};
+    const title = this._config.title || dv.name_by_user || dv.name || 'Alarms';
     const row = (a) => {
       const at = a.attributes, c = clock(at.hour, at.minute, at.h24), on = a.state === 'on';
       if (this._edit && this._edit.id === a.entity_id) return this._editor(h24);

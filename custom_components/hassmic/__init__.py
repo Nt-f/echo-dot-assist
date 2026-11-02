@@ -78,6 +78,7 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     await hass.http.async_register_static_paths([StaticPathConfig(CARD_URL, str(Path(__file__).parent / "frontend" / "hassmic-alarms-card.js"), False)])
     from homeassistant.components.frontend import add_extra_js_url
     add_extra_js_url(hass, CARD_URL)
+    add_extra_js_url(hass, CARD_URL, es5=True)      # the legacy build too (older browsers); defined once either way
 
     def coordinator_of(call: ServiceCall) -> HassmicCoordinator:
         """the Echo a call names by its device; the only one when there is one"""
