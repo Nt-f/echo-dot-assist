@@ -17,7 +17,10 @@ void  kiosk_load(void);                         /* at start: state/kiosk */
 int   kiosk_store(const char *text, char *err, size_t cap);
 /* malloc'd JSON: the screens, the address, the default, the return; with_token for the app on loopback alone */
 char *kiosk_json(int with_token, int enabled, size_t *len);
-void  kiosk_polled(int front);                  /* the app asked for its config; front: its activity is resumed */
+/* the app asked for its config; front: its activity is resumed; draws: it draws the request's words and a ring itself
+ * (its poll's path says so, docs/screen-apps.md) */
+void  kiosk_polled(int front, int draws);
+int   kiosk_draws(void);
 int   kiosk_front(void);                        /* 1: the app is in front (a poll within the last 20 s) */
 int   kiosk_configured(void);                   /* 1: at least one screen */
 /* the display thread's, with the kiosk switched on: the app started when it is gone (no poll for 90 s; at most once a

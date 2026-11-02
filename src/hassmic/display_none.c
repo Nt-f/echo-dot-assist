@@ -16,3 +16,6 @@ int  display_screen_timeout(int stock_ms) { return stock_ms; }
 int  display_keeps_awake(void) { return 0; }
 void display_link(int linked) { (void)linked; }
 int  display_splash(const char *file) { (void)file; return 1; }
+#include <stdio.h>
+size_t   display_state_json(char *out, size_t cap) { return (size_t)snprintf(out, cap, "{\"v\":0}"); }
+unsigned display_wait(unsigned since, int ms) { (void)since; (void)ms; return 0; }

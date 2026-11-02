@@ -189,7 +189,7 @@ int main(void)
     display_setting(DS_KIOSK, 1);
     WAIT(am_starts > 0);
     check(am_starts == 1, "kiosk on: the app started");
-    kiosk_polled(1); display_changed();
+    kiosk_polled(1, 0); display_changed();
     ms(600); n0 = nframes(); ms(1500);
     check(nframes() == n0, "the app in front: our layer gone (no frames)");
     display_ringing("Alarm 7 AM");
@@ -197,9 +197,30 @@ int main(void)
     check(nframes() > n0, "a ring over the kiosk: our layer back");
     display_ringing(NULL); ms(600); n0 = nframes(); ms(1500);
     check(nframes() == n0, "the ring over: the kiosk's again");
-    kiosk_polled(0); display_changed();
+    kiosk_polled(0, 0); display_changed();
     WAIT(nframes() > n0);
     check(nframes() > n0 && am_starts == 1, "the app paused: the clock, the app not started again within the minute");
+    /* an app that draws the words and a ring itself (its poll says /front/draws): the screen stays its; the state feed */
+    kiosk_polled(1, 1); display_changed();
+    ms(600); n0 = nframes();
+    char js[4600]; display_state_json(js, sizeof js);
+    unsigned v0 = (unsigned)atoi(strstr(js, "\"v\":") + 4);
+    display_ringing("Alarm 7 AM"); ms(1500);
+    check(nframes() == n0, "an app that draws: a ring leaves the screen to it");
+    display_state_json(js, sizeof js);
+    check(strstr(js, "\"ringing\":\"Alarm 7 AM\"") && strstr(js, "\"ringing_alarm\":true"), "the state: what rings");
+    unsigned v1 = (unsigned)atoi(strstr(js, "\"v\":") + 4);
+    check(v1 != v0, "the state: a new version");
+    display_ringing(NULL);
+    long long t0 = 0; { struct timespec t; clock_gettime(CLOCK_MONOTONIC, &t); t0 = t.tv_sec * 1000LL + t.tv_nsec / 1000000; }
+    unsigned v2 = display_wait(v1, 3000);             /* already newer: at once */
+    display_heard("what time is it"); display_state_json(js, sizeof js);
+    check(v2 != v1 && strstr(js, "\"heard\":\"what time is it\"") && strstr(js, "\"words\":true"), "the state: the words");
+    unsigned v3 = (unsigned)atoi(strstr(js, "\"v\":") + 4);
+    { struct timespec t; clock_gettime(CLOCK_MONOTONIC, &t); long long t1 = t.tv_sec * 1000LL + t.tv_nsec / 1000000; unsigned v4 = display_wait(v3, 400);
+      clock_gettime(CLOCK_MONOTONIC, &t); long long t2 = t.tv_sec * 1000LL + t.tv_nsec / 1000000;
+      check(v4 == v3 && t2 - t1 >= 350 && t1 - t0 < 1000, "the long poll: nothing new, it waits its time"); }
+    kiosk_polled(1, 0);
     display_setting(DS_KIOSK, 0);
 
     char c[400]; snprintf(c, sizeof c, "rm -rf '%s'", dir); if (system(c)) {}

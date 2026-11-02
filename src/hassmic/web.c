@@ -1098,12 +1098,23 @@ static void handle(int fd)
     char *q = strchr(r.path, '?'); if (q) *q = 0;       /* no query strings in what we serve */
 
     if (!strcmp(r.method, "OPTIONS")) respond_c(fd, strncmp(r.path, "/kiosk/", 7) != 0, 204, "text/plain", NULL, NULL, 0);
+    else if (!strcmp(r.method, "GET") && !strncmp(r.path, "/kiosk/state", 12)) {
+        /* what the screen shows, for the screen app that draws it itself: /kiosk/state/<v> waits up to 25 s for a
+         * version other than v (a long poll: words appear at once), /kiosk/state answers now */
+        if (!from_loopback(fd) || !kiosk_peer_ok(fd)) respond_c(fd, 0, 404, "application/json", NULL, "{}", 2);
+        else {
+            if (r.path[12] == '/') { char *e; unsigned long v = strtoul(r.path + 13, &e, 10); if (!*e) display_wait((unsigned)v, 25000); }
+            char o[4600]; size_t n = display_state_json(o, sizeof o);
+            respond_c(fd, 0, 200, "application/json", NULL, o, n < sizeof o ? n : sizeof o - 1);
+        }
+    }
     else if (!strcmp(r.method, "GET") && !strncmp(r.path, "/kiosk/config", 13)) {
         /* the token's way to the app: only from this Echo, and with no CORS headers: the pages the kiosk shows run here
          * too (127.0.0.1), and a page's script must not read it.  The app's HttpURLConnection does not ask for CORS */
         if (!from_loopback(fd) || !kiosk_peer_ok(fd)) respond_c(fd, 0, 404, "application/json", NULL, "{}", 2);
         else {
-            if (!strcmp(r.path + 13, "/front")) kiosk_polled(1); else if (!strcmp(r.path + 13, "/back")) kiosk_polled(0);
+            const char *t = r.path + 13;
+            if (!strncmp(t, "/front", 6)) kiosk_polled(1, !strcmp(t + 6, "/draws")); else if (!strncmp(t, "/back", 5)) kiosk_polled(0, 0);
             size_t n; char *j = kiosk_json(1, display_setting(DS_KIOSK, -1) > 0 && display_setting(DS_MODE, -1) != DISPLAY_OFF, &n);
             if (j) { respond_c(fd, 0, 200, "application/json", NULL, j, n); free(j); } else respond_c(fd, 0, 503, "application/json", NULL, "{}", 2);
         }

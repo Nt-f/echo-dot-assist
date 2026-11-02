@@ -6,6 +6,7 @@
  * that takes core_lock. */
 #ifndef DISPLAY_H
 #define DISPLAY_H
+#include <stddef.h>
 
 /* what the screen does: off (black, as before), awake (the clock while the screen is on; it sleeps as stock's does),
  * always (never sleeps), always_dim (never sleeps, dimmed at night) */
@@ -34,5 +35,8 @@ void display_link(int linked);
 int  display_splash(const char *file);
 /* ring_band.c: the screen_off_timeout the band's power policy is to set, given stock's for now (ms) */
 int  display_screen_timeout(int stock_ms);
-int  display_keeps_awake(void);                 /* 1: the screen must not sleep now (always on, or something rings) */
+int  display_keeps_awake(void);
+/* what the screen shows, for a screen app that draws it itself (web.c GET /kiosk/state): JSON, "v" its version */
+size_t   display_state_json(char *out, size_t cap);
+unsigned display_wait(unsigned since, int ms);  /* until the version is not `since` any more, or ms: the version */                 /* 1: the screen must not sleep now (always on, or something rings) */
 #endif

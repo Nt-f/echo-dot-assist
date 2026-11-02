@@ -173,6 +173,13 @@ async def run(tmp):
                 async with other.get(f"{web}/kiosk/config") as r:
                     t = await r.text()
             check(r.status == 404 and "token" not in t, f"from another address than 127.0.0.1: not found ({r.status})")
+            async with session.get(f"{web}/kiosk/state") as r:
+                st_ = await r.json(content_type=None) if r.status == 200 else {}
+            check(r.status == 200 and "v" in st_ and not any(h.lower().startswith("access-control") for h in r.headers),
+                  f"the state feed for the screen app ({r.status}, {sorted(st_)[:4]})")
+            async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(local_addr=("127.0.0.2", 0))) as other:
+                async with other.get(f"{web}/kiosk/state") as r:
+                    check(r.status == 404, f"the state feed from another address: not found ({r.status})")
             check(tok and cfg.get("ha") == hr.HA, f"the Echo has the address and a token ({cfg.get('ha')}, {len(tok)} chars)")
             check([s["name"] for s in cfg.get("screens", [])] == ["Home", "Home Assistant"]
                   and cfg["screens"][0]["url"].startswith(f"{hr.HA}/hassmic/wall.html") and cfg["screens"][1]["url"] == f"{hr.HA}/lovelace"

@@ -129,6 +129,7 @@ class HassmicOptionsFlow(OptionsFlowWithReload):
         if user_input is not None:
             return self.async_create_entry(data={**o, **user_input})
         kinds = [selector.SelectOptionDict(value=v, label=l) for v, l in (
+            ("clock", "Clock (a screen app's own: not hassmic's built-in kiosk)"),
             ("wall", "Wall panel (rooms and tiles, light on memory)"), ("dashboard", "Home Assistant's own UI"),
             ("music", "Music Assistant"), ("custom", "A page of your own"))]
         music = k.music_panel(self.hass)
