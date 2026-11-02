@@ -111,6 +111,11 @@ async def run(tmp):
             async with session.get(f"{hr.HA}/hassmic/hassmic-alarms-card.js") as r:
                 body = await r.text()
             check(r.status == 200 and "hassmic-alarms-card" in body, f"the dashboard card is served ({r.status})")
+            await c.post("/api/onboarding/integration", {"client_id": f"{hr.HA}/", "redirect_uri": f"{hr.HA}/?auth_callback=1"})
+            async with session.get(f"{hr.HA}/lovelace/0") as r:  # every dashboard loads it: the frontend's page names it
+                page = await r.text()
+            check("/hassmic/hassmic-alarms-card.js" in page,
+                  f"the frontend's page loads the card on every dashboard ({r.status}: {[l for l in page.splitlines() if 'import' in l or 'extra' in l.lower()][:6]})")
 
             # the Echo forgot Home Assistant (its login revoked on the page, a factory reset): the next call asks for
             # the button again, through a repair
