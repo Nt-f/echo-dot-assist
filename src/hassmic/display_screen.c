@@ -69,7 +69,8 @@ static int linked, ever_linked;                             /* lock held: Home A
 static long long words_until;                               /* lock held: mono ms the words go (0: while running) */
 
 static long long mono_ms(void) { struct timespec t; clock_gettime(CLOCK_MONOTONIC, &t); return t.tv_sec * 1000LL + t.tv_nsec / 1000000; }
-static void poke(void) { dirty = 1; pthread_cond_signal(&cv); }     /* lock held */
+static unsigned ver = 1;                                    /* lock held: bumps with every change a screen app may draw */
+static void poke(void) { dirty = 1; ver++; pthread_cond_broadcast(&cv); }  /* lock held; broadcast: display_wait waits too */
 
 int display_present(void) { return 1; }
 
@@ -119,6 +120,58 @@ void display_link(int up)
     pthread_mutex_lock(&lock);
     if (up != linked) { linked = up; if (up) ever_linked = 1; poke(); }
     pthread_mutex_unlock(&lock);
+}
+
+/* ---------------------------------------------------------------- for a screen app that draws these itself */
+
+static size_t jesc_(char *o, size_t cap, const char *s)
+{
+    size_t n = 0;
+    for (; *s && n + 7 < cap; s++) {
+        unsigned char c = (unsigned char)*s;
+        if (c == '"' || c == '\\') { o[n++] = '\\'; o[n++] = (char)c; }
+        else if (c < 0x20) n += (size_t)snprintf(o + n, cap - n, "\\u%04x", c);
+        else o[n++] = (char)c;
+    }
+    o[n] = 0;
+    return n;
+}
+
+size_t display_state_json(char *out, size_t cap)
+{
+    static char h[1300], r[2500], g[340];
+    pthread_mutex_lock(&lock);
+    unsigned v = ver; int run = running;
+    int words = ds[DS_TEXT] && (running || words_until || heard[0] || reply[0]);
+    jesc_(h, sizeof h, heard); jesc_(r, sizeof r, reply); jesc_(g, sizeof g, ringing);
+    int mode = ds[DS_MODE];
+    pthread_mutex_unlock(&lock);
+    int h24 = alarms_h24();
+    char next[700] = "null";
+    struct alarm a; time_t nx = alarms_next(&a);
+    if (nx) {
+        char f[96], t[200], te[400];
+        if (nx == a.snoozed) { struct tm tm; localtime_r(&nx, &tm); alarms_time_text(tm.tm_hour, tm.tm_min, h24, f, sizeof f); snprintf(t, sizeof t, "Snoozed until %s", f); }
+        else { alarms_format(&a, alarms_now(), h24, f, sizeof f); snprintf(t, sizeof t, "Alarm %s", f); }
+        jesc_(te, sizeof te, t); char le[120]; jesc_(le, sizeof le, a.label);
+        snprintf(next, sizeof next, "{\"at\":%lld,\"text\":\"%s\",\"label\":\"%s\"}", (long long)nx, te, le);
+    }
+    return (size_t)snprintf(out, cap, "{\"v\":%u,\"running\":%s,\"words\":%s,\"heard\":\"%s\",\"reply\":\"%s\",\"ringing\":\"%s\","
+                            "\"ringing_alarm\":%s,\"h24\":%s,\"clock_set\":%s,\"next_alarm\":%s,\"display\":\"%s\"}",
+                            v, run ? "true" : "false", words ? "true" : "false", h, r, g, strstr(ringing, "Alarm") ? "true" : "false",
+                            h24 ? "true" : "false", alarms_clock_ok() ? "true" : "false", next, display_modes[mode]);
+}
+
+unsigned display_wait(unsigned since, int ms)
+{
+    struct timespec ts; clock_gettime(CLOCK_REALTIME, &ts);
+    ts.tv_sec += ms / 1000; ts.tv_nsec += (long)(ms % 1000) * 1000000L;
+    if (ts.tv_nsec >= 1000000000L) { ts.tv_sec++; ts.tv_nsec -= 1000000000L; }
+    pthread_mutex_lock(&lock);
+    while (ver == since && pthread_cond_timedwait(&cv, &lock, &ts) == 0) {}
+    unsigned v = ver;
+    pthread_mutex_unlock(&lock);
+    return v;
 }
 
 int display_keeps_awake(void)
@@ -505,7 +558,7 @@ static void *display_thread(void *arg)
         pthread_mutex_lock(&lock);
         int mode = ds[DS_MODE], dark = ds[DS_DARK_ROOM], bright = ds[DS_BRIGHT], nbright = ds[DS_NIGHT_BRIGHT];
         long long now_ms_ = mono_ms();
-        if (words_until && now_ms_ >= words_until) { words_until = 0; heard[0] = reply[0] = 0; }
+        if (words_until && now_ms_ >= words_until) { words_until = 0; heard[0] = reply[0] = 0; ver++; pthread_cond_broadcast(&cv); }
         l.running = running; l.words = ds[DS_TEXT] && (running || words_until || heard[0] || reply[0]);
         snprintf(l.heard, sizeof l.heard, "%s", heard); snprintf(l.reply, sizeof l.reply, "%s", reply);
         snprintf(l.ringing, sizeof l.ringing, "%s", ringing);
@@ -521,7 +574,8 @@ static void *display_thread(void *arg)
         int show = l.status && mode == DISPLAY_OFF ? DISPLAY_AWAKE : mode;
         /* the kiosk app has the screen while nothing of ours is to show: a ring, a request's words, the status */
         int kiosk = kiosk_on && lk && !l.oobe && mode != DISPLAY_OFF;     /* off: black, the app blank too (web.c) */
-        int to_kiosk = kiosk && kiosk_tick(1) && !l.ringing[0] && !l.words;
+        /* a screen app that draws the request's words and a ring itself (docs/screen-apps.md) keeps the screen for them */
+        int to_kiosk = kiosk && kiosk_tick(1) && (kiosk_draws() || (!l.ringing[0] && !l.words));
         int rows = ring_band_rows(-1); if (rows < 0) rows = 0;
         if (show == DISPLAY_OFF || to_kiosk || rows != have_rows) {
             if (fd >= 0) { close(fd); fd = -1; fprintf(stderr, "display: %s\n", to_kiosk ? "the kiosk's" : "off"); }

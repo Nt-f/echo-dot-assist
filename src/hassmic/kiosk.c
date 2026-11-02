@@ -47,6 +47,7 @@ static char ha[URL_MAX + 1], token[TOKEN_MAX + 1];
 #define APP_MAX 150
 static char app[APP_MAX + 1] = APP_DEFAULT;
 static long long front_at, seen_at, started_at;
+static int draws;                       /* the app in front draws the request's words and a ring itself */
 
 static long long mono_ms(void) { struct timespec t; clock_gettime(CLOCK_MONOTONIC, &t); return t.tv_sec * 1000LL + t.tv_nsec / 1000000; }
 static void path(char *out, size_t cap)
@@ -65,6 +66,13 @@ static int clean(const char *s, size_t max, int tabs)
     return 1;
 }
 static int is_url(const char *u) { return (!strncmp(u, "http://", 7) || !strncmp(u, "https://", 8)) && !strchr(u, ' ') && clean(u, URL_MAX, 0); }
+/* a screen the app draws itself: "hassmic:clock" (docs/screen-apps.md), lower-case letters and dashes after the colon */
+static int is_own(const char *u)
+{
+    if (strncmp(u, "hassmic:", 8) || !u[8] || strlen(u) > 40) return 0;
+    for (const char *c = u + 8; *c; c++) if (!((*c >= 'a' && *c <= 'z') || *c == '-')) return 0;
+    return 1;
+}
 
 /* parses text into the given places; 0 ok */
 /* a package name as Android takes it: letters, digits, _ and dots */
@@ -98,7 +106,7 @@ static int parse(const char *text, struct screen *sc, int *ns, int *d, int *r, c
             *tab++ = 0;
             if (*ns >= KIOSK_SCREENS) { snprintf(err, cap, "more than %d screens", KIOSK_SCREENS); return -1; }
             if (!v[0] || !clean(v, NAME_MAX_, 0)) { snprintf(err, cap, "screen: a name of 1 to %d characters", NAME_MAX_); return -1; }
-            if (!is_url(tab)) { snprintf(err, cap, "screen %s: not an http(s) address", v); return -1; }
+            if (!is_url(tab) && !is_own(tab)) { snprintf(err, cap, "screen %s: not an http(s) address", v); return -1; }
             snprintf(sc[*ns].name, sizeof sc[*ns].name, "%s", v); snprintf(sc[*ns].url, sizeof sc[*ns].url, "%s", tab); (*ns)++;
         }
         else if (!strcmp(line, "app")) { if (!is_pkg(v)) { snprintf(err, cap, "app: not a package name"); return -1; } snprintf(ap, APP_MAX + 1, "%s", v); }
@@ -166,9 +174,10 @@ char *kiosk_json(int with_token, int enabled, size_t *len)
     return o;
 }
 
-void kiosk_polled(int front)
+void kiosk_polled(int front, int draws_)
 {
     pthread_mutex_lock(&lock);
+    if (front) draws = draws_;
     seen_at = mono_ms();
     if (front) front_at = seen_at;
     else front_at = 0;                  /* paused: the screen went off (or something else is in front) */
@@ -249,3 +258,5 @@ int kiosk_peer_ok(int fd)
     }
     return 1;
 }
+
+int kiosk_draws(void) { pthread_mutex_lock(&lock); int r = draws; pthread_mutex_unlock(&lock); return r; }

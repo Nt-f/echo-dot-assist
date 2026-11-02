@@ -67,6 +67,45 @@ While the app polls `/front`, hassmic takes its own layer off the screen wheneve
 it back over the app for a request's words, a ringing alarm (a tap snoozes it: the app sees that tap too) or the
 status after Home Assistant went away. The app needs to do nothing for that.
 
+## Drawing the clock, the words and the alarms itself
+
+An app that would rather draw these in its own look polls `/kiosk/config/front/draws` instead of `/front`: hassmic
+then leaves the screen to it for a request's words and a ringing alarm as well (the start's status and Home
+Assistant going away stay hassmic's: the app has nothing to show then). What to draw comes from
+
+```
+GET http://127.0.0.1:28931/kiosk/state           now
+GET http://127.0.0.1:28931/kiosk/state/<v>       a long poll: answers once the version is not <v> any more, or after 25 s
+```
+
+(the same rule: 127.0.0.1 and the screen app's uid only)
+
+```json
+{
+  "v": 42,
+  "running": true,
+  "words": true,
+  "heard": "turn on the kitchen lights",
+  "reply": "Turned on the kitchen lights.",
+  "ringing": "Alarm 7:30 AM",
+  "ringing_alarm": true,
+  "h24": false,
+  "clock_set": true,
+  "next_alarm": {"at": 1793689800, "text": "Alarm 7:30 AM on weekdays", "label": "Gym"},
+  "display": "always"
+}
+```
+
+- `running`: a request is under way (listening, thinking, answering); `words`: show `heard` (what speech to text
+  understood) and `reply` now (hassmic's "Show what you said and the reply" and "Words stay for" are applied).
+- `ringing`: what rings, empty when nothing does; `ringing_alarm`: an alarm (snoozes) rather than a timer. Taps and
+  long presses on the screen reach hassmic itself (it reads the touch screen beside Android): a tap snoozes an alarm
+  or stops a timer, a press of 1.5 s stops, whoever draws the ring. Draw what stops it; do not act on it.
+- `h24`, `next_alarm`, `clock_set` (the Echo's clock came from Home Assistant): for a clock of the app's own.
+
+Screens whose `url` is `hassmic:<name>` are the app's to draw; so far `hassmic:clock`, the clock as idle screen (the
+integration's "Clock" screen). An app that cannot draw one leaves it out (hassmic's own kiosk does).
+
 ## What the Echo lacks
 
 - **No keyboard.** Fire OS's input method went with Amazon's apps; the Echo has none. A screen app that offers text

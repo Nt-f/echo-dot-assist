@@ -160,7 +160,8 @@ public class Kiosk extends Activity {
 
     void pollLoop() {
         for (;;) {
-            boolean front = resumed;
+            // with nothing of its own to show (no web page among the screens), as if it were not in front: hassmic's clock
+            boolean front = resumed && (urls.length > 0 || cfgText.isEmpty());
             final String t = fetch(CONFIG + (front ? "/front" : "/back"));
             if (front) ui.post(() -> apply(t));
             synchronized (this) { try { wait(front ? POLL_MS : PAUSED_POLL_MS); } catch (InterruptedException e) { return; } }
@@ -181,11 +182,19 @@ public class Kiosk extends Activity {
                 JSONArray s = j.optJSONArray("screens");
                 int n = s == null ? 0 : s.length();
                 String[] nn = new String[n], uu = new String[n];
-                for (int i = 0; i < n; i++) { nn[i] = s.getJSONObject(i).optString("name"); uu[i] = s.getJSONObject(i).optString("url"); }
+                // only web pages: "hassmic:clock" and the like are for screen apps that draw them (docs/screen-apps.md)
+                java.util.List<String> ln = new java.util.ArrayList<>(), lu = new java.util.ArrayList<>();
+                for (int i = 0; i < n; i++) {
+                    String u = s.getJSONObject(i).optString("url");
+                    if (u.startsWith("http://") || u.startsWith("https://")) { ln.add(s.getJSONObject(i).optString("name")); lu.add(u); }
+                }
+                n = lu.size(); nn = ln.toArray(new String[0]); uu = lu.toArray(new String[0]);
                 boolean same = java.util.Arrays.equals(uu, urls);
                 names = nn; urls = uu;
-                def = j.optInt("default", 0); returnS = j.optInt("return", 0);
-                if (def < 0 || def >= n) def = 0;
+                // the start screen counted among all of them: here among the web pages (one this app skips: the first)
+                int d0 = j.optInt("default", 0), total = s == null ? 0 : s.length();
+                String du = d0 >= 0 && d0 < total ? s.getJSONObject(d0).optString("url") : "";
+                def = Math.max(0, lu.indexOf(du)); returnS = j.optInt("return", 0);
                 if (newLogin) injectedFor = "";
                 if (!enabled || n == 0) { stop(); return; }
                 start();

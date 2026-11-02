@@ -34,7 +34,7 @@ OPT_ADMIN = "kiosk_admin"               # the kiosk's user an administrator (Hom
 OPT_URL = "kiosk_ha_url"                # Home Assistant's address as the Echo reaches it; empty: get_url's
 OPT_APP = "kiosk_app"                   # the screen app's package (docs/screen-apps.md); empty: hassmic's Java kiosk
 
-SCREEN_KINDS = ["wall", "dashboard", "music", "custom"]
+SCREEN_KINDS = ["clock", "wall", "dashboard", "music", "custom"]
 DATA_USER, DATA_TOKEN = "kiosk_user", "kiosk_token"
 
 
@@ -64,7 +64,9 @@ def screens(hass: HomeAssistant, entry: ConfigEntry) -> tuple[list[tuple[str, st
     kinds = [k for k in SCREEN_KINDS if k in (o.get(OPT_SCREENS) or ["wall", "dashboard"])]
     out: list[tuple[str, str, str]] = []
     for k in kinds:
-        if k == "wall":
+        if k == "clock":                # drawn by a screen app that can (docs/screen-apps.md); hassmic's own kiosk skips it
+            out.append((k, "Clock", "hassmic:clock"))
+        elif k == "wall":
             out.append((k, "Home", f"{base}{WALL_URL}?echo={quote(entry.unique_id or '')}"))
         elif k == "dashboard":
             out.append((k, "Home Assistant", f"{base}/{(o.get(OPT_DASHBOARD) or 'lovelace').strip('/')}"))
