@@ -33,6 +33,19 @@ OPT_RETURN = "kiosk_return"             # seconds untouched before going back to
 OPT_ADMIN = "kiosk_admin"               # the kiosk's user an administrator (Home Assistant's settings on the Echo)
 OPT_URL = "kiosk_ha_url"                # Home Assistant's address as the Echo reaches it; empty: get_url's
 OPT_APP = "kiosk_app"                   # the screen app's package (docs/screen-apps.md); empty: hassmic's Java kiosk
+OPT_APP_SETTINGS = "kiosk_app_settings"  # "key=value" lines for the screen app (an Immich address and key, ...)
+
+
+def app_settings(text: str) -> dict[str, str]:
+    """the options' "key=value" lines; blank lines and # comments left out"""
+    out: dict[str, str] = {}
+    for line in (text or "").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        k, v = line.split("=", 1)
+        out[k.strip().lower()] = v.strip()
+    return out
 
 SCREEN_KINDS = ["clock", "wall", "dashboard", "music", "custom"]
 DATA_USER, DATA_TOKEN = "kiosk_user", "kiosk_token"
@@ -120,7 +133,7 @@ async def push(hass: HomeAssistant, entry: ConfigEntry, echo: Echo) -> None:
     token = await login(hass, entry)
     try:
         await echo.put_kiosk(ha_url(hass, entry), scr, default, int(o.get(OPT_RETURN, 120)), token,
-                             (o.get(OPT_APP) or "").strip())
+                             (o.get(OPT_APP) or "").strip(), app_settings(o.get(OPT_APP_SETTINGS, "")))
         await echo.set("display_kiosk=1\n")
     except EchoError as e:
         _LOGGER.warning("%s: the kiosk could not be set up: %s", entry.title, e)

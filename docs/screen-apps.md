@@ -62,6 +62,10 @@ owner of `/data/data/<package>`; anyone else gets a 404. No CORS headers: pages 
   future, "refresh_token": ""}`) before its first page; for the websocket API, `{"type": "auth", "access_token"}`.
 - `screens`, `default`, `return`: what to offer, where to start, and after how many seconds untouched on another
   screen to go back to the default one (0: never).
+- `settings`: the app's own, as the owner typed them into the integration's options ("Screen app settings", one
+  `key=value` a line: keys of a-z 0-9 . _ -, 16 at most, values up to 400 characters), e.g. the HomeView's
+  `immich.url`, `immich.key`, `immich.album`. They travel sealed with the token (secrets may be among them) and are
+  only in this answer, never in the signed API's.
 
 While the app polls `/front`, hassmic takes its own layer off the screen whenever it has nothing to show, and puts
 it back over the app for a request's words, a ringing alarm (a tap snoozes it: the app sees that tap too) or the

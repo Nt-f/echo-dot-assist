@@ -101,7 +101,6 @@ async def api_kiosk_app(c, entry, app):
     o = await c.post(f"/api/config/config_entries/options/flow/{o['flow_id']}",
                      {"kiosk": True, "kiosk_screens": ["wall", "dashboard"], "kiosk_default": "wall", "kiosk_return": 90, "kiosk_admin": False,
                       "kiosk_app": app})
-    await c.post(f"/api/config/config_entries/options/flow/{o['flow_id']}", {"theme": "amber", "nowplaying": True, "ambient": 120, "favorites": [], "hidden": []})
     await asyncio.sleep(2)
 
 
@@ -154,7 +153,8 @@ async def run(tmp):
             o = await c.post(f"/api/config/config_entries/options/flow/{o['flow_id']}",
                              {"kiosk": True, "kiosk_screens": ["wall", "dashboard"], "kiosk_default": "wall", "kiosk_return": 90,
                               "kiosk_admin": False, "kiosk_dashboard": "lovelace", "kiosk_music": "", "kiosk_custom_name": "",
-                              "kiosk_custom_url": "", "kiosk_ha_url": ""})
+                              "kiosk_custom_url": "", "kiosk_ha_url": "",
+                              "kiosk_app_settings": "# the HomeView's photos\nimmich.url = http://192.168.1.9:2283\nimmich.key=s3cret-immich-key\n"})
             check(o.get("type") == "create_entry", f"saved ({o.get('type')})")
 
             cfg = {}
@@ -184,9 +184,11 @@ async def run(tmp):
             check([s["name"] for s in cfg.get("screens", [])] == ["Home", "Home Assistant"]
                   and cfg["screens"][0]["url"].startswith(f"{hr.HA}/hassmic/wall.html") and cfg["screens"][1]["url"] == f"{hr.HA}/lovelace"
                   and cfg.get("default") == 0 and cfg.get("return") == 90, f"its screens: {cfg.get('screens')}, default {cfg.get('default')}, return {cfg.get('return')}")
+            check((cfg.get("settings") or {}) == {"immich.url": "http://192.168.1.9:2283", "immich.key": "s3cret-immich-key"},
+                  f"the screen app's settings, sealed on the way, in its config ({cfg.get('settings')})")
             st = open(os.path.join(echo.state, "kiosk")).read()
             check(oct(os.stat(os.path.join(echo.state, "kiosk")).st_mode & 0o777) == "0o600" and tok in st, "state/kiosk: 0600, the token in it")
-            check(tok not in echo.text(), "the token is not in the log")
+            check(tok not in echo.text() and "s3cret-immich-key" not in echo.text(), "the token and the settings are not in the log")
             # another screen app (one of the owner's, not installed here): the config goes to nobody else
             await api_kiosk_app(c, entry, "org.example.screen")
             async with session.get(f"{web}/kiosk/config") as r:

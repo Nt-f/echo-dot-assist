@@ -186,6 +186,14 @@ int main(void)
     check(kiosk_store("screen Bad\tjavascript:alert(1)\n", err, sizeof err) && strstr(err, "http"), "kiosk: only http(s) screens");
     check(kiosk_configured(), "kiosk: still the two screens after a refused config");
     { size_t jn; char *j = kiosk_json(0, 1, &jn); check(j && strstr(j, "\"name\":\"Music\"") && !strstr(j, "\"token\":\""), "kiosk: its JSON, no token unless asked"); free(j); }
+    /* the screen app's own settings: to the app on loopback only */
+    check(!kiosk_store("ha http://192.168.1.5:8123\nscreen Home\thttp://192.168.1.5:8123/\nset immich.url http://192.168.1.9:2283\nset immich.key abc123\n", err, sizeof err),
+          "kiosk: settings stored");
+    { size_t jn; char *j = kiosk_json(1, 1, &jn), *k = kiosk_json(0, 1, &jn);
+      check(j && strstr(j, "\"settings\":{\"immich.url\":\"http://192.168.1.9:2283\",\"immich.key\":\"abc123\"}"), "kiosk: settings in the app's config");
+      check(k && !strstr(k, "abc123"), "kiosk: not in the signed API's answer"); free(j); free(k); }
+    check(kiosk_store("set Bad/Key x\n", err, sizeof err) && strstr(err, "key"), "kiosk: a key of a-z 0-9 . _ - only");
+    check(!kiosk_store("ha http://192.168.1.5:8123\nscreen Home\thttp://192.168.1.5:8123/hassmic/wall.html\nscreen Music\thttp://192.168.1.5:8123/music\n", err, sizeof err), "kiosk: back to two screens");
     display_setting(DS_KIOSK, 1);
     WAIT(am_starts > 0);
     check(am_starts == 1, "kiosk on: the app started");

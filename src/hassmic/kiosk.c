@@ -8,6 +8,8 @@
  *   screen <name>\t<url>     up to KIOSK_SCREENS, in the order the app's switcher shows them
  *   default <i>              the screen it starts on and goes back to
  *   return <s>               after this long untouched on another screen, back to the default (0: never)
+ *   set <key> <value>        a setting of the screen app's own (its Immich address and key, ...), for it alone:
+ *                            only in the app's config on loopback, never in the signed API's answer
  *   app <package>            the screen app (docs/screen-apps.md): hassmic's Java kiosk by default, or one of the
  *                            owner's (the Flutter template, hassmic-screen), started by its SCREEN intent
  *
@@ -46,6 +48,12 @@ static char ha[URL_MAX + 1], token[TOKEN_MAX + 1];
 #define APP_DEFAULT "org.hassmic.kiosk"
 #define APP_MAX 150
 static char app[APP_MAX + 1] = APP_DEFAULT;
+#define SETS 16
+#define SET_KEY 40
+#define SET_VAL 400
+struct set { char key[SET_KEY + 1], val[SET_VAL + 1]; };
+static struct set sets[SETS];
+static int nsets;
 static long long front_at, seen_at, started_at;
 static int draws;                       /* the app in front draws the request's words and a ring itself */
 
@@ -84,9 +92,18 @@ static int is_pkg(const char *s)
     return 1;
 }
 
-static int parse(const char *text, struct screen *sc, int *ns, int *d, int *r, char *h, char *t, char *ap, char *err, size_t cap)
+static int is_key(const char *s)
 {
-    *ns = 0; *d = 0; *r = 120; h[0] = t[0] = 0; snprintf(ap, APP_MAX + 1, "%s", APP_DEFAULT);
+    size_t n = strlen(s);
+    if (!n || n > SET_KEY) return 0;
+    for (; *s; s++) if (!((*s >= 'a' && *s <= 'z') || (*s >= '0' && *s <= '9') || *s == '_' || *s == '.' || *s == '-')) return 0;
+    return 1;
+}
+
+static int parse(const char *text, struct screen *sc, int *ns, int *d, int *r, char *h, char *t, char *ap, struct set *st, int *nst,
+                 char *err, size_t cap)
+{
+    *ns = 0; *d = 0; *r = 120; h[0] = t[0] = 0; snprintf(ap, APP_MAX + 1, "%s", APP_DEFAULT); *nst = 0;
     const char *p = text;
     while (p && *p) {
         const char *e = strchr(p, '\n'); size_t n = e ? (size_t)(e - p) : strlen(p);
@@ -109,6 +126,15 @@ static int parse(const char *text, struct screen *sc, int *ns, int *d, int *r, c
             if (!is_url(tab) && !is_own(tab)) { snprintf(err, cap, "screen %s: not an http(s) address", v); return -1; }
             snprintf(sc[*ns].name, sizeof sc[*ns].name, "%s", v); snprintf(sc[*ns].url, sizeof sc[*ns].url, "%s", tab); (*ns)++;
         }
+        else if (!strcmp(line, "set")) {
+            char *sp = strchr(v, ' ');
+            if (!sp) { snprintf(err, cap, "set: \"key value\""); return -1; }
+            *sp++ = 0;
+            if (!is_key(v)) { snprintf(err, cap, "set: a key of a-z 0-9 . _ -, 40 at most"); return -1; }
+            if (!clean(sp, SET_VAL, 0)) { snprintf(err, cap, "set %s: a value of printable characters, %d at most", v, SET_VAL); return -1; }
+            if (*nst >= SETS) { snprintf(err, cap, "more than %d settings", SETS); return -1; }
+            snprintf(st[*nst].key, sizeof st[*nst].key, "%s", v); snprintf(st[*nst].val, sizeof st[*nst].val, "%s", sp); (*nst)++;
+        }
         else if (!strcmp(line, "app")) { if (!is_pkg(v)) { snprintf(err, cap, "app: not a package name"); return -1; } snprintf(ap, APP_MAX + 1, "%s", v); }
         else if (!strcmp(line, "default")) *d = atoi(v);
         else if (!strcmp(line, "return")) { *r = atoi(v); if (*r < 0 || *r > 86400) { snprintf(err, cap, "return: 0 to 86400 s"); return -1; } }
@@ -124,9 +150,10 @@ void kiosk_load(void)
     path(p, sizeof p);
     if (!(f = fopen(p, "r"))) return;
     size_t n = fread(text, 1, sizeof text - 1, f); fclose(f); text[n] = 0;
-    struct screen sc[KIOSK_SCREENS]; int ns, d, r; char h[URL_MAX + 1], t[TOKEN_MAX + 1], ap[APP_MAX + 1];
-    if (parse(text, sc, &ns, &d, &r, h, t, ap, err, sizeof err)) { fprintf(stderr, "kiosk: state/kiosk refused (%s)\n", err); return; }
+    struct screen sc[KIOSK_SCREENS]; int ns, d, r, nst; char h[URL_MAX + 1], t[TOKEN_MAX + 1], ap[APP_MAX + 1]; static struct set st[SETS];
+    if (parse(text, sc, &ns, &d, &r, h, t, ap, st, &nst, err, sizeof err)) { fprintf(stderr, "kiosk: state/kiosk refused (%s)\n", err); return; }
     pthread_mutex_lock(&lock);
+    memcpy(sets, st, sizeof sets); nsets = nst;
     memcpy(screens, sc, sizeof sc); nscreens = ns; def = d; ret_s = r; snprintf(ha, sizeof ha, "%s", h); snprintf(token, sizeof token, "%s", t);
     snprintf(app, sizeof app, "%s", ap);
     pthread_mutex_unlock(&lock);
@@ -135,8 +162,9 @@ void kiosk_load(void)
 
 int kiosk_store(const char *text, char *err, size_t cap)
 {
-    struct screen sc[KIOSK_SCREENS]; int ns, d, r; char h[URL_MAX + 1], t[TOKEN_MAX + 1], p[300], ap[APP_MAX + 1];
-    if (parse(text, sc, &ns, &d, &r, h, t, ap, err, cap)) return -1;
+    struct screen sc[KIOSK_SCREENS]; int ns, d, r, nst; char h[URL_MAX + 1], t[TOKEN_MAX + 1], p[300], ap[APP_MAX + 1];
+    static struct set st[SETS];
+    if (parse(text, sc, &ns, &d, &r, h, t, ap, st, &nst, err, cap)) return -1;
     /* written back as parsed: only what was taken */
     size_t cap_ = 16384, n = 0; char *o = malloc(cap_);
     if (!o) { snprintf(err, cap, "out of memory"); return -1; }
@@ -144,28 +172,41 @@ int kiosk_store(const char *text, char *err, size_t cap)
     if (t[0]) n += (size_t)snprintf(o + n, cap_ - n, "token %s\n", t);
     for (int i = 0; i < ns; i++) n += (size_t)snprintf(o + n, cap_ - n, "screen %s\t%s\n", sc[i].name, sc[i].url);
     n += (size_t)snprintf(o + n, cap_ - n, "default %d\nreturn %d\napp %s\n", d, r, ap);
+    for (int i = 0; i < nst; i++) n += (size_t)snprintf(o + n, cap_ - n, "set %s %s\n", st[i].key, st[i].val);
     path(p, sizeof p);
     int bad = statefile_write(p, 0600, o, n);
     free(o);
     if (bad) { snprintf(err, cap, "cannot write state/kiosk"); return -1; }
     pthread_mutex_lock(&lock);
     int other = strcmp(app, ap) != 0;
+    char old[APP_MAX + 1]; snprintf(old, sizeof old, "%s", app);
+    memcpy(sets, st, sizeof sets); nsets = nst;
     memcpy(screens, sc, sizeof sc); nscreens = ns; def = d; ret_s = r; snprintf(ha, sizeof ha, "%s", h); snprintf(token, sizeof token, "%s", t);
     snprintf(app, sizeof app, "%s", ap);
     if (other) { front_at = seen_at = started_at = 0; }        /* another app: started at once, the old one's polls refused */
     pthread_mutex_unlock(&lock);
     fprintf(stderr, "kiosk: %d screen%s from Home Assistant%s, screen app %s\n", ns, ns == 1 ? "" : "s", t[0] ? ", with a login" : "", ap);
+    if (other) {
+        /* the one before stopped: Android would keep it in memory (a Flutter app with a WebView: 200 MB) until it needs
+         * the room, and it would go on polling */
+        char *argv[] = { "/system/bin/am", "force-stop", old, NULL };
+        core_spawn(argv);
+    }
     return 0;
 }
 
 char *kiosk_json(int with_token, int enabled, size_t *len)
 {
-    size_t cap = 8192 + TOKEN_MAX, n = 0; char *o = malloc(cap);
+    size_t cap = 8192 + TOKEN_MAX + SETS * (SET_KEY + SET_VAL + 8), n = 0; char *o = malloc(cap);
     if (!o) return NULL;
     pthread_mutex_lock(&lock);
     /* every string passed clean(): nothing in it to escape */
     n += (size_t)snprintf(o + n, cap - n, "{\"enabled\":%s,\"ha\":\"%s\",\"has_token\":%s,", enabled ? "true" : "false", ha, token[0] ? "true" : "false");
-    if (with_token) n += (size_t)snprintf(o + n, cap - n, "\"token\":\"%s\",", token);
+    if (with_token) {
+        n += (size_t)snprintf(o + n, cap - n, "\"token\":\"%s\",\"settings\":{", token);
+        for (int i = 0; i < nsets; i++) n += (size_t)snprintf(o + n, cap - n, "%s\"%s\":\"%s\"", i ? "," : "", sets[i].key, sets[i].val);
+        n += (size_t)snprintf(o + n, cap - n, "},");
+    }
     n += (size_t)snprintf(o + n, cap - n, "\"app\":\"%s\",\"default\":%d,\"return\":%d,\"screens\":[", app, def, ret_s);
     for (int i = 0; i < nscreens; i++) n += (size_t)snprintf(o + n, cap - n, "%s{\"name\":\"%s\",\"url\":\"%s\"}", i ? "," : "", screens[i].name, screens[i].url);
     n += (size_t)snprintf(o + n, cap - n, "]}");
