@@ -281,7 +281,9 @@ No model `#ifdef`s in shared code: new differences become a board field, a `devi
   password is), `state/kiosk` 0600; the app reads `GET /kiosk/config[/front|/back]` from 127.0.0.1 only and injects
   `hassTokens` into HA's origin.  Setting `display_kiosk`: display_screen.c `am start`s the app (`kiosk_tick`) and closes
   its own layer while the app is in front and it has nothing to show.  The wall panel is `frontend/wall.html`+`wall.js`
-  (its own page on HA's websocket, not a dashboard: memory, the Show 5 under 512 MB for all of it).  The start's status:
+  (its own page on HA's websocket, not a dashboard: memory, the Show 5 under 512 MB for all of it); its layout per Echo
+  in `wall.py` (Store + websocket `hassmic/wall/get|set|subscribe`), set by the options flow's "wall" step or the
+  panel's edit mode (page dots held).  The start's status:
   `hassmic -Y <file>` (`display_splash`, main.sh `stage`), then display_screen.c's status screen until HA's link
   (`display_link`).
 - **Sound packs** (`soundpack.c`, `soundpack.h`): sets of the Sounds card's sounds in `state/sound-packs/<id>/` (`name`,

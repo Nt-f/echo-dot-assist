@@ -15,7 +15,7 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.service_info.zeroconf import ZeroconfServiceInfo
 
 from .api import DEFAULT_PORT, Echo, EchoError, new_key
-from . import kiosk as k
+from . import kiosk as k, wall
 from .const import CONF_KEY, CONF_MAC, CONF_NODE, DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
@@ -124,10 +124,14 @@ class HassmicOptionsFlow(OptionsFlowWithReload):
     """The Echo Show's screen (kiosk.py): Home Assistant on it, which screens, where it starts.  The entry reloads on
     Submit, and its setup sends it all to the Echo."""
 
+    def __init__(self) -> None:
+        self.kiosk: dict = {}
+
     async def async_step_init(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         o = self.config_entry.options
         if user_input is not None:
-            return self.async_create_entry(data={**o, **user_input})
+            self.kiosk = user_input
+            return await self.async_step_wall()
         kinds = [selector.SelectOptionDict(value=v, label=l) for v, l in (
             ("wall", "Wall panel (rooms and tiles, light on memory)"), ("dashboard", "Home Assistant's own UI"),
             ("music", "Music Assistant"), ("custom", "A page of your own"))]
@@ -149,3 +153,30 @@ class HassmicOptionsFlow(OptionsFlowWithReload):
         })
         return self.async_show_form(step_id="init", data_schema=schema,
                                     description_placeholders={"url": k.ha_url(self.hass, self.config_entry)})
+
+    async def async_step_wall(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
+        """The wall panel on this Echo (wall.py): its look and what Home shows.  The same layout the panel's own edit
+        mode changes (hold the page dots on the Echo): whichever was last."""
+        echo = self.config_entry.unique_id
+        lay = wall.get(self.hass, echo)
+        if user_input is not None:
+            new = {**lay, "theme": user_input["theme"], "ambient": int(user_input["ambient"]),
+                   "nowplaying": user_input["nowplaying"], "hidden": user_input.get("hidden") or []}
+            new["weather"] = user_input.get("weather") or ""
+            fav = user_input.get("favorites") or []
+            new["favorites"] = fav if fav else None         # none: the panel picks (thermostat, camera, scenes, locks)
+            await wall.put(self.hass, echo, new)
+            return self.async_create_entry(data={**self.config_entry.options, **self.kiosk})
+        sel = lambda **kw: selector.EntitySelector(selector.EntitySelectorConfig(**kw))
+        theme = [selector.SelectOptionDict(value=v, label=l) for v, l in (("amber", "Amber"), ("dusk", "Dusk"), ("light", "Light"))]
+        schema = vol.Schema({
+            vol.Required("theme", default=lay.get("theme", "amber")):
+                selector.SelectSelector(selector.SelectSelectorConfig(options=theme, mode=selector.SelectSelectorMode.LIST)),
+            vol.Optional("favorites", description={"suggested_value": lay.get("favorites") or []}): sel(multiple=True, reorder=True),
+            vol.Optional("weather", description={"suggested_value": lay.get("weather") or None}): sel(domain="weather"),
+            vol.Required("nowplaying", default=lay.get("nowplaying", True)): bool,
+            vol.Required("ambient", default=lay.get("ambient", 120)):
+                selector.NumberSelector(selector.NumberSelectorConfig(min=0, max=3600, step=10, unit_of_measurement="s", mode=selector.NumberSelectorMode.BOX)),
+            vol.Optional("hidden", description={"suggested_value": lay.get("hidden") or []}): sel(multiple=True),
+        })
+        return self.async_show_form(step_id="wall", data_schema=schema)

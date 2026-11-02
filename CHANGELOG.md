@@ -12,6 +12,9 @@ What changed for people using the Echo, newest first. Details and measurements a
   enough for the Echo Show 5's memory. An update to this version and a restart of the Echo bring it (the update
   puts Android's WebView back on the Echo, which Android only finds at a start).
   See the guide's "Home Assistant on the screen".
+- **Arrange the wall panel.** Hold the page dots on the Echo to edit it: drag tiles, star them for the Home page,
+  hide them, pick the wallpaper. Or in Home Assistant, on the hassmic integration's second options page. Both keep
+  one layout per Echo in Home Assistant.
 - **A keyboard on the Echo Show's screen.** The kiosk has an on-screen keyboard of its own (the Echo has none): it
   comes up when you tap a text field, for a login, a search or a name.
 - **The Echo Show starts about 15 seconds sooner.** Turning Alexa off at each start no longer asks Android

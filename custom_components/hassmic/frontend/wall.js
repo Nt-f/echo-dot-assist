@@ -66,7 +66,13 @@
       ws.send(JSON.stringify(Object.assign({ id }, msg)));
     });
   }
-  function subscribe(msg, cb) { const id = nextId++; subs.set(id, cb); ws.send(JSON.stringify(Object.assign({ id }, msg))); }
+  function subscribe(msg, cb) {
+    const id = nextId++; subs.set(id, cb);
+    const p = new Promise((res, rej) => pending.set(id, { res, rej }));
+    ws.send(JSON.stringify(Object.assign({ id }, msg)));
+    p.catch(() => subs.delete(id));
+    return p;
+  }
   const call = (domain, service, entity_id, data) => send({ type: 'call_service', domain, service, service_data: data || {}, target: { entity_id } }).catch((e) => console.warn(service, e));
 
   async function connect() {
@@ -120,6 +126,10 @@
   }
 
   async function started() {
+    // the layout (custom_components/hassmic wall.py): this Echo's, followed live; without the integration, this
+    // browser's own (localStorage)
+    subscribe({ type: 'hassmic/wall/subscribe', echo: ECHO }, (ev) => { layout = ev.layout || {}; local = false; applyLayout(); })
+      .catch(() => { local = true; try { layout = JSON.parse(localStorage.getItem('hassmicWall') || '{}'); } catch (e) { layout = {}; } applyLayout(); });
     subscribe({ type: 'subscribe_entities' }, onEntities);
     await registries().catch((e) => message('No rooms', 'Home Assistant did not give the areas: ' + (e && e.message || e)));
     // areas and entities renamed or moved: read again
@@ -141,6 +151,7 @@
     return (d && d.area_id) || null;
   }
   function shown(id) {
+    if (hidden().has(id)) return false;
     const e = entities[id], st = states[id], dm = domain(id);
     if (e && (e.hb || e.ec != null)) return false;          // hidden, or a config/diagnostic entity
     if (!st) return false;
@@ -247,11 +258,11 @@
   }
 
   // items into pages: a 2x2 widget takes four cells; what does not fit starts the page's next one
-  function pack(name, items, g) {
+  function pack(name, items, g, keepOrder) {
     const cap = g.rows * g.cols, bigMax = Math.floor(g.rows / 2) * Math.floor(g.cols / 2), pages = [];
     let cur = null, used = 0, bigs = 0;
     const open = () => { cur = { name: pages.length && pages[pages.length - 1].name.startsWith(name) ? name : name, items: [] }; pages.push(cur); used = 0; bigs = 0; };
-    items.sort((a, b) => (b.big ? 1 : 0) - (a.big ? 1 : 0));          // the big ones first: dense flow fills around them
+    if (!keepOrder) items.sort((a, b) => (b.big ? 1 : 0) - (a.big ? 1 : 0));   // the big ones first: dense flow fills around them
     for (const it of items) {
       const area = it.big ? 4 : 1;
       if (!cur || used + area > cap || (it.big && bigs >= bigMax)) open();
@@ -266,36 +277,40 @@
     const g = grid(), list = rooms();
     const keep = pageNames[pageIndex];
     const pages = [];
-    // Home: the clock, the date and weather, the thermostat, what plays, a camera, scenes, locks, the other screens
+    // Home: the clock, the date and weather, then the favourites (the layout's, else a thermostat, a camera, scenes,
+    // locks), what plays, the kiosk's other screens
     const home = [{ k: 'clock' }, { k: 'date' }];
-    const climate = (params.get('thermostat') || Object.keys(states).find((x) => domain(x) === 'climate' && states[x].a.temperature != null && shown(x)));
-    if (climate && states[climate]) home.push({ k: 'thermo', id: climate, big: true });
-    playing = Object.keys(states).find((x) => domain(x) === 'media_player' && states[x].s === 'playing' && states[x].a.media_title) || '';
-    if (playing) home.push({ k: 'np', id: playing, big: true });
-    const cam = params.get('camera') || Object.keys(states).find((x) => domain(x) === 'camera' && states[x].s !== 'unavailable');
-    if (cam && states[cam]) home.push({ k: 'cam', id: cam });
-    const fav = (params.get('favorites') || '').split(',').filter((x) => states[x]);
-    const scenes = Object.keys(states).filter((x) => domain(x) === 'scene' && shown(x)).slice(0, 3);
-    const locks = Object.keys(states).filter((x) => domain(x) === 'lock' && shown(x));
-    for (const id of fav.length ? fav : [...scenes, ...locks]) home.push({ k: 'tile', id, home: true });
+    playing = Object.keys(states).find((x) => domain(x) === 'media_player' && states[x].s === 'playing' && states[x].a.media_title && !hidden().has(x)) || '';
+    const fav = favorites();
+    for (const id of fav) {
+      const dm = domain(id);
+      if (dm === 'climate' && states[id].a.temperature != null) home.push({ k: 'thermo', id, big: true });
+      else if (dm === 'camera') home.push({ k: 'cam', id });
+      else if (dm === 'media_player' && id === playing) home.push({ k: 'np', id, big: true });
+      else home.push({ k: 'tile', id, home: true });
+    }
+    if (playing && layout.nowplaying !== false && !fav.includes(playing)) home.push({ k: 'np', id: playing, big: true, auto: true });
     const k = window.HassmicKiosk;
-    if (k) { try { JSON.parse(k.screens()).forEach((n, i) => { if (i !== k.current()) home.push({ k: 'screen', n, i }); }); } catch (e) { /* an older app */ } }
-    pages.push(...pack('Home', home, g));
+    if (k && !editing) { try { JSON.parse(k.screens()).forEach((n, i) => { if (i !== k.current()) home.push({ k: 'screen', n, i }); }); } catch (e) { /* an older app */ } }
+    pages.push(...pack('Home', home, g, true));
     const order = (id) => TILES.indexOf(domain(id));
     for (const r of list) {
+      const own = (layout.order || {})[r.id || '-'] || [];
+      const at = (id) => { const i = own.indexOf(id); return i < 0 ? 1e6 : i; };
+      const kind = (x) => domain(x) === 'scene' || domain(x) === 'script' ? -1 : order(x);
       const ids = r.ids.filter((x) => TILES.includes(domain(x)) || domain(x) === 'scene' || domain(x) === 'script')
-        .sort((x, y) => (domain(x) === 'scene' || domain(x) === 'script' ? -1 : order(x)) - (domain(y) === 'scene' || domain(y) === 'script' ? -1 : order(y)) || nameOf(x, r.name).localeCompare(nameOf(y, r.name)));
+        .sort((x, y) => at(x) - at(y) || kind(x) - kind(y) || nameOf(x, r.name).localeCompare(nameOf(y, r.name)));
       if (!ids.length) continue;
       const items = ids.map((id) => domain(id) === 'climate' && states[id].a.temperature != null ? { k: 'thermo', id, big: true, room: r.name } : { k: 'tile', id, room: r.name });
-      const ps = pack(r.name, items, g);
-      ps.forEach((p) => { p.sub = summary(r); });
+      const ps = pack(r.name, items, g, own.length > 0);
+      ps.forEach((p) => { p.sub = summary(r); p.area = r.id || '-'; });
       pages.push(...ps);
     }
     const box = $('pages'); box.textContent = '';
     pageNames = pages.map((p) => p.name);
     pages.forEach((p) => {
-      const pg = el('div', 'page'); pg.dataset.name = p.name; pg.dataset.sub = p.sub || '';
-      for (const it of p.items) pg.append(widget(it));
+      const pg = el('div', 'page'); pg.dataset.name = p.name; pg.dataset.sub = p.sub || ''; pg.dataset.area = p.area || '';
+      for (const it of p.items) { const w = widget(it); if (it.id && !it.auto) w.dataset.id = it.id; pg.append(w); if (editing) badges(w, p); }
       box.append(pg);
     });
     if (!list.length && pages.length === 1) message('Nothing in your rooms yet', 'Give your devices areas in Home Assistant: the wall panel shows them room by room.');
@@ -428,9 +443,9 @@
   // a tap and a long press (500 ms) on one element; a swipe (paging) is neither
   function press(e, onTap, onHold) {
     let timer, x, y, held, moved;
-    e.addEventListener('pointerdown', (ev) => { x = ev.clientX; y = ev.clientY; held = moved = false; timer = setTimeout(() => { held = true; onHold(); }, 500); });
+    e.addEventListener('pointerdown', (ev) => { if (editing) return; x = ev.clientX; y = ev.clientY; held = moved = false; timer = setTimeout(() => { held = true; onHold(); }, 500); });
     e.addEventListener('pointermove', (ev) => { if (Math.abs(ev.clientX - x) + Math.abs(ev.clientY - y) > 12) { moved = true; clearTimeout(timer); } });
-    e.addEventListener('pointerup', () => { clearTimeout(timer); if (!held && !moved) onTap(); });
+    e.addEventListener('pointerup', () => { clearTimeout(timer); if (!held && !moved && !editing) onTap(); });
     e.addEventListener('pointercancel', () => { moved = true; clearTimeout(timer); });
     e.addEventListener('contextmenu', (ev) => ev.preventDefault());
   }
@@ -525,7 +540,9 @@
   }
   const WICON = { sunny: 'sun', 'clear-night': 'moon', cloudy: 'cloud', partlycloudy: 'cloud', rainy: 'rain', pouring: 'rain', lightning: 'rain', 'lightning-rainy': 'rain', snowy: 'cloud', fog: 'cloud', windy: 'cloud' };
   function wx() {
-    const id = params.get('weather') || Object.keys(states).find((x) => domain(x) === 'weather');
+    const want = params.get('weather') || layout.weather || '';
+    if (want === 'none') return null;
+    const id = want || Object.keys(states).find((x) => domain(x) === 'weather');
     return id && states[id];
   }
   function drawDate(w) {
@@ -546,7 +563,7 @@
   }
 
   // left alone, the ambient clock (?ambient=<s>, 0 never; 120 s by default); a touch brings the widgets back
-  const AMBIENT_S = params.has('ambient') ? +params.get('ambient') : 120;
+  const ambientS = () => params.has('ambient') ? +params.get('ambient') : layout.ambient ?? 120;
   let lastTouch = Date.now();
   function ambientDraw() {
     const d = new Date(), st = wx();
@@ -560,14 +577,153 @@
     if ($('ambient').classList.contains('show')) { $('ambient').classList.remove('show'); $('pages').scrollLeft = 0; pageIndex = 0; dots(); }
   }, true);
   setInterval(() => {
-    if (AMBIENT_S > 0 && built && !openSheet && Date.now() - lastTouch > AMBIENT_S * 1000 && !$('ambient').classList.contains('show')) {
+    if (ambientS() > 0 && built && !openSheet && !editing && Date.now() - lastTouch > ambientS() * 1000 && !$('ambient').classList.contains('show')) {
       ambientDraw(); $('ambient').classList.add('show');
     }
   }, 5000);
 
   $('pages').addEventListener('scroll', debounce(() => { const i = Math.round($('pages').scrollLeft / innerWidth); if (i !== pageIndex) { pageIndex = i; dots(); } }, 80));
   addEventListener('resize', debounce(() => built && render(), 300));
-  if (['dusk', 'light', 'amber'].includes(params.get('theme'))) document.documentElement.dataset.theme = params.get('theme');
+  // ---------------------------------------------------------------- the layout and its edit mode
+  const ECHO = params.get('echo') || '';
+  let layout = {}, local = false, editing = false;
+  const hidden = () => new Set(layout.hidden || []);
+  // Home's ids: the layout's favourites, else what the panel picks (the URL's ?favorites= first)
+  function favorites() {
+    const ok = (x) => states[x] && !hidden().has(x);
+    if (params.get('favorites')) return params.get('favorites').split(',').filter(ok);
+    if (Array.isArray(layout.favorites)) return layout.favorites.filter(ok);
+    const out = [];
+    const climate = params.get('thermostat') || Object.keys(states).find((x) => domain(x) === 'climate' && states[x].a.temperature != null && shown(x));
+    if (climate && states[climate]) out.push(climate);
+    const cam = params.get('camera') || Object.keys(states).find((x) => domain(x) === 'camera' && states[x].s !== 'unavailable' && !hidden().has(x));
+    if (cam && states[cam]) out.push(cam);
+    out.push(...Object.keys(states).filter((x) => domain(x) === 'scene' && shown(x)).slice(0, 3));
+    out.push(...Object.keys(states).filter((x) => domain(x) === 'lock' && shown(x)));
+    return out;
+  }
+  function applyLayout() {
+    const t = params.get('theme') || layout.theme;
+    if (['dusk', 'light', 'amber'].includes(t)) document.documentElement.dataset.theme = t; else delete document.documentElement.dataset.theme;
+    if (built) render();
+    if (editing) editBar();
+  }
+  let saveTimer;
+  function save(patch) {
+    layout = Object.assign({}, layout, patch);
+    applyLayout();
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => {
+      if (local) { try { localStorage.setItem('hassmicWall', JSON.stringify(layout)); } catch (e) { /* private window */ } return; }
+      send({ type: 'hassmic/wall/set', echo: ECHO, layout }).catch((e) => toast('Not saved: ' + (e && e.message || e)));
+    }, 500);
+  }
+  function toast(t) {
+    const d = el('div', 'toast', t); document.body.append(d); setTimeout(() => d.remove(), 3500);
+  }
+
+  // hold the page dots: edit
+  (() => {
+    let timer;
+    $('dots').addEventListener('pointerdown', () => { timer = setTimeout(() => edit(true), 700); });
+    for (const e of ['pointerup', 'pointercancel', 'pointerleave']) $('dots').addEventListener(e, () => clearTimeout(timer));
+  })();
+  function edit(on) {
+    editing = on;
+    document.body.classList.toggle('editing', on);
+    const b = $('editbar'); if (b) b.remove();
+    if (on) editBar();
+    closeSheet();
+    render();
+  }
+  window.hassmicWallEdit = edit;              // tests
+  // nothing of a widget's own while editing: its buttons, a scene's run
+  document.addEventListener('click', (ev) => {
+    if (editing && !ev.target.closest('.badge, #editbar, .sheet, #dots')) { ev.stopPropagation(); ev.preventDefault(); }
+  }, true);
+
+  function editBar() {
+    let b = $('editbar'); if (b) b.remove();
+    b = el('div'); b.id = 'editbar';
+    const cur = params.get('theme') || layout.theme || 'amber';
+    for (const t of ['amber', 'dusk', 'light']) {
+      const s = el('button', 'swatch ' + t + (t === cur ? ' sel' : '')); s.title = t; s.onclick = () => save({ theme: t }); b.append(s);
+    }
+    const n = (layout.hidden || []).length;
+    const h = el('button', 'eb', n ? `Hidden (${n})` : 'Hidden'); h.onclick = hiddenSheet; b.append(h);
+    const r = el('button', 'eb', 'Reset'); r.onclick = () => save({ favorites: null, order: {}, hidden: [] }); b.append(r);
+    const d = el('button', 'eb done', 'Done'); d.onclick = () => edit(false); b.append(d);
+    if (local) b.append(el('span', 'note', 'this browser only'));
+    document.body.append(b);
+  }
+
+  function hiddenSheet() {
+    closeSheet();
+    const veil = el('div', 'veil'), box = el('div', 'sheet'); veil.append(box); document.body.append(veil);
+    veil.addEventListener('click', (ev) => { if (ev.target === veil) closeSheet(); });
+    box.append(el('h3', null, 'Hidden'), el('div', 'sub', 'Shown nowhere on the wall panel. Tap to show again.'));
+    const list = layout.hidden || [];
+    if (!list.length) box.append(el('div', 'sub', 'Nothing hidden: tap ⊖ on a tile to hide it.'));
+    for (const id of list) {
+      const b = el('button', 'btn', (states[id] && states[id].a.friendly_name) || id);
+      b.style.cssText = 'display:block;width:100%;margin:6px 0;text-align:left';
+      b.onclick = () => { save({ hidden: list.filter((x) => x !== id) }); hiddenSheet(); };
+      box.append(b);
+    }
+    const d = el('button', 'btn primary', 'Done'); d.onclick = closeSheet; d.style.marginTop = '10px'; box.append(d);
+    openSheet = { id: '', veil, refresh() {} };
+  }
+
+  // a widget's badges: ★ on Home or off it, ⊖ hidden (on Home: off Home); a drag moves it
+  function badges(w, page) {
+    const id = w.dataset.id; if (!id) return;
+    const onHome = page.name === 'Home';
+    const fav = favorites();
+    const star = el('button', 'badge fav' + (fav.includes(id) ? '' : ' off'), '★');
+    star.onclick = () => save({ favorites: fav.includes(id) ? fav.filter((x) => x !== id) : [...fav, id] });
+    const minus = el('button', 'badge hide', '−');
+    minus.onclick = () => onHome ? save({ favorites: fav.filter((x) => x !== id) }) : save({ hidden: [...(layout.hidden || []), id], favorites: Array.isArray(layout.favorites) ? fav.filter((x) => x !== id) : layout.favorites });
+    if (!onHome) w.append(star);
+    w.append(minus);
+    drag(w, page);
+  }
+
+  // the drag follows the pointer on the window: moving the tile in the grid (insertBefore) takes its pointer capture away
+  function drag(w, page) {
+    w.addEventListener('pointerdown', (ev) => {
+      if (!editing || ev.target.closest('.badge')) return;
+      let sx = ev.clientX, sy = ev.clientY, on = false;
+      const pid = ev.pointerId;
+      const move = (e) => {
+        if (e.pointerId !== pid) return;
+        const dx = e.clientX - sx, dy = e.clientY - sy;
+        if (!on && Math.abs(dx) + Math.abs(dy) < 8) return;
+        if (!on) { on = true; w.classList.add('dragging'); $('pages').style.overflowX = 'hidden'; }
+        w.style.transform = `translate(${dx}px, ${dy}px) scale(1.05)`;
+        const under = document.elementFromPoint(e.clientX, e.clientY);
+        const t = under && under.closest('.w[data-id]');
+        if (t && t !== w && t.parentNode === w.parentNode) {
+          const kids = [...w.parentNode.children], a = kids.indexOf(w), b = kids.indexOf(t);
+          const r0 = w.getBoundingClientRect();
+          t.parentNode.insertBefore(w, a < b ? t.nextSibling : t);
+          const r1 = w.getBoundingClientRect();                // the grid moved it: under the finger it stays
+          sx += r1.left - r0.left; sy += r1.top - r0.top;
+          w.style.transform = `translate(${e.clientX - sx}px, ${e.clientY - sy}px) scale(1.05)`;
+        }
+      };
+      const end = (e) => {
+        if (e.pointerId !== pid) return;
+        removeEventListener('pointermove', move); removeEventListener('pointerup', end); removeEventListener('pointercancel', end);
+        if (!on) return;
+        w.classList.remove('dragging'); w.style.transform = ''; $('pages').style.overflowX = '';
+        const ids = [...w.parentNode.querySelectorAll('.w[data-id]')].map((x) => x.dataset.id);
+        if (page.name === 'Home') save({ favorites: ids.concat(favorites().filter((x) => !ids.includes(x))) });
+        else save({ order: Object.assign({}, layout.order, { [page.area]: ids }) });
+      };
+      addEventListener('pointermove', move); addEventListener('pointerup', end); addEventListener('pointercancel', end);
+    });
+  }
+
   setInterval(tick, 10000);
   setInterval(() => { cams.splice(0, cams.length, ...cams.filter(() => true)); cams.forEach((f) => f()); }, 10000);
   connect();

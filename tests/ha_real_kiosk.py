@@ -58,7 +58,7 @@ async def browser_wall(session, token, png):
         tokens = {"access_token": token, "token_type": "Bearer", "expires_in": 315360000, "hassUrl": hr.HA,
                   "clientId": hr.HA + "/", "expires": 4102444800000, "refresh_token": ""}
         await js(f"localStorage.setItem('hassTokens', {json.dumps(json.dumps(tokens))})")
-        await cdp("Page.navigate", url=f"{hr.HA}/hassmic/wall.html")
+        await cdp("Page.navigate", url=f"{hr.HA}/hassmic/wall.html?echo=echo-show-5-a1b2c3")      # as the kiosk opens it
         out = {}
         for _ in range(60):
             await asyncio.sleep(0.5)
@@ -86,6 +86,36 @@ async def browser_wall(session, token, png):
         })()""")
         await js("(() => { document.getElementById('adigits').textContent = '10:09'; document.getElementById('ambient').classList.add('show'); })()")
         await asyncio.sleep(0.3); await shot("-ambient")
+        await js("document.getElementById('ambient').classList.remove('show')")
+
+        # the edit mode, by real pointer input (CDP's mouse is the page's pointer): held dots, a tile hidden, one
+        # dragged in front of another, one starred for Home
+        async def mouse(kind, x, y, down):
+            await cdp("Input.dispatchMouseEvent", type=kind, x=x, y=y, button="left", buttons=1 if down else 0, clickCount=1)
+        async def rect(expr):
+            return await js(f"(() => {{ const e = {expr}; if (!e) return null; const r = e.getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; }})()")
+        tileq = lambda name: f"[...document.querySelectorAll('.tile')].find(e => e.querySelector('.nm') && e.querySelector('.nm').textContent === '{name}' && e.getBoundingClientRect().left >= 0 && e.getBoundingClientRect().left < innerWidth)"
+        d = await rect("document.getElementById('dots')")
+        await mouse("mousePressed", d[0], d[1], True); await asyncio.sleep(1.0); await mouse("mouseReleased", d[0], d[1], False)
+        await asyncio.sleep(0.4)
+        out["editing"] = await js("document.body.classList.contains('editing') && !!document.getElementById('editbar')")
+        await js("(() => { const p = [...document.querySelectorAll('.page')].findIndex(p => p.dataset.name === 'Living Room'); document.getElementById('pages').scrollLeft = p * innerWidth; })()")
+        await asyncio.sleep(0.5); await shot("-edit")
+        b = await rect(tileq("Decorative Lights") + ".querySelector('.badge.hide')")
+        if b: await mouse("mousePressed", b[0], b[1], True); await mouse("mouseReleased", b[0], b[1], False)
+        await asyncio.sleep(0.8)
+        a, t = await rect(tileq("Ceiling Lights")), await rect(tileq("Bed Light"))
+        if a and t:
+            await mouse("mousePressed", a[0], a[1], True)
+            for i in range(1, 11):
+                await mouse("mouseMoved", a[0] + (t[0] - a[0]) * i / 10, a[1] + (t[1] - a[1]) * i / 10, True); await asyncio.sleep(0.04)
+            await mouse("mouseReleased", t[0], t[1], False)
+        await asyncio.sleep(0.8)
+        s_ = await rect(tileq("Ceiling Lights") + ".querySelector('.badge.fav')")
+        if s_: await mouse("mousePressed", s_[0], s_[1], True); await mouse("mouseReleased", s_[0], s_[1], False)
+        await asyncio.sleep(1.2)
+        out["after_edit"] = await js("[...document.querySelectorAll('.page')].find(p => p.dataset.name === 'Living Room').querySelectorAll('.w[data-id]').length")
+        await js("hassmicWallEdit(false)")
         await ws.close()
         return out
     finally:
@@ -142,6 +172,9 @@ async def run(tmp):
                              {"kiosk": True, "kiosk_screens": ["wall", "dashboard"], "kiosk_default": "wall", "kiosk_return": 90,
                               "kiosk_admin": False, "kiosk_dashboard": "lovelace", "kiosk_music": "", "kiosk_custom_name": "",
                               "kiosk_custom_url": "", "kiosk_ha_url": ""})
+            check(o.get("step_id") == "wall", f"then the wall panel's step ({o.get('step_id')})")
+            o = await c.post(f"/api/config/config_entries/options/flow/{o['flow_id']}",
+                             {"theme": "amber", "nowplaying": True, "ambient": 120, "favorites": [], "hidden": []})
             check(o.get("type") == "create_entry", f"saved ({o.get('type')})")
 
             cfg = {}
@@ -182,6 +215,7 @@ async def run(tmp):
                 body = await r.text()
             check(r.status == 200 and "/hassmic/wall.js" in body, f"the wall panel is served ({r.status})")
 
+            entry_opts = lambda: {"kiosk": True, "kiosk_screens": ["wall", "dashboard"], "kiosk_default": "wall", "kiosk_return": 90, "kiosk_admin": False}
             out = await browser_wall(session, tok, os.path.join(hr.ROOT, "build", "test-logs", "wall.png"))
             if out is not None:
                 check(out.get("tiles", 0) >= 4 and out.get("pages", [""])[0] == "Home" and "Kitchen" in out.get("pages", []) and "Living Room" in out.get("pages", []),
@@ -190,11 +224,30 @@ async def run(tmp):
                 check("Ceiling Lights" in out.get("names", []), f"names without their room's ({out.get('names')})")
                 check(out.get("tap") in ("on", "off") and await c.state("light.ceiling_lights") == out.get("tap"),
                       f"a tap toggles the light ({out.get('tap')}, now {await c.state('light.ceiling_lights')})")
+                check(out.get("editing"), "the dots held: the edit mode")
+                lay = await c.ws(type="hassmic/wall/get", echo="echo-show-5-a1b2c3")
+                check("switch.decorative_lights" in (lay.get("hidden") or []), f"⊖: hidden, saved in Home Assistant as the kiosk's user ({lay.get('hidden')})")
+                lo = (lay.get("order") or {}).get(areas["Living Room"], [])
+                check("light.ceiling_lights" in lo and "light.bed_light" in lo and lo.index("light.ceiling_lights") < lo.index("light.bed_light"), f"a drag: Ceiling Lights before Bed Light ({lo})")
+                check("light.ceiling_lights" in (lay.get("favorites") or []), f"★: on Home ({lay.get('favorites')})")
+
+            # the wall step of the options sets the same layout
+            o = await c.post("/api/config/config_entries/options/flow", {"handler": entry["entry_id"]})
+            o = await c.post(f"/api/config/config_entries/options/flow/{o['flow_id']}", {**{k: v for k, v in entry_opts().items()}})
+            o = await c.post(f"/api/config/config_entries/options/flow/{o['flow_id']}",
+                             {"theme": "dusk", "nowplaying": False, "ambient": 0, "favorites": ["climate.hvac", "light.kitchen_lights"], "hidden": []})
+            lay = await c.ws(type="hassmic/wall/get", echo="echo-show-5-a1b2c3")
+            check(o.get("type") == "create_entry" and lay.get("theme") == "dusk" and lay.get("favorites") == ["climate.hvac", "light.kitchen_lights"]
+                  and lay.get("ambient") == 0 and lay.get("nowplaying") is False and lay.get("hidden") == []
+                  and (lay.get("order") or {}).get(areas["Living Room"]), f"the options' wall step: the layout, the panel's own order kept ({lay})")
+            other = await c.ws(type="hassmic/wall/get", echo="another-echo")
+            check(other == {}, f"another Echo without one: nothing set ({other})")
 
             # options again, the kiosk off: the Echo's setting off, the user kept
             o = await c.post("/api/config/config_entries/options/flow", {"handler": entry["entry_id"]})
             o = await c.post(f"/api/config/config_entries/options/flow/{o['flow_id']}", {"kiosk": False, "kiosk_screens": ["wall"], "kiosk_default": "wall",
                              "kiosk_return": 0, "kiosk_admin": False})
+            o = await c.post(f"/api/config/config_entries/options/flow/{o['flow_id']}", {"theme": "dusk", "nowplaying": False, "ambient": 0, "favorites": [], "hidden": []})
             check(o.get("type") == "create_entry", "the kiosk switched off")
             # removed: its user and the token gone
             await session.delete(f"{hr.HA}/api/config/config_entries/entry/{entry['entry_id']}", headers=c.h)

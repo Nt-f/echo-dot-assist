@@ -554,8 +554,18 @@ its local one (the options show which; Home Assistant Cloud's is not reachable f
 The wall panel is a page of its own, not a dashboard, so that the Echo Show 5 stays well within its memory: Home
 Assistant's full interface takes 150–250 MB in the browser, the wall panel a small part of that, and only one screen
 is loaded at a time. It shows the rooms (areas) that have something to show, each with its temperature and humidity
-under the page dots where a sensor in it has them. In the address: `?favorites=light.desk,lock.front` picks Home's
-tiles, `?thermostat=`, `?camera=`, `?weather=` which entity those widgets show, `?ambient=0` turns the big clock off. It works in any browser too:
+under the page dots where a sensor in it has them.
+
+**Making it yours.** On the Echo: hold the page dots at the bottom for a moment. The tiles wobble; drag one to move
+it, tap ★ to put it on Home (a thermostat shows big there, a camera its picture), tap − to hide it (on Home: off
+Home). The bar at the top picks the wallpaper (amber, dusk, light), lists what is hidden (tap one to show it again),
+puts everything back as the panel would have it (Reset), and Done ends it. In Home Assistant: the hassmic
+integration's Configure has a second page, "The wall panel": the wallpaper, Home's tiles in order, the weather, what
+plays on Home or not, the big clock's time, what to hide. Both change the same layout, kept in Home Assistant per
+Echo, and every screen showing that panel follows a change at once. A rooms' names, areas and which entities exist
+stay Home Assistant's: hide an entity there and it is gone from the panel too. In the address (any browser):
+`?theme=`, `?favorites=light.desk,lock.front`, `?thermostat=`, `?camera=`, `?weather=`, `?ambient=0` win over the
+layout; `?echo=` names whose layout it shows (none: a layout of its own, "default"). It works in any browser too:
 `http://<home assistant>:8123/hassmic/wall.html`, once logged into Home Assistant there with "Keep me logged in".
 
 ## Music

@@ -2296,7 +2296,16 @@ Run in this order. Each step says what it proves.
       Kiosk.Keys: FOCUS_JS (focusin/focusout through shadow roots) -> bridge typing(on, kind) -> a keyboard below the
       WebView (the page shrinks, the field scrolled into view), keys as KeyCharacterMap VIRTUAL_KEYBOARD events into
       the WebView (insertText for what the map lacks); typed "Abc1" into HA's login (mwc fields in shadow DOM),
-      shift, ?123, ⌫.  Not yet measured: HA's full UI logged in, the wall panel there (the user's HA has no
+      shift, ?123, ⌫.
+      The layout (asked the same day: options in the integration and editing on the panel, both): wall.py, a Store
+      `hassmic.wall` {echo node | default: layout}, websocket hassmic/wall/get|set|subscribe for any logged-in user
+      (the kiosk's is not an admin), checked by a schema (themes, ids <= 300, ambient 0..86400); the options flow's
+      second step "wall" writes it too.  The panel: dots held 0.7 s -> edit mode (wobble, ★ favourites, − hidden, drag
+      in a page: favourites' order on Home, `order[area]` in a room; the drag follows the window's pointer events, as
+      moving the node in the grid drops its pointer capture), a bar (wallpaper, Hidden, Reset, Done), saved 500 ms
+      after the last change; without the integration's commands, localStorage.  ha_real_kiosk drives it by CDP mouse
+      input as the kiosk's user.
+      Not yet measured: HA's full UI logged in, the wall panel there (the user's HA has no
       integration of this version yet), a tap on the kiosk while a ring shows (passes through?).  Open: kiosk entities in HA (screen select); the wall's choice of rooms/entities (now: every
       area, registry-hidden ones left out); the screen waking on a touch while dark (the panel's touch controller).
 - [x] Drop In between Echos (2026-10-08, asked by a user with ten Echos who used Alexa's as an intercom). `dropin.c`:

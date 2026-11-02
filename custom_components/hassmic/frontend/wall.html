@@ -53,7 +53,8 @@ body { background: #000; color: var(--text); user-select: none; -webkit-user-sel
 #pages::-webkit-scrollbar { display: none; }
 .page { flex: none; width: 100vw; height: 100%; scroll-snap-align: start; padding: var(--pad); padding-bottom: 22px;
         display: grid; gap: var(--gap); grid-template-columns: repeat(var(--cols), minmax(0, 1fr)); grid-template-rows: repeat(var(--rows), minmax(0, 1fr)); grid-auto-flow: dense; }
-#dots { position: fixed; left: 0; right: 0; bottom: 5px; display: flex; justify-content: center; align-items: center; gap: 6px; font-size: 11px; color: var(--text-dim); pointer-events: none; }
+/* the dots: which page; held 0.7 s, the edit mode */
+#dots { position: fixed; left: 50%; transform: translateX(-50%); bottom: 0; height: 22px; padding: 0 14px; display: flex; justify-content: center; align-items: center; gap: 6px; font-size: 11px; color: var(--text-dim); touch-action: none; }
 #dots i { width: 6px; height: 6px; border-radius: 50%; background: var(--text-dim); opacity: .45; }
 #dots i.sel { opacity: 1; }
 #dots span { margin-right: 4px; font-weight: 600; }
@@ -95,9 +96,9 @@ body { background: #000; color: var(--text); user-select: none; -webkit-user-sel
 .thermo .t small { font-size: calc(16 * var(--U)); letter-spacing: 0; vertical-align: top; }
 .thermo .lb { font-weight: 700; font-size: max(11px, calc(5.4 * var(--U))); margin-top: calc(3 * var(--U)); }
 .thermo .sub { font-size: max(10px, calc(4.8 * var(--U))); color: var(--text-dim); }
-.thermo button { position: absolute; bottom: calc(3 * var(--U)); width: calc(22 * var(--U)); height: calc(22 * var(--U)); border: 0; background: transparent; color: var(--text); }
+.thermo button:not(.badge) { position: absolute; bottom: calc(3 * var(--U)); width: calc(22 * var(--U)); height: calc(22 * var(--U)); border: 0; background: transparent; color: var(--text); }
 .thermo .dn { left: calc(3 * var(--U)); } .thermo .up { right: calc(3 * var(--U)); }
-.thermo button svg { width: calc(12 * var(--U)); height: calc(12 * var(--U)); }
+.thermo button:not(.badge) svg { width: calc(12 * var(--U)); height: calc(12 * var(--U)); }
 
 /* what plays */
 .np { background-size: cover; background-position: center; display: flex; flex-direction: column; justify-content: flex-end; padding: calc(6 * var(--U)) calc(7 * var(--U)); }
@@ -123,6 +124,29 @@ body { background: #000; color: var(--text); user-select: none; -webkit-user-sel
                    -webkit-text-stroke: 2px rgba(255,255,255,.45); text-shadow: 0 2px 30px rgba(255,255,255,.25); font-variant-numeric: tabular-nums;
                    font-family: "SF Pro Display", "Amazon Ember", Roboto, sans-serif; }
 #ambient .under { position: absolute; left: 0; right: 0; bottom: 18px; text-align: center; font-size: 18px; font-weight: 600; color: rgba(255,255,255,.85); }
+
+/* editing: the tiles wobble, a star puts one on Home, a minus hides it, a drag moves it */
+@keyframes wobble { from { rotate: -.7deg; } to { rotate: .7deg; } }
+.editing .w[data-id] { animation: wobble .28s ease-in-out infinite alternate; touch-action: none; }
+.editing .w[data-id]:nth-child(2n) { animation-delay: -.14s; }
+.w.dragging { animation: none !important; z-index: 6; opacity: .9; box-shadow: 0 14px 34px rgba(0,0,0,.3); pointer-events: none; transition: none; }
+.badge { position: absolute; top: 6px; width: 28px; height: 28px; border-radius: 50%; border: 0; display: grid; place-items: center;
+         font: 700 17px/1 sans-serif; z-index: 3; box-shadow: 0 2px 6px rgba(0,0,0,.25); padding: 0; }
+.badge.fav { left: 6px; background: #fff; color: #f5a623; }
+.badge.fav.off { color: #b8b8b8; }
+.badge.hide { right: 6px; background: #ff453a; color: #fff; }
+#editbar { position: fixed; top: 8px; left: 50%; transform: translateX(-50%); z-index: 8; display: flex; gap: 8px; align-items: center;
+           padding: 6px 8px; border-radius: 999px; background: rgba(28, 28, 30, .88); box-shadow: 0 8px 24px rgba(0,0,0,.3); }
+#editbar .eb { border: 0; border-radius: 999px; padding: 8px 14px; font: 600 14px/1 sans-serif; background: rgba(255,255,255,.14); color: #fff; }
+#editbar .done { background: #fff; color: #1c1c1e; }
+#editbar .note { color: rgba(255,255,255,.6); font-size: 12px; padding-right: 6px; }
+.swatch { width: 30px; height: 30px; border-radius: 50%; border: 2px solid transparent; padding: 0; }
+.swatch.sel { border-color: #fff; }
+.swatch.amber { background: linear-gradient(135deg, #b8601c, #e9a74b); }
+.swatch.dusk { background: linear-gradient(135deg, #1d2140, #6a4bb0); }
+.swatch.light { background: linear-gradient(135deg, #f4f3f8, #d9d2f7); }
+.editing #pages .page { padding-top: 56px; }
+.toast { position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%); background: rgba(28,28,30,.92); color: #fff; padding: 10px 16px; border-radius: 14px; z-index: 30; font-size: 14px; }
 
 /* a long press: the controls */
 .veil { position: fixed; inset: 0; background: rgba(0,0,0,.45); display: grid; place-items: center; z-index: 10; }

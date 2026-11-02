@@ -69,6 +69,18 @@
           "kiosk_admin": "The Echo's user is an administrator (Home Assistant's settings on the Echo)",
           "kiosk_ha_url": "Home Assistant's address for the Echo (empty: the one found)"
         }
+      },
+      "wall": {
+        "title": "The wall panel",
+        "description": "How the wall panel looks on this Echo and what its Home page shows. You can also change it on the Echo: hold the dots at the bottom of the screen to edit (drag tiles, star them for Home, hide them).",
+        "data": {
+          "theme": "Wallpaper",
+          "favorites": "Home's tiles, in order (a thermostat shows big, a camera its picture; empty: the panel picks)",
+          "weather": "Weather",
+          "nowplaying": "Show what plays on Home",
+          "ambient": "Big clock after untouched for (0: never)",
+          "hidden": "Hide these everywhere"
+        }
       }
     }
   }

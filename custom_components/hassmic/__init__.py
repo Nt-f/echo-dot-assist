@@ -23,7 +23,7 @@ from homeassistant.helpers.typing import ConfigType
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .api import DEFAULT_PORT, Echo, EchoAuthError, EchoError
-from . import kiosk
+from . import kiosk, wall
 from .const import CARD_URL, CONF_KEY, DAY_KEYS, DOMAIN, SCAN_INTERVAL_S, WALL_URL
 
 _LOGGER = logging.getLogger(__name__)
@@ -76,6 +76,7 @@ class HassmicCoordinator(DataUpdateCoordinator[dict]):
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     # the dashboard card, served from here and loaded on every dashboard
+    await wall.async_setup(hass)          # the wall panel's layouts and their websocket commands
     fe = Path(__file__).parent / "frontend"
     # the wall panel: no login to fetch it (it is only a page), its data then over the websocket with the kiosk's token
     await hass.http.async_register_static_paths([StaticPathConfig(CARD_URL, str(fe / "hassmic-alarms-card.js"), False),
