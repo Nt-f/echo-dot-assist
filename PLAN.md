@@ -2254,6 +2254,14 @@ Run in this order. Each step says what it proves.
       ... a custom card renderer ... like a Shelly Wall Display or Apple's Home display", all of it under 512 MB).
       Boot: boot.log of the Show 5 (2026-11-02): firewall at boot+9, `== satellite start` at +26 (the boot animation
       ends about then), hassmic's first frame at +46: 20 s of black, mostly lockdown/alexa-off stopping services.
+      Later boot (2026-11-02, factory copy of 3ebf9f2): boot_completed +18, `== satellite start` +20, alexa-off.sh
+      done +36.6, self test +40.1, HA linked +41.3.  The 16 s were alexa-off.sh with nothing to do: `pm list packages
+      -d` and `pm list packages` (~2 s each, a Java VM per call), four `settings get` (~1.5 s each) and the p2p
+      `wpa_cli` (7 s despite `timeout 5`, with no group up).  Now it reads packages.xml/package-restrictions.xml and
+      settings_<ns>.xml first and asks wpa_cli only when `p2p-p2p0-0` exists: 2.6 s (1 s of it the `sleep 1`); one
+      package shown enabled in the XML still goes through pm (checked on the Echo).  Rebooted with it (cbbf3dd+):
+      alexa-off.sh done +22.8, self test +26.5, HA linked +29.7 (was +41.3).  Left: Android's 18 s to
+      boot_completed and hassmic's ~3.5 s load.
       `hassmic -Y <file>` (`display_splash`): fonts, ringbar's screen mode, main.sh's `stage` line from
       /data/local/hassmic/boot-status (root's, 644), its pid in state/splash.pid; the real display ends it once its own
       layer is up (`splash_end`), else 180 s.  Then the status screen in display_screen.c until `display_link(1)`

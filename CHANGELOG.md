@@ -14,6 +14,8 @@ What changed for people using the Echo, newest first. Details and measurements a
   See the guide's "Home Assistant on the screen".
 - **A keyboard on the Echo Show's screen.** The kiosk has an on-screen keyboard of its own (the Echo has none): it
   comes up when you tap a text field, for a login, a search or a name.
+- **The Echo Show starts about 15 seconds sooner.** Turning Alexa off at each start no longer asks Android
+  questions it already knows the answers to (the Echo Show 5 took 16 of its 41 seconds there).
 - **The Echo Show says what it is doing while it starts.** The 20 seconds of black screen after the boot animation now
   show each step, then what the Echo waits for (Wi-Fi, Home Assistant, or how to add it to Home Assistant).
 
