@@ -1099,6 +1099,7 @@ void ring_light_get(struct ring_light *l) { pthread_mutex_lock(&lock); *l = ligh
 
 void ring_level(int dbfs10) { (void)dbfs10; }       /* the LEDs' listening ring does not follow the voice */
 int  ring_band_rows(int set) { (void)set; return -1; }
+int  ring_band_screen(int rows, int *in, int *w, int *h) { (void)rows; (void)in; (void)w; (void)h; return -1; }    /* no screen */
 
 void ring_light_set(const struct ring_light *l, unsigned flash_ms)
 {

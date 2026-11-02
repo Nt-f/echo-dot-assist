@@ -28,6 +28,8 @@ struct board {
     const char *privacy_button;     /* input device of the mute button itself, where the driver reports the latch late (athena:
                                        its gpio-privacy holds the enable line 1 s, then changes state); NULL: no early notice */
     int privacy_settle_ms;          /* with privacy_button: how long a press is believed before the latch must have confirmed it */
+    const char *touch;              /* the touch screen's input device ("name:<its name>"), read beside Android's for the
+                                       display (display_screen.c: a tap snoozes an alarm); NULL: none */
 
     /* Bluetooth: raw HCI (H4) character device, the init service that owns it in stock, where the address is stored */
     const char *bt_dev;
@@ -74,4 +76,5 @@ struct board {
 extern const struct board board;
 /* volcurve.c: the curve at volume v (clamped to 0..100): dB under volume 100, board.volume_curve's or the Echo Dot 2's */
 float board_vol_db(int v);
+int   board_vol_at(float db);           /* the lowest of the curve's points at least that loud (volcurve.c) */
 #endif

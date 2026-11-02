@@ -257,6 +257,10 @@ jobs:
         env:
           HASSMIC_HA_REQUIRED: '1'
         run: .venv/bin/python tests/ha_real_end.py
+      - name: The Home Assistant integration (custom_components/hassmic) in Home Assistant
+        env:
+          HASSMIC_HA_REQUIRED: '1'
+        run: .venv/bin/python tests/ha_real_alarms.py
 
   release:
     needs: [version, build, test]

@@ -2,6 +2,51 @@
 
 What changed for people using the Echo, newest first. Details and measurements are in [PLAN.md](PLAN.md).
 
+## 2026-11-02
+
+- **Alarms nobody answers get louder.** After coming up to the timer volume, a ringing alarm keeps getting louder, 10
+  points of volume a minute up to the loudest the Echo plays ("Unanswered alarms get louder" on the "Clock & alarms"
+  page). Stopped or snoozed, everything is back at its own volume.
+- **Your alarms in Home Assistant, with a card.** A Home Assistant integration of hassmic's own
+  (`custom_components/hassmic`): a switch per alarm, actions to add, change and delete them, and a dashboard card
+  "Echo alarms" that lists them like the Alexa app (switch, tap to change time, days and label, Add, Snooze, Stop).
+  Home Assistant is let in with a press of the Echo's button, as a browser is. See the guide's "Clock and alarms".
+- **"Change my alarm to 6:30"** moves the next alarm (its days kept) instead of setting a second one.
+- **"Pause" knows which Echo you mean.** "Pause", "resume", "next", "previous", "volume up", "louder" and "set the
+  volume to 5" said to an Echo that is playing music are carried out on that Echo, rather than Home Assistant asking
+  which media player.
+- **No more ticks in music.** Music Assistant's music had a small tick several times a second on the Echo Show 5
+  while the Echo kept it in sync, most noticeable in quiet passages and while it listens; it is now kept in sync
+  without a cut. And the music no longer clicks as it is turned down for a request and back up after: it glides.
+
+- **Alarms on the Echo.** Home Assistant has timers but no alarms; now the Echo keeps its own, and they ring by
+  themselves, with or without Home Assistant. Ask for them: "<wake word>, set an alarm for 7 AM", "wake me up at 6:30
+  tomorrow", "set an alarm for 6:45 on weekdays", "wake me up in 20 minutes", "what alarms do I have", "cancel my
+  alarm", "cancel all alarms". The Echo answers these itself (Home Assistant speaks the answer; tick "Allow the device
+  to perform Home Assistant actions" in the device's options). A ringing alarm snoozes with "<wake word>, snooze", a
+  volume key or a tap on an Echo Show's screen, and stops with "<wake word>, stop", the action button (both volume
+  keys on an Echo Show) or a long press on the screen. It starts quietly and comes up to the timer volume over 30
+  seconds, plays Alexa's alarm tone, rings for 10 minutes at most and snoozes for 9 (all on the settings page's new
+  "Clock & alarms" page, which also lists, adds, edits and deletes alarms). In Home Assistant: "Next alarm" (a time:
+  a dashboard counts down to it, an automation can turn on the lights 10 minutes before), "Alarms", "Alarm ringing",
+  "Snooze alarm", an "Alarm" event entity (ringing, snoozed, stopped, ...) and the actions `set_alarm` and
+  `delete_alarm` for automations and AI agents. English sentences for now.
+- **A clock on the Echo Show.** The screen above the light band, black until now, shows the time, the date and the
+  next alarm; while you talk to it, what it heard and what the assistant answered; and a ringing alarm or timer, big.
+  "Screen" on the "Clock & alarms" page: with the screen on (the clock while the screen is on; it still goes dark
+  after 5 minutes, as before), always on, or always on and dimmed at night (a dim red clock and a low backlight
+  between 22:00 and 07:00, and while the room is dark), or off. The screen's brightness by day and by night are
+  there too.
+
+- **Even volume steps.** Every point of the volume is now the same step: 0.5 dB a point, 5 dB a press of the volume
+  buttons, from 1 (about 50 dB under full) to 100 (as loud as before). The Echos' own volume puts most of the change at
+  one end: on an Echo Show 5 the bottom half covers 46 dB and the top half 20, and since it has only 31 steps for 100
+  points, a slider moved by one point often changed nothing; on an Echo Dot, 60 to 70 was 1 dB and 90 to 100 was 10.
+  Low volumes are louder than before (on an Echo Show 5, 5 and 10 were 60 and 51 dB under full, now 47.5 and 45.5) and
+  middle ones somewhat quieter (50 is 25 dB under full, where it was 20 to 22). Your volume stays
+  at its number through the update. "Even volume steps" on the settings page (Sound, Speaker) brings the Echo's own
+  steps back. On by default.
+
 ## 2026-11-01
 
 - **Your own sounds in place of Alexa's.** A new "Sounds" card on the settings page (Voice) lists the Echo's sounds:

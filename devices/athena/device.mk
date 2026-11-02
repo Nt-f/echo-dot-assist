@@ -10,6 +10,8 @@ WAKE    := src/hassmic/wake_pryon.c
 LIBS    := libpryon.so libopus.so libz.so
 # No LED ring: the ring as a band along the bottom of the screen, drawn by scripts/device/ringbar.dex (ring.h)
 RING    := src/hassmic/ring_band.c
+# a screen: the clock, the request's words and alarms above the band (display.h)
+SCREEN  := src/hassmic/display_screen.c
 # NDK system libraries the backend needs (not stock: no stubs for them)
 SYSLIBS := -lOpenSLES
 

@@ -217,6 +217,18 @@ def main():
     env = run(["0", "builder"], (1280, 800, 0), [], api9=True)
     check(env.log == [("overscan", 0, 0, 0, 0, 0)] and env.out == ["off"], "builder: \"0\" resets the overscan, no layer")
 
+    # the display (display_screen.c): "screen <band rows>", a layer over what is above the band, no overscan
+    f3, px3 = frame(960, 470, 4)
+    env = run(["screen", "10"], (960, 480, 1), [f3[:7000], f3[7000:]])
+    check(not [e for e in env.log if e[0] == "overscan"], "screen: leaves the overscan to the band's process")
+    check(("surfacecontrol", "hassmic-band", 960, 470, -1, 4) in env.log and ("position", 0.0, 0.0) in env.log
+          and env.out == ["ready 960 470"], "screen: 960x470 at (0, 0), \"ready 960 470\"")
+    draws = [e for e in env.log if e[0] == "draw"]
+    check(len(draws) == 1 and draws[0] == ("draw", px3, 0, 960, 0, 0, 960, 470, False, None), "screen: the frame drawn whole")
+    env = run(["screen", "0", "builder"], (1280, 800, 0), [], api9=True)
+    check(("surfacecontrol", "hassmic-band", 1280, 800, -1, 4) in env.log and env.out == ["ready 1280 800"],
+          "screen with builder and no band: the whole screen")
+
     check.done("ringbar.dex: overscan, layer and frames as expected")
 
 

@@ -50,6 +50,8 @@ aioesphomeapi, wyoming, aiosendspin, noiseprotocol, aiohttp):
 .venv/bin/python tests/fake_ha_esphome_features.py #   sound detection (HASSMIC_FAKE_SOUND_WINDOW: 3 s windows), Wi-Fi motion
 .venv/bin/python tests/fake_ha_esphome_buttons.py  #   runs cancelled while HA thinks or streams, the "Button" event entity
 .venv/bin/python tests/fake_ha_esphome_address.py  #   a new address: links closed, mDNS announced again
+.venv/bin/python tests/fake_ha_alarms.py      # the Echo's own alarms: requests answered on the Echo and announced, HA's
+                                             # entities and actions, a ring on the moved clock, snooze, stop, the page
 .venv/bin/python tests/fake_ha_end.py         # the end of a request heard on the Echo (micend.c): a talker, dishes as loud
                                              # (no speech in the front end's records written into the capture), quieter
                                              # voices on another pitch; end of audio, not an abort; the gain left alone;
@@ -66,6 +68,7 @@ aioesphomeapi, wyoming, aiosendspin, noiseprotocol, aiohttp):
                                              # actions and template engine: renamed ids, other devices, failures, replies
 .venv/bin/python tests/ha_real_end.py         # the Echo's end of audio in a real Home Assistant (stand-in STT and TTS as a
                                              # custom component): HA's STT stream ends with it, intent and reply follow
+.venv/bin/python tests/ha_real_alarms.py      # custom_components/hassmic (alarms integration and card) in a real HA
 .venv/bin/python tests/ha_real_dropin.py      # the blueprint in a real Home Assistant (build/ha-venv, made by --setup;
                                              # skips without it) with four Echos, one the released build: replies, timing.
                                              # All of it in an `unshare -rn` namespace with only lo
@@ -249,6 +252,26 @@ No model `#ifdef`s in shared code: new differences become a board field, a `devi
   (host build, `HASSMIC_FAKE_SOUND`; `HASSMIC_FAKE_SOUND_MODEL` names the model, `broken` fails to load). `sound_model()`
   says which model it takes, for the page; a start that fails switches the setting off via `settings_set` and sets
   `core_sound_failed()` (page warning). Picked in the Makefile from the wake word backend.
+- **Alarms** (`alarms.c`, `alarms.h`): the Echo's own, in `state/alarms`, rung on local time by a clock thread through
+  the timers' ring (main.c `core_alarm_ring`, `ringing[].alarm`; `core_alarm_snooze`, `core_alarm_stop` dismisses a
+  once alarm); settings `alarm_*`, `clock_format`, feature `alarms` (HA's entities: "Next alarm" timestamp, "Alarms",
+  "Alarm ringing", "Snooze alarm", event "Alarm" `core_alarm_events`, actions `set_alarm`/`delete_alarm`).  Spoken
+  requests (`alarms_command`, English) are answered in main.c `alarm_request` from `core_transcript`, the run
+  cancelled, the answer through `proto->say` (assist_satellite.announce, the Bluetooth announcements' queue).  A
+  volume key snoozes (`alarm_keys`), a ring starts quiet (`alarm_ramp`).  Page: "Clock & alarms", `/api/alarms`.
+  `HASSMIC_FAKE_CLOCK_OFFSET` (seconds, or a file holding them) moves the Echo's clock for tests (`alarms_now`).
+  Unanswered, an alarm gets louder (`alarm_louder`, `alarm_boost` lifts `loudest()`).  `custom_components/hassmic` is
+  a Home Assistant integration over the settings page API (a switch per alarm, services, the card in `frontend/`);
+  tests/ha_real_alarms.py.  Spoken media requests about what this Echo plays ("pause", "next", "volume 5") are
+  `media_request` in core_transcript (sendspin_voice, a2dp_voice).
+- **Display** (`display.h`; `display_screen.c` where device.mk sets `SCREEN`, `display_none.c` elsewhere): the Echo
+  Show's screen above the band, ringbar.dex's "screen" mode started by `ring_band_screen`, frames drawn in C with
+  `src/third_party/stb_truetype.h` from `/system/fonts` (`HASSMIC_FONT_DIR`): clock, date, next alarm; the request's
+  words (`display_heard`/`_reply` from proto_esphome.c, `display_run` from `core_set_state`); a ring
+  (`display_ringing`).  Settings `display` (off/awake/always/always_dim), `display_*`; always keeps the screen on
+  through ring_band.c's power policy (`display_screen_timeout`), the backlight via `settings put system
+  screen_brightness`.  `board.touch` (checkers: goodix-ts, not grabbed): a tap snoozes, 1.5 s stops (`core_touch`).
+  The Makefile variable is SCREEN, not DISPLAY (X11's environment variable would win over `?=`).
 - **Sound packs** (`soundpack.c`, `soundpack.h`): sets of the Sounds card's sounds in `state/sound-packs/<id>/` (`name`,
   `<sound>.wav`), `/api/sound-pack`, page `packsCard`, a `.soundpack` file = a tar of `pack.json` + WAVs (`web/tar.js`).
   A pack is a whole set; 16 packs, 30 MB, 32 MB left on the partition (`HASSMIC_SOUNDPACK_MAX`, `_FREE_MIN` for tests).

@@ -71,4 +71,7 @@ int  ring_rotation(int set);                /* LEDs the fill's start is turned b
  * all the apps'); -1 where the ring is LEDs.  set < 0 reads. */
 void ring_level(int dbfs10);
 int  ring_band_rows(int set);
+/* The display above the band (display_screen.c): ringbar.dex's "screen" mode over what is above a band of `rows`, its
+ * stdin in *in (frames of *w x *h ARGB); 0, or -1 (no renderer, or the ring is LEDs) */
+int  ring_band_screen(int rows, int *in, int *w, int *h);
 #endif

@@ -21,6 +21,7 @@ int core_muted(void) { return 0; }
 int core_dnd(int set) { (void)set; return 0; }
 int core_led_brightness(int set) { (void)set; return 100; }
 void core_spawn(char *const argv[]) { (void)argv; }
+int display_screen_timeout(int stock_ms) { return stock_ms; }      /* display.h: no screen of its own here */
 int main(void)
 {
     int s = slot_of(P_THINK), c; static struct rgb row[%d]; struct rgb led[LEDS];

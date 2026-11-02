@@ -29,6 +29,7 @@
 #include "board.h"
 #include "core.h"
 #include "ringdesign.h"
+#include "display.h"
 #include <errno.h>
 #include <fcntl.h>
 #include <limits.h>
@@ -454,8 +455,9 @@ static int builder_api(void)
 #endif
 }
 
-/* the renderer for `n` rows: its stdin in *in, the band's width in *w (0: band off).  0, or -1 when it did not come up */
-static int ringbar(int n, int *in, int *w)
+/* the renderer for `n` rows: its stdin in *in, the band's width in *w (0: band off), its height in *h.  screen: the
+ * display's (display_screen.c) over what is above a band of n rows.  0, or -1 when it did not come up */
+static int renderer(int screen, int n, int *in, int *w, int *h)
 {
     int pin[2], pout[2]; char rs[8]; snprintf(rs, sizeof rs, "%d", n);
     const char *fake = getenv("HASSMIC_FAKE_BAND"), *dex = dex_path();
@@ -476,12 +478,12 @@ static int ringbar(int n, int *in, int *w)
     long maxfd = sysconf(_SC_OPEN_MAX);
     if (maxfd < 0 || maxfd > 65536) maxfd = 65536;
     /* what to run, made before the fork too: after it only async-signal-safe calls (execve, not execle) */
-    char *argv_[7] = { NULL }; const char *prog;
-    if (fake) { prog = fake; argv_[0] = (char *)fake; argv_[1] = rs; }
-    else {
-        prog = "/system/bin/app_process";
-        argv_[0] = "app_process"; argv_[1] = "/"; argv_[2] = "Ringbar"; argv_[3] = rs; argv_[4] = builder ? "builder" : NULL;
-    }
+    char *argv_[8] = { NULL }; const char *prog; int a = 0;
+    if (fake) { prog = fake; argv_[a++] = (char *)fake; }
+    else { prog = "/system/bin/app_process"; argv_[a++] = "app_process"; argv_[a++] = "/"; argv_[a++] = "Ringbar"; }
+    if (screen) argv_[a++] = "screen";
+    argv_[a++] = rs;
+    if (builder && !fake) argv_[a++] = "builder";
     if (pipe2(pin, O_CLOEXEC)) { free(envp); return -1; }
     if (pipe2(pout, O_CLOEXEC)) { close(pin[0]); close(pin[1]); free(envp); return -1; }
     pid_t pid = fork();
@@ -508,15 +510,17 @@ static int ringbar(int n, int *in, int *w)
     }
     line[k] = 0; close(pout[0]);
     int ww = 0, hh = 0;
-    if (!strcmp(line, "off") && !n) { close(pin[1]); *w = 0; *in = -1; return 0; }
-    if (sscanf(line, "ready %d %d", &ww, &hh) != 2 || ww <= 0 || ww > MAX_W || hh != n) {
-        fprintf(stderr, "band: the renderer did not come up (%s): %s\n", line[0] ? line : "no answer", dex);
+    if (!screen && !strcmp(line, "off") && !n) { close(pin[1]); *w = 0; *in = -1; return 0; }
+    if (sscanf(line, "ready %d %d", &ww, &hh) != 2 || ww <= 0 || ww > MAX_W || (screen ? hh <= 0 || hh > 4096 : hh != n)) {
+        fprintf(stderr, "%s: the renderer did not come up (%s): %s\n", screen ? "display" : "band", line[0] ? line : "no answer", dex);
         close(pin[1]); return -1;
     }
-    *in = pin[1]; *w = ww;
-    fprintf(stderr, "band: %d x %d at the bottom of the screen\n", ww, hh);
+    *in = pin[1]; *w = ww; if (h) *h = hh;
+    if (!screen) fprintf(stderr, "band: %d x %d at the bottom of the screen\n", ww, hh);
     return 0;
 }
+static int ringbar(int n, int *in, int *w) { return renderer(0, n, in, w, NULL); }
+int ring_band_screen(int rows, int *in, int *w, int *h) { return renderer(1, rows, in, w, h); }
 
 static int send_frame(int fd, const struct rgb *row, int w, int n, float k)
 {
@@ -564,7 +568,7 @@ static void *band_thread(void *arg)
         }
         long long now = now_ms();
         if (now >= next_check) {                    /* stock's screen timeouts by what the Echo is doing */
-            int t = core_muted() || core_dnd(-1) ? QUIET_MS : TIMEOUT_MS;
+            int t = display_screen_timeout(core_muted() || core_dnd(-1) ? QUIET_MS : TIMEOUT_MS);   /* the clock may keep it on */
             if (t != timeout) { timeout = t; screen_timeout(t); }
             next_check = now + 1000;
         }

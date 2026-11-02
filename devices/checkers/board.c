@@ -50,6 +50,9 @@ const struct board board = {
      * Echo Show (2026-10-13): "gating", /dev/input/event0, KEY_POWER */
     .privacy_input = "name:gating",
     .privacy_latch = 1,
+    /* Goodix gt9xx (getevent -il on the first Echo Show, docs/re-checkers.md): BTN_TOUCH at each touch.  Not grabbed:
+     * Android wakes the screen on it as before */
+    .touch = "name:goodix-ts",
 
     .bt_dev = "/dev/stpbt",                                         /* MT7668 combo, btmtksdio.ko */
     .bt_service = NULL,                                             /* none: Android's stack (app/Bluetooth) is off the partition */

@@ -22,6 +22,9 @@ How it gets the band to itself:
 The protocol, which hassmic's C side relies on:
     argv[1]         the band's height in rows; 0 = overscan reset, no band
     stdout          one line first: "ready <width> <rows>" (then the frames are wanted), or "off" for 0
+    screen mode     argv "screen <band rows> [builder]": a second process of the same program for hassmic's display
+                    (display_screen.c): a layer over everything above the band (width x (height - band rows), at the
+                    top), no overscan of its own, "ready <width> <rows>", then frames as below
     stdin           frames of width * rows * 4 bytes: each pixel 0xAARRGGBB as a little-endian int, rows top
                     to bottom; a frame is drawn once it is whole.  End of stdin (hassmic closed it or died):
                     the program ends and its layer goes with it
@@ -138,6 +141,7 @@ NAME = "hassmic-band"                     # the layer's name in dumpsys SurfaceF
 # the class's own methods: (name, params, return)
 SELF = [
     ("main",  (STRARR,), "V"),
+    ("screen", (STRARR,), "V"),
     ("overscan", (OBJ, "I", "I"), "V"),
     ("create", ("I", "I", "I"), OBJ),
     ("surface", (OBJ, "I"), OBJ),
@@ -165,6 +169,11 @@ def emit():
         # a=0 h=1 t=2..5 wm=6 di=7 w=8 dh=9 rot=10 s=11 n=12
         c = Code(13, 1)
         c.aget_at(2, 0, 0)
+        c.const_string(3, "screen"); c.invoke(VIRT, "str.eq", [2, 3]); c.move_result(3)
+        c.ifz(IFEQZ, 3, "band")
+        c.invoke(STATIC, "screen", [0])                       # the display above the band (display_screen.c)
+        c.ret_void()
+        c.label("band")
         c.invoke(STATIC, "int.parse", [2]); c.move_result(1)
         c.const_string(2, "android.os.ServiceManager"); c.const_string(3, "getService")
         c.const_string(4, "java.lang.String"); c.const_string(5, "window")
@@ -200,6 +209,38 @@ def emit():
         c.invoke(VIRT, "obj.getcls", [11]); c.move_result(2, True)         # a use of it after the loop: live all along
         c.ret_void()
         m.append(("main", c))
+
+    def screen():
+        # "screen <band rows> [builder]": a layer over the whole screen above the band, for hassmic's display
+        # (display_screen.c): no overscan of its own (the band's process keeps it), the same frames protocol.
+        # a=0 h=1 t=2..5 di=6 w=7 dh=8 n=9 sc=10 s=11
+        c = Code(12, 1)
+        c.aget_at(2, 0, 1)
+        c.invoke(STATIC, "int.parse", [2]); c.move_result(1)
+        c.const_string(2, "android.hardware.display.DisplayManagerGlobal"); c.const_string(3, "getInstance")
+        c.invoke(STATIC, "sinv0", [2, 3]); c.move_result(2, True)
+        c.const_string(3, "getDisplayInfo"); c.const_string(4, "int")
+        c.const_4(5, 0); c.invoke(STATIC, "int.value", [5]); c.move_result(5, True)
+        c.invoke(STATIC, "w1", [2, 3, 4, 5]); c.move_result(6, True)
+        c.const_string(2, "logicalWidth"); c.invoke(STATIC, "fint", [6, 2]); c.move_result(7)
+        c.const_string(2, "logicalHeight"); c.invoke(STATIC, "fint", [6, 2]); c.move_result(8)
+        c.binop(SUB, 8, 8, 1)                                 # the rows above the band
+        c.array_length(9, 0)
+        c.binop_lit8(ADD8, 9, 9, -1)                          # create's argc: 2 with "builder", as the band's
+        c.invoke(STATIC, "create", [7, 8, 9]); c.move_result(10, True)
+        c.const_4(2, 0)
+        c.invoke(STATIC, "surface", [10, 2]); c.move_result(11, True)
+        c.new_instance(2, SB); c.invoke(DIRECT, "SB.new", [2])
+        c.const_string(3, "ready "); c.invoke(VIRT, "SB.appendO", [2, 3])
+        c.invoke(VIRT, "SB.appendI", [2, 7])
+        c.const_string(3, " "); c.invoke(VIRT, "SB.appendO", [2, 3])
+        c.invoke(VIRT, "SB.appendI", [2, 8])
+        c.invoke(VIRT, "SB.to", [2]); c.move_result(2, True)
+        c.invoke(STATIC, "out", [2])
+        c.invoke(STATIC, "loop", [11, 7, 8])
+        c.invoke(VIRT, "obj.getcls", [10]); c.move_result(2, True)         # the SurfaceControl live all along
+        c.ret_void()
+        m.append(("screen", c))
 
     def overscan():
         # wm=0 rot=1 h=2 ps=3 as=4 i=5 t=6 z=7 n=8
@@ -491,7 +532,7 @@ def emit():
         c.ret_void()
         m.append(("out", c))
 
-    for f in (main, overscan, create, surface, loop, full, meth, cls, inv, sinv, sinv0, w1, w2, os_, fint, out):
+    for f in (main, screen, overscan, create, surface, loop, full, meth, cls, inv, sinv, sinv0, w1, w2, os_, fint, out):
         f()
     return m
 
