@@ -48,7 +48,9 @@ async def run(tmp):
     net = f"{int.from_bytes(os.urandom(8), 'little') | 1:016x} " + base64.b64encode(os.urandom(32)).decode()
     echo = hr.Echo(tmp, "Echo Show 5 a1b2c3", "02:00:00:a1:b2:c3", 26190, net, os.path.join(hr.ROOT, "build", "hassmic-host"))
     halog = open(os.path.join(tmp, "ha.log"), "w")
-    hass = subprocess.Popen([hr.HA_PY, "-m", "homeassistant", "-c", conf, "--skip-pip"], stdout=halog, stderr=subprocess.STDOUT)
+    hass = subprocess.Popen([hr.HA_PY, "-m", "homeassistant", "-c", conf, "--skip-pip"], stdout=halog, stderr=subprocess.STDOUT,
+                            cwd=conf)       # not the repository: python -m puts the working directory on sys.path, and its
+                                            # custom_components/ (hassmic's integration) would hide the config's
     echo.start()
     try:
         async with aiohttp.ClientSession() as session:

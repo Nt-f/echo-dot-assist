@@ -12,6 +12,8 @@ from aioesphomeapi.model import Event
 from esphome_common import KEY_VOLUMEUP, check, until, sync, home_assistant, run
 
 PORT, HTTP_PORT, WEB, HTTPS_PORT, SELF_PORT = 17201, 17202, 17203, 17204, 17205
+# the Echo's zone and this test's the same: move_clock's minutes are the Echo's (CI runs in UTC)
+os.environ["TZ"] = "America/New_York"; time.tzset()
 OFFSET = os.path.join(tempfile.mkdtemp(), "clock-offset")
 open(OFFSET, "w").write("0\n")
 
