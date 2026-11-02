@@ -28,6 +28,7 @@ void core_touch(int held) { (void)held; }
 const char *core_name = "Echo Show 5 3fce9a";
 int core_oobe(void) { return 0; }
 static int last_brightness = -1, wakes, am_starts;
+void core_run(char *const argv[], char *out, size_t n) { (void)argv; if (n) out[0] = 0; }
 void core_spawn(char *const argv[])
 {
     if (!strcmp(argv[0], "/system/bin/am")) am_starts++;
