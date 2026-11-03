@@ -308,6 +308,7 @@ class EchoLocalPanel extends HTMLElement {
       if (echo !== this.echo) return;
       this.apps = r;
       if (this.tab === 'apps') { const t = this.shadowRoot.querySelector('.appstab'); if (t) t.replaceWith(this.appsTab()); else this.render(); }
+      else if (this.tab === 'screen' && !r.none && this.kiosk && !this.kiosk.error) this.render();   // its app list offers them
       else if (r.none) {               // no Apps tab on an Echo Dot; nothing else redrawn (the preview would load again)
         const b = [...this.shadowRoot.querySelectorAll('.tab')].find((x) => x.textContent === 'Apps'); if (b) b.remove();
       }
@@ -465,11 +466,16 @@ class EchoLocalPanel extends HTMLElement {
     const def = h('select', { onchange: () => { o.kiosk_default = def.value; touch(); } }, k.kinds.map((x) => h('option', { value: x, selected: (o.kiosk_default || 'wall') === x }, KIND_LABEL[x] || x)));
     const ret = h('input', { type: 'number', min: 0, max: 3600, step: 10 }); ret.value = o.kiosk_return ?? 120;
     ret.addEventListener('input', () => { if (ret.checkValidity() && ret.value !== '') { o.kiosk_return = +ret.value; touch(); } });
+    // the screen apps known by name, then every app installed on this Echo (any app may be the screen app: one not made
+    // for hassmic is started as the launcher starts it, logs in to Home Assistant by itself, and gets the words and
+    // alarms drawn over it by hassmic), then one typed in
+    const installed = ((this.apps && this.apps.apps) || []).map((a) => a.package).filter((p) => !KNOWN_APPS.some(([v]) => v === p)).sort();
+    const offered = [...KNOWN_APPS, ...installed.map((p) => [p, `${p} (installed)`])];
     const appSel = h('select', { onchange: () => { o.kiosk_app = appSel.value === '*' ? (o.kiosk_app || '') : appSel.value; appOwn.style.display = appSel.value === '*' ? '' : 'none'; touch(); } },
-      KNOWN_APPS.map(([v, l]) => h('option', { value: v, selected: (o.kiosk_app || '') === v }, l)),
-      h('option', { value: '*', selected: !KNOWN_APPS.some(([v]) => v === (o.kiosk_app || '')) }, 'Another app (its package)…'));
+      offered.map(([v, l]) => h('option', { value: v, selected: (o.kiosk_app || '') === v }, l)),
+      h('option', { value: '*', selected: !offered.some(([v]) => v === (o.kiosk_app || '')) }, 'Another app (its package)…'));
     const appOwn = text('kiosk_app', 'org.example.screen');
-    appOwn.style.display = KNOWN_APPS.some(([v]) => v === (o.kiosk_app || '')) ? 'none' : '';
+    appOwn.style.display = offered.some(([v]) => v === (o.kiosk_app || '')) ? 'none' : '';
     const settings = h('textarea', { spellcheck: false, placeholder: 'immich.url=http://192.168.1.9:2283\nimmich.key=…' });
     settings.value = o.kiosk_app_settings || '';
     settings.addEventListener('input', () => { o.kiosk_app_settings = settings.value; touch(); });
@@ -477,7 +483,7 @@ class EchoLocalPanel extends HTMLElement {
     return h('div', null, bar, pst, h('div', { class: 'grid' },
       h('div', { class: 'card' }, h('h2', null, 'On the screen'),
         row('Show Home Assistant on the screen', sw('kiosk')),
-        h('div', { class: 'row' }, h('div', { class: 'head' }, h('span', { class: 'name' }, 'Screens')), h('div', { class: 'help' }, 'On, in the order the switcher offers them.'), screens),
+        h('div', { class: 'row' }, h('div', { class: 'head' }, h('span', { class: 'name' }, 'Screens')), h('div', { class: 'help' }, 'On, in the order hassmic\'s bar (pulled down from the top edge) offers them.'), screens),
         row('Start on, and go back to', def),
         row('Back to it after untouched for', h('span', null, ret, ' ', h('span', { class: 'note' }, 's')), '0: never.'),
         row("Dashboard (Home Assistant's own UI)", text('kiosk_dashboard', 'lovelace'), 'Its path: lovelace is Overview.'),
@@ -485,7 +491,7 @@ class EchoLocalPanel extends HTMLElement {
         row('Your page’s name', text('kiosk_custom_name', 'Page')),
         row('Your page’s address', text('kiosk_custom_url', 'http://…', 'url'))),
       h('div', { class: 'card' }, h('h2', null, 'The screen app'),
-        h('div', { class: 'about' }, 'The Android app that shows the screens (docs/screen-apps.md). Its Home, if it draws one, is under Home screen.'),
+        h('div', { class: 'about' }, 'The Android app that has the screen (docs/screen-apps.md): hassmic\'s kiosk, Echo-Wall, or any app installed on the Echo. One made for hassmic gets Home Assistant\'s address and this Echo\'s login; any other logs in by itself, and hassmic draws the words of a request and a ringing alarm over it. Whatever it is, hassmic\'s bar (pulled down from the top edge) leads to it and to every other app.'),
         row('App', h('span', null, appSel, ' ', appOwn)),
         h('div', { class: 'row' }, h('div', { class: 'head' }, h('span', { class: 'name' }, 'Its settings')), h('div', { class: 'help' }, 'One key=value a line; sent sealed with the Echo’s login.'), settings),
         row('The Echo’s user is an administrator', sw('kiosk_admin'), 'Home Assistant’s settings on the Echo.'),

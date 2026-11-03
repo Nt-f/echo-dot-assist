@@ -100,7 +100,8 @@ async def browser(session, token, png):
                 os.makedirs(os.path.dirname(png), exist_ok=True); open(png.replace(".png", name + ".png"), "wb").write(base64.b64decode(r["data"]))
         await shot("")
         out["screen"] = await js(f"""(async () => {{ const p = {find}; p.tab = 'screen'; await p.loadKiosk();
-            await new Promise(r => setTimeout(r, 300)); return {{ rows: [...p.shadowRoot.querySelectorAll('.card .row .name')].map(e => e.textContent),
+            await p.loadApps(); await new Promise(r => setTimeout(r, 500)); return {{ rows: [...p.shadowRoot.querySelectorAll('.card .row .name')].map(e => e.textContent),
+              apps: [...p.shadowRoot.querySelectorAll('.card select option')].map(e => e.textContent),
               push: (p.shadowRoot.querySelector('.pushst') || {{}}).textContent || '' }}; }})()""")
         await asyncio.sleep(0.5); await shot("-screen")
         out["appstab"] = await js(f"""(async () => {{ const p = {find}; p.tab = 'apps'; p.render(); await p.loadApps();
@@ -295,6 +296,8 @@ async def run(tmp):
                 scr = out.get("screen") or {}
                 check("Show Home Assistant on the screen" in scr.get("rows", []) and "Sent to the Echo" in scr.get("push", ""),
                       f"the Screen tab: the kiosk's options, the last push ({scr.get('rows', [])[:2]}, {scr.get('push')!r})")
+                check("org.schabi.newpipe (installed)" in scr.get("apps", []) and "Echo-Wall" in scr.get("apps", []),
+                      f"the Screen tab: any app installed on the Echo offered as the screen app ({[x for x in scr.get('apps', []) if '.' in x or 'Echo' in x][:6]})")
                 ap = out.get("appstab") or {}
                 check("Apps" in ap.get("tabs", []) and "org.schabi.newpipe" in ap.get("apps", []) and ap.get("screenApp") == [True]
                       and ap.get("status", "").startswith("Removed org.example.app"),
