@@ -4,16 +4,21 @@ What changed for people using the Echo, newest first. Details and measurements a
 
 ## 2026-11-02
 
+- **The Home Assistant integration is now "Echo Local"** (`custom_components/echo_local`, actions `echo_local.*`, card
+  `custom:echo-local-alarms-card`): its old name, `hassmic`, is also another project's integration (jeffc/hassmic), and
+  Home Assistant can't load both. Remove the old one and add Echo Local again; the Echo asks for its button once more.
+  The kiosk app and the screen apps' intent moved to `io.github.gamer92000.echodotassist` (`docs/screen-apps.md`): a
+  screen app of your own needs the new intent.
 - **Home Assistant on the Echo Show's screen.** A kiosk app of hassmic's own shows a wall panel in the manner of Apple's
   HomeView (glass widgets over a wallpaper: clock, weather, the thermostat's big number, what plays, a camera, then a
   page of tiles per room; tap to switch, hold for brightness, position, volume, temperature; a big clock when idle), Home Assistant's
   own dashboards, Music Assistant or a page of your own, switched by a handle at the top of the screen. Set up in Home
-  Assistant: the hassmic integration's options, which also give the Echo a login of its own. The wall panel is light
+  Assistant: the Echo Local integration's options, which also give the Echo a login of its own. The wall panel is light
   enough for the Echo Show 5's memory. An update to this version and a restart of the Echo bring it (the update
   puts Android's WebView back on the Echo, which Android only finds at a start).
   See the guide's "Home Assistant on the screen".
 - **Arrange the wall panel.** Hold the page dots on the Echo to edit it: drag tiles, star them for the Home page,
-  hide them, pick the wallpaper. Or in Home Assistant, on the hassmic integration's second options page. Both keep
+  hide them, pick the wallpaper. Or in Home Assistant, on the Echo Local integration's second options page. Both keep
   one layout per Echo in Home Assistant.
 - **A keyboard on the Echo Show's screen.** The kiosk has an on-screen keyboard of its own (the Echo has none): it
   comes up when you tap a text field, for a login, a search or a name.
@@ -26,7 +31,7 @@ What changed for people using the Echo, newest first. Details and measurements a
   points of volume a minute up to the loudest the Echo plays ("Unanswered alarms get louder" on the "Clock & alarms"
   page). Stopped or snoozed, everything is back at its own volume.
 - **Your alarms in Home Assistant, with a card.** A Home Assistant integration of hassmic's own
-  (`custom_components/hassmic`): a switch per alarm, actions to add, change and delete them, and a dashboard card
+  (`custom_components/echo_local`): a switch per alarm, actions to add, change and delete them, and a dashboard card
   "Echo alarms" that lists them like the Alexa app (switch, tap to change time, days and label, Add, Snooze, Stop).
   Home Assistant is let in with a press of the Echo's button, as a browser is. See the guide's "Clock and alarms".
 - **"Change my alarm to 6:30"** moves the next alarm (its days kept) instead of setting a second one.

@@ -485,7 +485,7 @@ that was stopped or rang out turns itself off; a repeating one goes on to its ne
 update) less than 5 minutes ago still rings after it. "Clock": 7:30 AM or 07:30, automatic by the time zone.
 
 **The Home Assistant integration and card.** The esphome integration shows "Next alarm" and the rest; to see every
-alarm and change them from Home Assistant, add hassmic's own integration (`custom_components/hassmic` of this
+alarm and change them from Home Assistant, add the Echo Local integration (`custom_components/echo_local` of this
 repository): copy that folder into Home Assistant's `config/custom_components/` (or add this repository to HACS as a
 custom repository of type Integration), restart Home Assistant, then Settings → Devices & services → Add integration →
 "hassmic (Echo alarms)" (or Configure on the Echo it found by itself). Give the Echo's address; Home Assistant then
@@ -493,9 +493,9 @@ waits for the Echo to let it in, as a browser on its settings page does: press t
 volume keys together) and Submit. It adds:
 
 - a switch per alarm (on: it rings; off: kept), with its time, days, label and next ring as attributes;
-- the actions `hassmic.add_alarm` (time, days, label), `hassmic.edit_alarm` and `hassmic.delete_alarm` (on an alarm's
-  switch), `hassmic.snooze` and `hassmic.stop`;
-- the dashboard card "Echo alarms" (`type: custom:hassmic-alarms-card`, `device_id:` the Echo, optional `title:`), loaded
+- the actions `echo_local.add_alarm` (time, days, label), `echo_local.edit_alarm` and `echo_local.delete_alarm` (on an alarm's
+  switch), `echo_local.snooze` and `echo_local.stop`;
+- the dashboard card "Echo alarms" (`type: custom:echo-local-alarms-card`, `device_id:` the Echo, optional `title:`), loaded
   by the integration itself: the alarms with their switches, tap one to change its time, days and label or delete
   it, "Add alarm", and Snooze and Stop while one rings.
 
@@ -535,7 +535,7 @@ cover, lock, speaker and door or motion sensor, swiped sideways. A tap switches,
 brings the widgets back. Also **Home Assistant's own dashboards**, **Music Assistant**, and a page of your own. A small handle at the top
 edge of the screen switches between them; left alone on another screen for 2 minutes, it goes back to the first.
 
-It is set up from Home Assistant, in the hassmic integration (the one for the Echo's alarms): *Settings › Devices &
+It is set up from Home Assistant, in the Echo Local integration (the one for the Echo's alarms): *Settings › Devices &
 services › hassmic › Configure* on the Echo Show. Tick "Show Home Assistant on the screen", pick the screens and the
 one to start on. The Echo has no keyboard to log in with, so the integration makes a Home Assistant user for it
 ("Echo Show 5 … kiosk": local network only, not an administrator unless you tick that) and hands the Echo a token of
@@ -566,7 +566,7 @@ Echo, and every screen showing that panel follows a change at once. A rooms' nam
 stay Home Assistant's: hide an entity there and it is gone from the panel too. In the address (any browser):
 `?theme=`, `?favorites=light.desk,lock.front`, `?thermostat=`, `?camera=`, `?weather=`, `?ambient=0` win over the
 layout; `?echo=` names whose layout it shows (none: a layout of its own, "default"). It works in any browser too:
-`http://<home assistant>:8123/hassmic/wall.html`, once logged into Home Assistant there with "Keep me logged in".
+`http://<home assistant>:8123/echo_local/wall.html`, once logged into Home Assistant there with "Keep me logged in".
 
 ## Music
 

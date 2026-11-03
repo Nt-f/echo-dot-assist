@@ -1,8 +1,8 @@
-// hassmic-alarms-card: the alarms of an Echo running hassmic (custom_components/hassmic), as the Alexa app shows them:
+// echo-local-alarms-card: the alarms of an Echo running hassmic (custom_components/echo_local), as the Alexa app shows them:
 // a row per alarm with its switch, tap one to change its time, days and label, "Add alarm", and Snooze / Stop while
 // one rings.  Plain custom elements, no build step: the integration serves this file and loads it on every dashboard.
 //
-//   type: custom:hassmic-alarms-card
+//   type: custom:echo-local-alarms-card
 //   device_id: <the Echo's device>     # optional with one Echo
 //   title: Bedroom alarms              # optional
 //
@@ -35,7 +35,7 @@ function untilText(iso) {
   return h >= 24 ? `in ${Math.round(h / 24)} day${Math.round(h / 24) === 1 ? '' : 's'}` : h ? `in ${h} h${m ? ` ${m} min` : ''}` : `in ${m} min`;
 }
 
-class HassmicAlarmsCard extends HTMLElement {
+class EchoLocalAlarmsCard extends HTMLElement {
   setConfig(config) {
     this._config = { ...(config || {}) };
     this._edit = null;                                         // null, or { id: entity_id | 'new', time, days, label }
@@ -48,20 +48,20 @@ class HassmicAlarmsCard extends HTMLElement {
 
   getCardSize() { return 2 + this._alarms().length; }
 
-  static getConfigElement() { return document.createElement('hassmic-alarms-card-editor'); }
+  static getConfigElement() { return document.createElement('echo-local-alarms-card-editor'); }
 
   static getStubConfig(hass) {
-    const e = Object.values(hass.entities || {}).find((x) => x.platform === 'hassmic' && x.device_id);
+    const e = Object.values(hass.entities || {}).find((x) => x.platform === 'echo_local' && x.device_id);
     return e ? { device_id: e.device_id } : {};
   }
 
-  // the Echo's alarm switches (switch.py): this device's, or every hassmic Echo's
+  // the Echo's alarm switches (switch.py): this device's, or every Echo's
   _alarms() {
     const h = this._hass;
     if (!h) return [];
     const dev = this._config.device_id;
     return Object.values(h.entities || {})
-      .filter((e) => e.platform === 'hassmic' && e.entity_id.startsWith('switch.') && (!dev || e.device_id === dev))
+      .filter((e) => e.platform === 'echo_local' && e.entity_id.startsWith('switch.') && (!dev || e.device_id === dev))
       .map((e) => h.states[e.entity_id]).filter((s) => s && s.attributes.alarm_id !== undefined)
       .sort((a, b) => (a.attributes.time || '').localeCompare(b.attributes.time || ''));
   }
@@ -89,7 +89,7 @@ class HassmicAlarmsCard extends HTMLElement {
   }
 
   _call(service, data, target) {
-    return this._hass.callService('hassmic', service, data, target).catch((e) => { this._error = e.message || String(e); this._sig = ''; this._draw(); });
+    return this._hass.callService('echo_local', service, data, target).catch((e) => { this._error = e.message || String(e); this._sig = ''; this._draw(); });
   }
 
   _draw() {
@@ -215,14 +215,14 @@ button.del { color: var(--error-color); }
 .grow { flex: 1; }
 `;
 
-class HassmicAlarmsCardEditor extends HTMLElement {
+class EchoLocalAlarmsCardEditor extends HTMLElement {
   setConfig(config) { this._config = { ...config }; this._render(); }
   set hass(hass) { this._hass = hass; this._render(); }
   _render() {
     if (!this._hass || !this._config) return;
     if (!this._form) {
       this._form = document.createElement('ha-form');
-      this._form.schema = [{ name: 'device_id', selector: { device: { integration: 'hassmic' } } }, { name: 'title', selector: { text: {} } }];
+      this._form.schema = [{ name: 'device_id', selector: { device: { integration: 'echo_local' } } }, { name: 'title', selector: { text: {} } }];
       this._form.computeLabel = (s) => (s.name === 'device_id' ? 'Echo' : 'Title (optional)');
       this._form.addEventListener('value-changed', (ev) => {
         this._config = ev.detail.value;
@@ -235,8 +235,8 @@ class HassmicAlarmsCardEditor extends HTMLElement {
   }
 }
 
-if (!customElements.get('hassmic-alarms-card')) customElements.define('hassmic-alarms-card', HassmicAlarmsCard);
-if (!customElements.get('hassmic-alarms-card-editor')) customElements.define('hassmic-alarms-card-editor', HassmicAlarmsCardEditor);
+if (!customElements.get('echo-local-alarms-card')) customElements.define('echo-local-alarms-card', EchoLocalAlarmsCard);
+if (!customElements.get('echo-local-alarms-card-editor')) customElements.define('echo-local-alarms-card-editor', EchoLocalAlarmsCardEditor);
 window.customCards = window.customCards || [];
-if (!window.customCards.some((c) => c.type === 'hassmic-alarms-card'))
-  window.customCards.push({ type: 'hassmic-alarms-card', name: 'Echo alarms', description: 'The alarms of an Echo running hassmic: switch, change, add, snooze.', preview: false });
+if (!window.customCards.some((c) => c.type === 'echo-local-alarms-card'))
+  window.customCards.push({ type: 'echo-local-alarms-card', name: 'Echo alarms', description: 'The alarms of an Echo running hassmic: switch, change, add, snooze.', preview: false });

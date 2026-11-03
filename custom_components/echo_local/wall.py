@@ -3,9 +3,9 @@ Echo (its node, the panel's ?echo=), "default" for any other browser.  Set from 
 (config_flow.py, the "Wall panel" step) or on the panel itself (its edit mode), read and followed by the panel over
 Home Assistant's websocket:
 
-    hassmic/wall/get        {echo}           the layout
-    hassmic/wall/set        {echo, layout}   replaces it (checked: below); every panel following it gets it
-    hassmic/wall/subscribe  {echo}           the layout now and at every change
+    echo_local/wall/get        {echo}           the layout
+    echo_local/wall/set        {echo, layout}   replaces it (checked: below); every panel following it gets it
+    echo_local/wall/subscribe  {echo}           the layout now and at every change
 
 Any logged-in user may read and set it: the Echo's kiosk user is not an administrator, and a layout only says which
 tiles show where.  What it holds (all optional; missing = the panel's own choice):
@@ -29,8 +29,8 @@ from homeassistant.helpers.storage import Store
 
 from .const import DOMAIN
 
-STORE_KEY = "hassmic.wall"
-SIGNAL = "hassmic_wall_changed"
+STORE_KEY = "echo_local.wall"
+SIGNAL = "echo_local_wall_changed"
 DEFAULT = "default"
 THEMES = ["amber", "dusk", "light"]
 _ids = vol.All([vol.All(str, vol.Length(max=255))], vol.Length(max=300))
@@ -74,13 +74,13 @@ async def async_setup(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, ws_subscribe)
 
 
-@websocket_api.websocket_command({vol.Required("type"): "hassmic/wall/get", vol.Optional("echo", default=""): str})
+@websocket_api.websocket_command({vol.Required("type"): "echo_local/wall/get", vol.Optional("echo", default=""): str})
 @callback
 def ws_get(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict) -> None:
     connection.send_result(msg["id"], get(hass, msg["echo"]))
 
 
-@websocket_api.websocket_command({vol.Required("type"): "hassmic/wall/set", vol.Optional("echo", default=""): str,
+@websocket_api.websocket_command({vol.Required("type"): "echo_local/wall/set", vol.Optional("echo", default=""): str,
                                   vol.Required("layout"): dict})
 @websocket_api.async_response
 async def ws_set(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict) -> None:
@@ -92,7 +92,7 @@ async def ws_set(hass: HomeAssistant, connection: websocket_api.ActiveConnection
     connection.send_result(msg["id"], layout)
 
 
-@websocket_api.websocket_command({vol.Required("type"): "hassmic/wall/subscribe", vol.Optional("echo", default=""): str})
+@websocket_api.websocket_command({vol.Required("type"): "echo_local/wall/subscribe", vol.Optional("echo", default=""): str})
 @callback
 def ws_subscribe(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict) -> None:
     echo = msg["echo"] or DEFAULT

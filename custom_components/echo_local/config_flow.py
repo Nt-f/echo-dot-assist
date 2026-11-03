@@ -21,13 +21,13 @@ from .const import CONF_KEY, CONF_MAC, CONF_NODE, DOMAIN
 _LOGGER = logging.getLogger(__name__)
 
 
-class HassmicConfigFlow(ConfigFlow, domain=DOMAIN):
+class EchoLocalConfigFlow(ConfigFlow, domain=DOMAIN):
     VERSION = 1
 
     @staticmethod
     @callback
-    def async_get_options_flow(entry: ConfigEntry) -> HassmicOptionsFlow:
-        return HassmicOptionsFlow()
+    def async_get_options_flow(entry: ConfigEntry) -> EchoLocalOptionsFlow:
+        return EchoLocalOptionsFlow()
 
     def __init__(self) -> None:
         self.host: str | None = None
@@ -120,7 +120,7 @@ class HassmicConfigFlow(ConfigFlow, domain=DOMAIN):
         return await self.async_step_approve()
 
 
-class HassmicOptionsFlow(OptionsFlowWithReload):
+class EchoLocalOptionsFlow(OptionsFlowWithReload):
     """The Echo Show's screen (kiosk.py): Home Assistant on it, which screens, where it starts.  The entry reloads on
     Submit, and its setup sends it all to the Echo."""
 

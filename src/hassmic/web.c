@@ -445,7 +445,7 @@ static size_t hello_json(char *o, size_t cap, int members)
                          name, node, board.model, board.codename, VERSION, p, start_id, core_web_port);
     /* no action button (board.action_combo): the page names what stands in for it */
     if (board.action_combo && n < cap) n += (size_t)snprintf(o + n, cap - n, ",\"action\":\"volume_keys\"");
-    /* the Wi-Fi MAC, which ESPHome's mDNS says anyway: the Home Assistant integration (custom_components/hassmic) puts its
+    /* the Wi-Fi MAC, which ESPHome's mDNS says anyway: the Home Assistant integration (custom_components/echo_local) puts its
      * entities on the device the esphome integration made, which Home Assistant keys on it */
     { char m[24] = ""; FILE *f = fopen(getenv("HASSMIC_MAC_FILE") ? getenv("HASSMIC_MAC_FILE") : "/sys/class/net/wlan0/address", "r");
       if (f) { if (fscanf(f, "%17s", m) != 1) m[0] = 0; fclose(f); }

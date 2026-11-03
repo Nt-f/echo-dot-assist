@@ -1,6 +1,6 @@
 /* The kiosk: Home Assistant (or Music Assistant, or any page) on the Echo Show's screen, in hassmic's own app
- * (tools/kiosk/: org.hassmic.kiosk, a WebView on the firmware's Amazon WebView, Chromium 118), set up from Home
- * Assistant by the hassmic integration (custom_components/hassmic: the screens, the address, a login of its own).
+ * (tools/kiosk/: io.github.gamer92000.echodotassist.kiosk, a WebView on the firmware's Amazon WebView, Chromium 118), set up from Home
+ * Assistant by the Echo Local integration (custom_components/echo_local: the screens, the address, a login of its own).
  *
  * This side keeps what the integration sent (state/kiosk, 0600: it holds the login's token) and hands it to the app
  * over loopback only (web.c GET /kiosk/config); the app tells by its polls whether it is in front, and the display

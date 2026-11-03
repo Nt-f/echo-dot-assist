@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""custom_components/hassmic (the Echo's alarms in Home Assistant) in a real Home Assistant against build/hassmic-host:
+"""custom_components/echo_local (the Echo's alarms in Home Assistant) in a real Home Assistant against build/hassmic-host:
 the config flow (the address, then the Echo's action button lets Home Assistant in), the alarm switches on the same
 device as the esphome integration's entities (the MAC), the actions add_alarm / edit_alarm / delete_alarm, a switch
 turned off, the dashboard card served, and Home Assistant let in again after the Echo forgot it.
@@ -14,11 +14,11 @@ from ha_real_dropin import check, HA_PORT
 
 def write_config(conf):
     os.makedirs(os.path.join(conf, ".storage"))
-    shutil.copytree(os.path.join(hr.ROOT, "custom_components", "hassmic"), os.path.join(conf, "custom_components", "hassmic"))
+    shutil.copytree(os.path.join(hr.ROOT, "custom_components", "echo_local"), os.path.join(conf, "custom_components", "echo_local"))
     open(os.path.join(conf, "configuration.yaml"), "w").write(
         "homeassistant:\n  name: Test\n  unit_system: metric\n  time_zone: UTC\n  latitude: 0\n  longitude: 0\n  elevation: 0\n"
         "  country: DE\n  internal_url: http://127.0.0.1:%d\napi:\nconfig:\nonboarding:\nfrontend:\n"
-        "logger:\n  default: warning\n  logs:\n    custom_components.hassmic: debug\n" % HA_PORT)
+        "logger:\n  default: warning\n  logs:\n    custom_components.echo_local: debug\n" % HA_PORT)
     json.dump({"version": 2, "minor_version": 2, "key": "http", "data": {
         "stable": {"server_port": HA_PORT, "server_host": ["127.0.0.1"], "cors_allowed_origins": [], "login_attempts_threshold": -1,
                    "ip_ban_enabled": False, "ssl_profile": "modern", "use_x_frame_options": True,
@@ -26,9 +26,9 @@ def write_config(conf):
         "pending": None, "yaml_migration_done": True}}, open(os.path.join(conf, ".storage", "http"), "w"))
 
 
-async def add_hassmic(c, echo, press=True):
+async def add_echo_local(c, echo, press=True):
     """the config flow: the address, then the button (SIGUSR2 on the PC); the result"""
-    f = await c.post("/api/config/config_entries/flow", {"handler": "hassmic", "show_advanced_options": False})
+    f = await c.post("/api/config/config_entries/flow", {"handler": "echo_local", "show_advanced_options": False})
     f = await c.post(f"/api/config/config_entries/flow/{f['flow_id']}", {"host": "127.0.0.1", "port": echo.port + 10})
     if f.get("step_id") != "approve": return f
     first = f
@@ -65,19 +65,19 @@ async def run(tmp):
             await hr.add_esphome(c, echo)
             check(await hr.until(lambda: _has(echo, "voice assistant: subscribed"), 20), "the Echo in Home Assistant (esphome)")
 
-            f = await add_hassmic(c, echo)
+            f = await add_echo_local(c, echo)
             check(f.get("_first", {}).get("step_id") == "approve" and "a1b2c3" in json.dumps(f.get("_first", {}).get("description_placeholders")),
                   f"the flow asks for the button on that Echo: {f.get('_first')}")
             check(f.get("_early") == {"base": "not_approved"}, f"Submit before the press: not let in yet ({f.get('_early')})")
             check(f.get("type") == "create_entry" and f.get("title") == "Echo Show 5 a1b2c3", f"after the press: added ({f.get('type')}, {f.get('title')})")
-            again = await add_hassmic(c, echo, press=False)
+            again = await add_echo_local(c, echo, press=False)
             check(again.get("type") == "abort" and again.get("reason") == "already_configured", f"the same Echo again: already added ({again})")
 
-            await c.ws(type="call_service", domain="hassmic", service="add_alarm",
+            await c.ws(type="call_service", domain="echo_local", service="add_alarm",
                        service_data={"time": "07:30:00", "days": ["mon", "fri"], "label": "Gym"})
             async def sw():
                 reg = await c.ws(type="config/entity_registry/list")
-                return [x for x in reg if x["platform"] == "hassmic" and x["entity_id"].startswith("switch.")], reg
+                return [x for x in reg if x["platform"] == "echo_local" and x["entity_id"].startswith("switch.")], reg
             ok = await hr.until(lambda: _n(sw, 1), 15)
             alarms, reg = await sw()
             check(ok and len(alarms) == 1, f"add_alarm: a switch for it ({[a['entity_id'] for a in alarms]})")
@@ -99,22 +99,22 @@ async def run(tmp):
             await c.ws(type="call_service", domain="switch", service="turn_off", target={"entity_id": eid})
             offok = await hr.until(lambda: _is(c, eid, "off"), 10)
             check(offok and not _alarms(echo)[0]["enabled"], f"switched off: kept on the Echo, off ({offok}, {_alarms(echo)}, {await c.state(eid)})")
-            await c.ws(type="call_service", domain="hassmic", service="edit_alarm", target={"entity_id": eid},
+            await c.ws(type="call_service", domain="echo_local", service="edit_alarm", target={"entity_id": eid},
                        service_data={"time": "06:45:00", "days": [], "label": "Flight"})
             check(await hr.until(lambda: _is(c, eid, "on"), 10), "edit_alarm: on again")
             e0 = _alarms(echo)[0]
             check(e0["hour"] == 6 and e0["min"] == 45 and e0["days"] == 0 and e0["label"] == "Flight" and e0["enabled"],
                   f"edit_alarm: once at 6:45, \"Flight\" ({e0})")
-            await c.ws(type="call_service", domain="hassmic", service="delete_alarm", target={"entity_id": eid})
+            await c.ws(type="call_service", domain="echo_local", service="delete_alarm", target={"entity_id": eid})
             check(await hr.until(lambda: _n(sw, 0), 15) and _alarms(echo) == [], "delete_alarm: gone on the Echo and in Home Assistant")
 
-            async with session.get(f"{hr.HA}/hassmic/hassmic-alarms-card.js") as r:
+            async with session.get(f"{hr.HA}/echo_local/echo-local-alarms-card.js") as r:
                 body = await r.text()
-            check(r.status == 200 and "hassmic-alarms-card" in body, f"the dashboard card is served ({r.status})")
+            check(r.status == 200 and "echo-local-alarms-card" in body, f"the dashboard card is served ({r.status})")
             await c.post("/api/onboarding/integration", {"client_id": f"{hr.HA}/", "redirect_uri": f"{hr.HA}/?auth_callback=1"})
             async with session.get(f"{hr.HA}/lovelace/0") as r:  # every dashboard loads it: the frontend's page names it
                 page = await r.text()
-            check("/hassmic/hassmic-alarms-card.js" in page,
+            check("/echo_local/echo-local-alarms-card.js" in page,
                   f"the frontend's page loads the card on every dashboard ({r.status}: {[l for l in page.splitlines() if 'import' in l or 'extra' in l.lower()][:6]})")
 
             # the Echo forgot Home Assistant (its login revoked on the page, a factory reset): the next call asks for
@@ -124,7 +124,7 @@ async def run(tmp):
             echo.stop(); echo.start()
             flows = []
             for _ in range(100):                        # the next poll (every 30 s) finds it out
-                flows = [x for x in await c.ws(type="config_entries/flow/progress") if x["handler"] == "hassmic"]
+                flows = [x for x in await c.ws(type="config_entries/flow/progress") if x["handler"] == "echo_local"]
                 if flows: break
                 await asyncio.sleep(0.5)
             check(flows and flows[0]["context"].get("source") == "reauth" and flows[0]["step_id"] == "reauth_confirm",

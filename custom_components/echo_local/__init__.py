@@ -1,4 +1,4 @@
-"""hassmic for Home Assistant: the Echo's own alarms (src/hassmic/alarms.c) as entities, actions and a dashboard card.
+"""Echo Local, the Home Assistant integration for Echos running hassmic: the Echo's own alarms (src/hassmic/alarms.c) as entities, actions and a dashboard card.
 
 The esphome integration already has the Echo (voice, media player, "Next alarm", "Snooze alarm", ...).  This one adds
 what ESPHome's entities cannot carry: every alarm with its time, days, label and switch, and adding, changing and
@@ -49,7 +49,7 @@ def days_mask(days) -> int:
     return mask
 
 
-class HassmicCoordinator(DataUpdateCoordinator[dict]):
+class EchoLocalCoordinator(DataUpdateCoordinator[dict]):
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry, echo: Echo) -> None:
         super().__init__(hass, _LOGGER, name=entry.title, update_interval=timedelta(seconds=SCAN_INTERVAL_S), config_entry=entry)
         self.echo = echo
@@ -79,14 +79,14 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     await wall.async_setup(hass)          # the wall panel's layouts and their websocket commands
     fe = Path(__file__).parent / "frontend"
     # the wall panel: no login to fetch it (it is only a page), its data then over the websocket with the kiosk's token
-    await hass.http.async_register_static_paths([StaticPathConfig(CARD_URL, str(fe / "hassmic-alarms-card.js"), False),
+    await hass.http.async_register_static_paths([StaticPathConfig(CARD_URL, str(fe / "echo-local-alarms-card.js"), False),
                                                  StaticPathConfig(WALL_URL, str(fe / "wall.html"), False),
-                                                 StaticPathConfig("/hassmic/wall.js", str(fe / "wall.js"), False)])
+                                                 StaticPathConfig("/echo_local/wall.js", str(fe / "wall.js"), False)])
     from homeassistant.components.frontend import add_extra_js_url
     add_extra_js_url(hass, CARD_URL)
     add_extra_js_url(hass, CARD_URL, es5=True)      # the legacy build too (older browsers); defined once either way
 
-    def coordinator_of(call: ServiceCall) -> HassmicCoordinator:
+    def coordinator_of(call: ServiceCall) -> EchoLocalCoordinator:
         """the Echo a call names by its device; the only one when there is one"""
         entries = [e for e in hass.config_entries.async_loaded_entries(DOMAIN)]
         dev = call.data.get("device_id")
@@ -124,7 +124,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         raise ConfigEntryNotReady(str(e)) from e
     if hello.get("node") != entry.unique_id:
         raise ConfigEntryNotReady(f"{entry.data[CONF_HOST]} is {hello.get('name')} now, not {entry.title}")
-    coordinator = HassmicCoordinator(hass, entry, echo)
+    coordinator = EchoLocalCoordinator(hass, entry, echo)
     await coordinator.async_config_entry_first_refresh()
     entry.runtime_data = coordinator
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)

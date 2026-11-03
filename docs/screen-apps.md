@@ -2,10 +2,10 @@
 
 hassmic owns the Echo Show's screen only for its own pictures: the start's status, the words of a request, a ringing
 alarm, the clock. Everything else is a **screen app's**: an ordinary Android app that hassmic starts and gives the
-screen to. hassmic ships one, the Java kiosk (`tools/kiosk`, `org.hassmic.kiosk`: web pages in a WebView, a switcher,
-a keyboard). Anyone can write another and install it with `adb install`; the hassmic integration in Home Assistant
+screen to. hassmic ships one, the Java kiosk (`tools/kiosk`, `io.github.gamer92000.echodotassist.kiosk`: web pages in a WebView, a switcher,
+a keyboard). Anyone can write another and install it with `adb install`; the Echo Local integration in Home Assistant
 names which one the Echo uses (Configure › "Screen app": its package). A Flutter template that does what the Java
-kiosk does lives at [Nt-f/hassmic-screen](https://github.com/Nt-f/hassmic-screen).
+kiosk does lives at [Nt-f/Echo-Screen](https://github.com/Nt-f/Echo-Screen).
 
 This is the whole contract between hassmic and a screen app.
 
@@ -15,12 +15,12 @@ The app's main activity declares
 
 ```xml
 <intent-filter>
-    <action android:name="org.hassmic.action.SCREEN" />
+    <action android:name="io.github.gamer92000.echodotassist.action.SCREEN" />
     <category android:name="android.intent.category.DEFAULT" />
 </intent-filter>
 ```
 
-and hassmic starts it with `am start -a org.hassmic.action.SCREEN -c android.intent.category.DEFAULT <package>` once
+and hassmic starts it with `am start -a io.github.gamer92000.echodotassist.action.SCREEN -c android.intent.category.DEFAULT <package>` once
 "Home Assistant on the screen" is on and the Echo is linked to Home Assistant, and again whenever the app has not
 asked for its config (below) for 90 seconds (it crashed, or was never started since the boot), at most once a minute.
 It is not a home screen: Android 7 starts the home before the user is unlocked, when no WebView may run.
@@ -43,7 +43,7 @@ owner of `/data/data/<package>`; anyone else gets a 404. No CORS headers: pages 
   "ha": "http://192.168.1.211:8123",
   "has_token": true,
   "token": "<a long-lived access token>",
-  "app": "org.hassmic.kiosk",
+  "app": "io.github.gamer92000.echodotassist.kiosk",
   "default": 0,
   "return": 120,
   "screens": [

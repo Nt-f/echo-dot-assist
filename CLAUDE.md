@@ -68,7 +68,7 @@ aioesphomeapi, wyoming, aiosendspin, noiseprotocol, aiohttp):
                                              # actions and template engine: renamed ids, other devices, failures, replies
 .venv/bin/python tests/ha_real_end.py         # the Echo's end of audio in a real Home Assistant (stand-in STT and TTS as a
                                              # custom component): HA's STT stream ends with it, intent and reply follow
-.venv/bin/python tests/ha_real_alarms.py      # custom_components/hassmic (alarms integration and card) in a real HA
+.venv/bin/python tests/ha_real_alarms.py      # custom_components/echo_local (alarms integration and card) in a real HA
 .venv/bin/python tests/ha_real_kiosk.py       # the Echo Show's kiosk set up from the integration: user, token, screens,
                                              # the wall panel in headless Chrome (build/test-logs/wall.png)
 .venv/bin/python tests/ha_real_dropin.py      # the blueprint in a real Home Assistant (build/ha-venv, made by --setup;
@@ -262,7 +262,7 @@ No model `#ifdef`s in shared code: new differences become a board field, a `devi
   cancelled, the answer through `proto->say` (assist_satellite.announce, the Bluetooth announcements' queue).  A
   volume key snoozes (`alarm_keys`), a ring starts quiet (`alarm_ramp`).  Page: "Clock & alarms", `/api/alarms`.
   `HASSMIC_FAKE_CLOCK_OFFSET` (seconds, or a file holding them) moves the Echo's clock for tests (`alarms_now`).
-  Unanswered, an alarm gets louder (`alarm_louder`, `alarm_boost` lifts `loudest()`).  `custom_components/hassmic` is
+  Unanswered, an alarm gets louder (`alarm_louder`, `alarm_boost` lifts `loudest()`).  `custom_components/echo_local` is
   a Home Assistant integration over the settings page API (a switch per alarm, services, the card in `frontend/`);
   tests/ha_real_alarms.py.  Spoken media requests about what this Echo plays ("pause", "next", "volume 5") are
   `media_request` in core_transcript (sendspin_voice, a2dp_voice).
@@ -276,15 +276,15 @@ No model `#ifdef`s in shared code: new differences become a board field, a `devi
   The Makefile variable is SCREEN, not DISPLAY (X11's environment variable would win over `?=`).
 - **Kiosk** (`kiosk.c`, `kiosk.h`; app `tools/kiosk/`, `build.sh` with the Android SDK -> `scripts/device/hassmic-kiosk.apk`,
   device.conf `KIOSK_APK`, /system/app/HassmicKiosk): Home Assistant's pages on the Echo Show's screen in a WebView on
-  the firmware's Amazon WebView (kept on the partition for it).  The integration (`custom_components/hassmic/kiosk.py`,
+  the firmware's Amazon WebView (kept on the partition for it).  The integration (`custom_components/echo_local/kiosk.py`,
   options flow) makes a local-only HA user + long-lived token per Echo and POSTs `/api/kiosk` (token sealed as the Wi-Fi
   password is), `state/kiosk` 0600; the screen app (`app <package>`, docs/screen-apps.md: started by the intent
-  `org.hassmic.action.SCREEN`; the Java kiosk by default, or the owner's, e.g. the Flutter template Nt-f/hassmic-screen)
+  `io.github.gamer92000.echodotassist.action.SCREEN`; the Java kiosk by default, or the owner's, e.g. the Flutter template Nt-f/Echo-Screen)
   reads `GET /kiosk/config[/front|/back]` from 127.0.0.1 and only with its own uid (`kiosk_peer_ok`: /proc/net/tcp6) and injects
   `hassTokens` into HA's origin.  Setting `display_kiosk`: display_screen.c `am start`s the app (`kiosk_tick`) and closes
   its own layer while the app is in front and it has nothing to show.  The wall panel is `frontend/wall.html`+`wall.js`
   (its own page on HA's websocket, not a dashboard: memory, the Show 5 under 512 MB for all of it); its layout per Echo
-  in `wall.py` (Store + websocket `hassmic/wall/get|set|subscribe`), set by the options flow's "wall" step or the
+  in `wall.py` (Store + websocket `echo_local/wall/get|set|subscribe`), set by the options flow's "wall" step or the
   panel's edit mode (page dots held).  The start's status:
   `hassmic -Y <file>` (`display_splash`, main.sh `stage`), then display_screen.c's status screen until HA's link
   (`display_link`).

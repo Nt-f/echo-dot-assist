@@ -1,5 +1,5 @@
 """A switch per alarm: on, it rings; off, it is kept.  Its attributes are the alarm (time, days, label, when next), for
-the dashboard card and templates; changed with the entity actions hassmic.edit_alarm and hassmic.delete_alarm."""
+the dashboard card and templates; changed with the entity actions echo_local.edit_alarm and echo_local.delete_alarm."""
 from __future__ import annotations
 
 from datetime import datetime, timezone
@@ -14,7 +14,7 @@ from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from . import HassmicCoordinator, days_mask
+from . import EchoLocalCoordinator, days_mask
 from .const import CONF_MAC, CONF_NODE, DAY_KEYS, DOMAIN
 
 
@@ -28,7 +28,7 @@ def device_info(entry: ConfigEntry, hello: dict) -> DeviceInfo:
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, add: AddEntitiesCallback) -> None:
-    c: HassmicCoordinator = entry.runtime_data
+    c: EchoLocalCoordinator = entry.runtime_data
     have: dict[int, AlarmSwitch] = {}
 
     @callback
@@ -57,11 +57,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, add: AddEnt
     platform.async_register_entity_service("delete_alarm", {}, "async_delete")
 
 
-class AlarmSwitch(CoordinatorEntity[HassmicCoordinator], SwitchEntity):
+class AlarmSwitch(CoordinatorEntity[EchoLocalCoordinator], SwitchEntity):
     _attr_has_entity_name = True
     _attr_icon = "mdi:alarm"
 
-    def __init__(self, c: HassmicCoordinator, entry: ConfigEntry, alarm_id: int) -> None:
+    def __init__(self, c: EchoLocalCoordinator, entry: ConfigEntry, alarm_id: int) -> None:
         super().__init__(c)
         self.alarm_id = alarm_id
         self._attr_unique_id = f"{entry.data[CONF_NODE]}-alarm-{alarm_id}"

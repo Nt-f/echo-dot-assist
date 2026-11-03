@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The Echo Show's kiosk set up from Home Assistant (custom_components/hassmic kiosk.py, src/hassmic/kiosk.c) in a real
+"""The Echo Show's kiosk set up from Home Assistant (custom_components/echo_local kiosk.py, src/hassmic/kiosk.c) in a real
 Home Assistant against build/hassmic-host: the options flow, the kiosk's own user (local only, not an administrator)
 and its token, sealed to the Echo and read back by the app's way (GET /kiosk/config from 127.0.0.1, the token only
 there), the screens (the wall panel, a dashboard), the token taking Home Assistant's websocket; the wall panel
@@ -53,12 +53,12 @@ async def browser_wall(session, token, png):
         await cdp("Page.enable")
         # the Show 5's WebView: 960 x 470 above the light band
         await cdp("Emulation.setDeviceMetricsOverride", width=960, height=470, deviceScaleFactor=1, mobile=False)
-        await cdp("Page.navigate", url=f"{hr.HA}/hassmic/kiosk-test-404")   # the origin, for its localStorage
+        await cdp("Page.navigate", url=f"{hr.HA}/echo_local/kiosk-test-404")   # the origin, for its localStorage
         await asyncio.sleep(1)
         tokens = {"access_token": token, "token_type": "Bearer", "expires_in": 315360000, "hassUrl": hr.HA,
                   "clientId": hr.HA + "/", "expires": 4102444800000, "refresh_token": ""}
         await js(f"localStorage.setItem('hassTokens', {json.dumps(json.dumps(tokens))})")
-        await cdp("Page.navigate", url=f"{hr.HA}/hassmic/wall.html?echo=echo-show-5-a1b2c3")      # as the kiosk opens it
+        await cdp("Page.navigate", url=f"{hr.HA}/echo_local/wall.html?echo=echo-show-5-a1b2c3")      # as the kiosk opens it
         out = {}
         for _ in range(60):
             await asyncio.sleep(0.5)
@@ -115,7 +115,7 @@ async def browser_wall(session, token, png):
         if s_: await mouse("mousePressed", s_[0], s_[1], True); await mouse("mouseReleased", s_[0], s_[1], False)
         await asyncio.sleep(1.2)
         out["after_edit"] = await js("[...document.querySelectorAll('.page')].find(p => p.dataset.name === 'Living Room').querySelectorAll('.w[data-id]').length")
-        await js("hassmicWallEdit(false)")
+        await js("echoLocalWallEdit(false)")
         await ws.close()
         return out
     finally:
@@ -144,7 +144,7 @@ async def run(tmp):
     halog = open(os.path.join(tmp, "ha.log"), "w")
     hass = subprocess.Popen([hr.HA_PY, "-m", "homeassistant", "-c", conf, "--skip-pip"], stdout=halog, stderr=subprocess.STDOUT, cwd=conf)
     # the screen app's data folder (kiosk.c kiosk_peer_ok): its owner is the uid the config is handed to, this test's
-    apps = os.path.join(tmp, "apps"); os.makedirs(os.path.join(apps, "org.hassmic.kiosk"))
+    apps = os.path.join(tmp, "apps"); os.makedirs(os.path.join(apps, "io.github.gamer92000.echodotassist.kiosk"))
     os.environ["HASSMIC_APP_DATA"] = apps
     echo.start()
     web = f"http://127.0.0.1:{echo.port + 10}"
@@ -158,9 +158,9 @@ async def run(tmp):
                 if hass.poll() is not None: raise RuntimeError("Home Assistant ended")
                 await asyncio.sleep(0.5)
             c = hr.Client(session, await hr.onboard(session)); await c.ws_open()
-            f = await ra.add_hassmic(c, echo)
+            f = await ra.add_echo_local(c, echo)
             check(f.get("type") == "create_entry", f"hassmic added ({f.get('type')})")
-            entry = next(e for e in await c.get("/api/config/config_entries/entry") if e["domain"] == "hassmic")
+            entry = next(e for e in await c.get("/api/config/config_entries/entry") if e["domain"] == "echo_local")
 
             # rooms for the demo's things
             await asyncio.sleep(2)
@@ -216,7 +216,7 @@ async def run(tmp):
                     check(r.status == 404, f"the state feed from another address: not found ({r.status})")
             check(tok and cfg.get("ha") == hr.HA, f"the Echo has the address and a token ({cfg.get('ha')}, {len(tok)} chars)")
             check([s["name"] for s in cfg.get("screens", [])] == ["Home", "Home Assistant"]
-                  and cfg["screens"][0]["url"].startswith(f"{hr.HA}/hassmic/wall.html") and cfg["screens"][1]["url"] == f"{hr.HA}/lovelace"
+                  and cfg["screens"][0]["url"].startswith(f"{hr.HA}/echo_local/wall.html") and cfg["screens"][1]["url"] == f"{hr.HA}/lovelace"
                   and cfg.get("default") == 0 and cfg.get("return") == 90, f"its screens: {cfg.get('screens')}, default {cfg.get('default')}, return {cfg.get('return')}")
             check((cfg.get("settings") or {}) == {"immich.url": "http://192.168.1.9:2283", "immich.key": "s3cret-immich-key"},
                   f"the screen app's settings, sealed on the way, in its config ({cfg.get('settings')})")
@@ -245,9 +245,9 @@ async def run(tmp):
             await w.receive_json(); await w.send_json({"type": "auth", "access_token": tok})
             check((await w.receive_json()).get("type") == "auth_ok", "the token takes Home Assistant's websocket")
             await w.close()
-            async with session.get(f"{hr.HA}/hassmic/wall.html") as r:
+            async with session.get(f"{hr.HA}/echo_local/wall.html") as r:
                 body = await r.text()
-            check(r.status == 200 and "/hassmic/wall.js" in body, f"the wall panel is served ({r.status})")
+            check(r.status == 200 and "/echo_local/wall.js" in body, f"the wall panel is served ({r.status})")
 
             entry_opts = lambda: {"kiosk": True, "kiosk_screens": ["wall", "dashboard"], "kiosk_default": "wall", "kiosk_return": 90, "kiosk_admin": False}
             out = await browser_wall(session, tok, os.path.join(hr.ROOT, "build", "test-logs", "wall.png"))
@@ -259,7 +259,7 @@ async def run(tmp):
                 check(out.get("tap") in ("on", "off") and await c.state("light.ceiling_lights") == out.get("tap"),
                       f"a tap toggles the light ({out.get('tap')}, now {await c.state('light.ceiling_lights')})")
                 check(out.get("editing"), "the dots held: the edit mode")
-                lay = await c.ws(type="hassmic/wall/get", echo="echo-show-5-a1b2c3")
+                lay = await c.ws(type="echo_local/wall/get", echo="echo-show-5-a1b2c3")
                 check("switch.decorative_lights" in (lay.get("hidden") or []), f"⊖: hidden, saved in Home Assistant as the kiosk's user ({lay.get('hidden')})")
                 lo = (lay.get("order") or {}).get(areas["Living Room"], [])
                 check("light.ceiling_lights" in lo and "light.bed_light" in lo and lo.index("light.ceiling_lights") < lo.index("light.bed_light"), f"a drag: Ceiling Lights before Bed Light ({lo})")
@@ -270,11 +270,11 @@ async def run(tmp):
             o = await c.post(f"/api/config/config_entries/options/flow/{o['flow_id']}", {**{k: v for k, v in entry_opts().items()}})
             o = await c.post(f"/api/config/config_entries/options/flow/{o['flow_id']}",
                              {"theme": "dusk", "nowplaying": False, "ambient": 0, "favorites": ["climate.hvac", "light.kitchen_lights"], "hidden": []})
-            lay = await c.ws(type="hassmic/wall/get", echo="echo-show-5-a1b2c3")
+            lay = await c.ws(type="echo_local/wall/get", echo="echo-show-5-a1b2c3")
             check(o.get("type") == "create_entry" and lay.get("theme") == "dusk" and lay.get("favorites") == ["climate.hvac", "light.kitchen_lights"]
                   and lay.get("ambient") == 0 and lay.get("nowplaying") is False and lay.get("hidden") == []
                   and (lay.get("order") or {}).get(areas["Living Room"]), f"the options' wall step: the layout, the panel's own order kept ({lay})")
-            other = await c.ws(type="hassmic/wall/get", echo="another-echo")
+            other = await c.ws(type="echo_local/wall/get", echo="another-echo")
             check(other == {}, f"another Echo without one: nothing set ({other})")
 
             # options again, the kiosk off: the Echo's setting off, the user kept

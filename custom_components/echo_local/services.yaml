@@ -3,7 +3,7 @@ add_alarm:
     device_id:
       selector:
         device:
-          integration: hassmic
+          integration: echo_local
     time:
       required: true
       example: "07:30:00"
@@ -25,7 +25,7 @@ add_alarm:
 edit_alarm:
   target:
     entity:
-      integration: hassmic
+      integration: echo_local
       domain: switch
   fields:
     time:
@@ -45,17 +45,17 @@ edit_alarm:
 delete_alarm:
   target:
     entity:
-      integration: hassmic
+      integration: echo_local
       domain: switch
 snooze:
   fields:
     device_id:
       selector:
         device:
-          integration: hassmic
+          integration: echo_local
 stop:
   fields:
     device_id:
       selector:
         device:
-          integration: hassmic
+          integration: echo_local

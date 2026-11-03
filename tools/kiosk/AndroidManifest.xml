@@ -2,7 +2,7 @@
 <!-- hassmic's kiosk (Kiosk.java), the default screen app: started by hassmic (kiosk.c) once the kiosk is on, never a home screen
      itself: Android 7 starts the home before user 0 is unlocked, and a WebView cannot run then (mkhome.py's codeless
      home stays for that). -->
-<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="org.hassmic.kiosk"
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="io.github.gamer92000.echodotassist.kiosk"
     android:versionCode="1" android:versionName="1">
     <uses-sdk android:minSdkVersion="24" android:targetSdkVersion="25" />
     <uses-permission android:name="android.permission.INTERNET" />
@@ -14,7 +14,7 @@
             android:configChanges="orientation|screenSize|keyboardHidden|keyboard|navigation|screenLayout|uiMode">
             <!-- the screen app's contract (docs/screen-apps.md): hassmic starts whichever app it names by this -->
             <intent-filter>
-                <action android:name="org.hassmic.action.SCREEN" />
+                <action android:name="io.github.gamer92000.echodotassist.action.SCREEN" />
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
         </activity>

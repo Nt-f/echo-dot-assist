@@ -22,7 +22,7 @@
  * so the app has a keyboard of its own (Keys below): a script put into every page tells it through the bridge when a
  * text field has the focus (focusin/focusout, through shadow roots: Home Assistant's fields are in them), and it types
  * by real key events into the WebView, as a USB keyboard would.  The page gets smaller while it shows. */
-package org.hassmic.kiosk;
+package io.github.gamer92000.echodotassist.kiosk;
 
 import android.app.Activity;
 import android.content.ComponentCallbacks2;

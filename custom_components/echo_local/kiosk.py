@@ -113,7 +113,7 @@ async def login(hass: HomeAssistant, entry: ConfigEntry) -> str:
         return token
     for rt in list(user.refresh_tokens.values()):        # a token of an earlier setup: one at a time
         hass.auth.async_remove_refresh_token(rt)
-    rt = await hass.auth.async_create_refresh_token(user, client_name=f"hassmic kiosk ({entry.unique_id})",
+    rt = await hass.auth.async_create_refresh_token(user, client_name=f"Echo Local kiosk ({entry.unique_id})",
                                                     token_type=TOKEN_TYPE_LONG_LIVED_ACCESS_TOKEN,
                                                     access_token_expiration=timedelta(days=3650))
     token = hass.auth.async_create_access_token(rt)

@@ -11,7 +11,7 @@
  *   set <key> <value>        a setting of the screen app's own (its Immich address and key, ...), for it alone:
  *                            only in the app's config on loopback, never in the signed API's answer
  *   app <package>            the screen app (docs/screen-apps.md): hassmic's Java kiosk by default, or one of the
- *                            owner's (the Flutter template, hassmic-screen), started by its SCREEN intent
+ *                            owner's (the Flutter template, Echo-Screen), started by its SCREEN intent
  *
  * The app reads it as JSON from 127.0.0.1 (web.c), and only that app: the connection's owner (its uid in
  * /proc/net/tcp6 or tcp) is the screen app's (the owner of its data folder), as anyone may install apps of their own on
@@ -45,7 +45,7 @@ struct screen { char name[NAME_MAX_ + 1], url[URL_MAX + 1]; };
 static struct screen screens[KIOSK_SCREENS];
 static int nscreens, def, ret_s = 120;
 static char ha[URL_MAX + 1], token[TOKEN_MAX + 1];
-#define APP_DEFAULT "org.hassmic.kiosk"
+#define APP_DEFAULT "io.github.gamer92000.echodotassist.kiosk"
 #define APP_MAX 150
 static char app[APP_MAX + 1] = APP_DEFAULT;
 #define SETS 16
@@ -251,7 +251,7 @@ int kiosk_tick(int enabled)
          * activity declares (docs/screen-apps.md); the package alone names it */
         char pkg[APP_MAX + 1];
         pthread_mutex_lock(&lock); snprintf(pkg, sizeof pkg, "%s", app); pthread_mutex_unlock(&lock);
-        char *argv[] = { "/system/bin/am", "start", "-a", "org.hassmic.action.SCREEN", "-c", "android.intent.category.DEFAULT", pkg, NULL };
+        char *argv[] = { "/system/bin/am", "start", "-a", "io.github.gamer92000.echodotassist.action.SCREEN", "-c", "android.intent.category.DEFAULT", pkg, NULL };
         fprintf(stderr, "kiosk: starting the screen app %s\n", pkg);
         core_spawn(argv);
     }

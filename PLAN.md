@@ -2241,7 +2241,7 @@ Run in this order. Each step says what it proves.
       the duck (a sixth) glided over 30 ms on Sendspin and A2DP (it was a step at a chunk's edge): user report of
       "quiet hiss pops" while listening over music; the Show 5's output runs ~350 ppm off (nudged ~-170 frames / 10 s,
       ~17 splices a second before).  Not measured on the Echo yet.
-      `custom_components/hassmic`: config flow (address or zeroconf on _esphomelib platform=hassmic; login by the
+      `custom_components/echo_local`: config flow (address or zeroconf on _esphomelib platform=hassmic; login by the
       button like a browser, X25519/BLAKE2b as tests/webclient.py; reauth behind a Submit, so the Echo lights up only
       when someone is there), coordinator polling /api/alarms every 30 s, a switch per alarm, services, the card
       (frontend/, vanilla custom element, served and add_extra_js_url'd).  HA 2026.10 keeps devices per config entry
@@ -2288,7 +2288,7 @@ Run in this order. Each step says what it proves.
       TRIM_MEMORY_RUNNING_LOW.  tests/ha_real_kiosk.py (real HA 2026.10 + demo, headless Chrome renders the wall,
       a tap toggles, build/test-logs/wall.png).
       On the user's Show 5 (2026-11-02, push + reboot): the splash from boot+21 to boot+41 (`display: the boot's splash
-      ended` as hassmic's display came up), AmazonWebView back and org.hassmic.kiosk installed at the boot, hassmic
+      ended` as hassmic's display came up), AmazonWebView back and io.github.gamer92000.echodotassist.kiosk installed at the boot, hassmic
       `am start`ed it and gave up its layer ("display: the kiosk's"), Amazon's WebView in our app (its
       WebViewExtAmazon config lines: low-memory device, MSE buffers cut), HA's login page full screen above the band.
       The kiosk process: 91 MB PSS (Graphics 37 MB, native 9 MB, Java 5 MB; one process: the renderer runs in it on
@@ -2298,7 +2298,7 @@ Run in this order. Each step says what it proves.
       the WebView (insertText for what the map lacks); typed "Abc1" into HA's login (mwc fields in shadow DOM),
       shift, ?123, ⌫.
       The layout (asked the same day: options in the integration and editing on the panel, both): wall.py, a Store
-      `hassmic.wall` {echo node | default: layout}, websocket hassmic/wall/get|set|subscribe for any logged-in user
+      `echo_local.wall` {echo node | default: layout}, websocket echo_local/wall/get|set|subscribe for any logged-in user
       (the kiosk's is not an admin), checked by a schema (themes, ids <= 300, ambient 0..86400); the options flow's
       second step "wall" writes it too.  The panel: dots held 0.7 s -> edit mode (wobble, ★ favourites, − hidden, drag
       in a page: favourites' order on Home, `order[area]` in a room; the drag follows the window's pointer events, as

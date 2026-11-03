@@ -1,6 +1,6 @@
 {
-  "domain": "hassmic",
-  "name": "hassmic (Echo alarms)",
+  "domain": "echo_local",
+  "name": "Echo Local",
   "codeowners": [],
   "config_flow": true,
   "dependencies": ["http", "frontend", "websocket_api"],

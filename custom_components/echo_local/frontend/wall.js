@@ -1,4 +1,4 @@
-// hassmic's wall panel (wall.html), in the manner of Apple's HomeView: square glass widgets over a wallpaper, a page
+// Echo Local's wall panel (wall.html), in the manner of Apple's HomeView: square glass widgets over a wallpaper, a page
 // Home (clock, date and weather, the thermostat's big number, what plays, a camera, scenes, locks, the kiosk's other
 // screens) and a page per room (Home Assistant's areas: a tile per light, switch, fan, cover, lock, speaker, door or
 // motion sensor, a thermostat as a big one), swiped sideways; a tap toggles, a long press opens the controls; left
@@ -77,7 +77,7 @@
 
   async function connect() {
     let t = tokens();
-    if (!t || !t.access_token) { message('Not logged in', 'Set the kiosk up from the hassmic integration, or log into Home Assistant in this browser with "Keep me logged in".'); return; }
+    if (!t || !t.access_token) { message('Not logged in', 'Set the kiosk up from the Echo Local integration, or log into Home Assistant in this browser with "Keep me logged in".'); return; }
     if (t.expires && Date.now() > t.expires - 60000 && t.refresh_token) t = (await refresh(t).catch(() => null)) || t;
     ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/api/websocket');
     ws.onmessage = async (ev) => {
@@ -86,7 +86,7 @@
       else if (m.type === 'auth_invalid') {
         const n = await refresh(t).catch(() => null);
         if (n) { ws.close(); return; }     // onclose connects again with it
-        message('Login refused', 'Home Assistant no longer takes this login: set the kiosk up again from the hassmic integration.');
+        message('Login refused', 'Home Assistant no longer takes this login: set the kiosk up again from the Echo Local integration.');
         ws.onclose = null; ws.close();
       } else if (m.type === 'auth_ok') started();
       else if (m.type === 'result') { const p = pending.get(m.id); if (p) { pending.delete(m.id); m.success ? p.res(m.result) : p.rej(m.error); } }
@@ -126,10 +126,10 @@
   }
 
   async function started() {
-    // the layout (custom_components/hassmic wall.py): this Echo's, followed live; without the integration, this
+    // the layout (custom_components/echo_local wall.py): this Echo's, followed live; without the integration, this
     // browser's own (localStorage)
-    subscribe({ type: 'hassmic/wall/subscribe', echo: ECHO }, (ev) => { layout = ev.layout || {}; local = false; applyLayout(); })
-      .catch(() => { local = true; try { layout = JSON.parse(localStorage.getItem('hassmicWall') || '{}'); } catch (e) { layout = {}; } applyLayout(); });
+    subscribe({ type: 'echo_local/wall/subscribe', echo: ECHO }, (ev) => { layout = ev.layout || {}; local = false; applyLayout(); })
+      .catch(() => { local = true; try { layout = JSON.parse(localStorage.getItem('echoLocalWall') || '{}'); } catch (e) { layout = {}; } applyLayout(); });
     subscribe({ type: 'subscribe_entities' }, onEntities);
     await registries().catch((e) => message('No rooms', 'Home Assistant did not give the areas: ' + (e && e.message || e)));
     // areas and entities renamed or moved: read again
@@ -614,8 +614,8 @@
     applyLayout();
     clearTimeout(saveTimer);
     saveTimer = setTimeout(() => {
-      if (local) { try { localStorage.setItem('hassmicWall', JSON.stringify(layout)); } catch (e) { /* private window */ } return; }
-      send({ type: 'hassmic/wall/set', echo: ECHO, layout }).catch((e) => toast('Not saved: ' + (e && e.message || e)));
+      if (local) { try { localStorage.setItem('echoLocalWall', JSON.stringify(layout)); } catch (e) { /* private window */ } return; }
+      send({ type: 'echo_local/wall/set', echo: ECHO, layout }).catch((e) => toast('Not saved: ' + (e && e.message || e)));
     }, 500);
   }
   function toast(t) {
@@ -636,7 +636,7 @@
     closeSheet();
     render();
   }
-  window.hassmicWallEdit = edit;              // tests
+  window.echoLocalWallEdit = edit;              // tests
   // nothing of a widget's own while editing: its buttons, a scene's run
   document.addEventListener('click', (ev) => {
     if (editing && !ev.target.closest('.badge, #editbar, .sheet, #dots')) { ev.stopPropagation(); ev.preventDefault(); }
