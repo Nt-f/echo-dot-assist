@@ -291,7 +291,8 @@ No model `#ifdef`s in shared code: new differences become a board field, a `devi
   Local" (`frontend/panel.js`, panel_custom, admin; `panel.py`: `echo_local/list`, `kiosk/get|set|push`) has the
   screen's options (the options flow's too) and the Apps tab.  Any installed app may be the screen app (started by the
   SCREEN intent, else as the launcher does: `monkey`, kiosk.c `start_app`); hassmic's shell runs beside it in the kiosk
-  APK's `:shell` process (tools/kiosk `Shell.java`: the bar pulled down over any app, `GET /kiosk/shell`; `Watcher.java`:
+  APK's `:shell` process (tools/kiosk `Shell.java`: the bar pulled down over any app, `GET /kiosk/shell`; the pull read by hassmic from the touchscreen,
+  no window over the edge: display_screen.c `touch_thread`, `board.touch_top`, long poll `/kiosk/shell/pull/<v>`; `Watcher.java`:
   an accessibility service reporting the app in front to `/kiosk/shell/front/<pkg>`, which kiosk.c believes for a
   minute, since Fire OS 7 hides `oom_score_adj`; `Keyboard.java`: the Echo's input method; main.sh `screen_grants`
   switches them on).  What a screen app draws itself: `/kiosk/config/front/draws/<words,ring>` (`kiosk_draws_parse`).  The Shows' own apps from the panel's Apps tab (`apps.py`: the Echo's `/api/apps` over the

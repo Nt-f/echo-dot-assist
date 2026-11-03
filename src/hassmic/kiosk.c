@@ -20,6 +20,7 @@
 #define _GNU_SOURCE
 #endif
 #include "kiosk.h"
+#include "board.h"
 #include "core.h"
 #include "statefile.h"
 #include <arpa/inet.h>
@@ -509,6 +510,30 @@ int kiosk_draws(void)
     return r;
 }
 
+/* swipes in from an edge (display_screen.c touch_thread), for the shell's long poll: the latest one and a version */
+static pthread_cond_t pulled = PTHREAD_COND_INITIALIZER;
+static unsigned pull_v; static char pull_edge[4]; static float pull_at;
+void kiosk_shell_pull(const char *edge, float at)
+{
+    pthread_mutex_lock(&lock);
+    snprintf(pull_edge, sizeof pull_edge, "%.2s", edge); pull_at = at; pull_v++;
+    pthread_cond_broadcast(&pulled);
+    pthread_mutex_unlock(&lock);
+}
+
+size_t kiosk_shell_wait(unsigned v, int ms, char *out, size_t cap)
+{
+    struct timespec ts; clock_gettime(CLOCK_REALTIME, &ts);
+    ts.tv_sec += ms / 1000; ts.tv_nsec += (long)(ms % 1000) * 1000000L;
+    if (ts.tv_nsec >= 1000000000L) { ts.tv_sec++; ts.tv_nsec -= 1000000000L; }
+    pthread_mutex_lock(&lock);
+    while (pull_v == v) if (pthread_cond_timedwait(&pulled, &lock, &ts)) break;
+    size_t n = (size_t)snprintf(out, cap, "{\"v\":%u,\"edge\":\"%s\",\"at\":%.3f,\"top\":\"%s\"}", pull_v, pull_edge, pull_at,
+                                board.touch_top ? board.touch_top : "");
+    pthread_mutex_unlock(&lock);
+    return n;
+}
+
 int kiosk_shell_peer_ok(int fd)
 {
     char p[300]; struct stat st;
@@ -528,8 +553,9 @@ char *kiosk_shell_json(int enabled, size_t *len)
     if (!o) return NULL;
     char fg[APP_MAX + 1]; int f = kiosk_in_front(fg, sizeof fg);
     pthread_mutex_lock(&lock);
-    n += (size_t)snprintf(o + n, cap - n, "{\"enabled\":%s,\"app\":\"%s\",\"front\":\"%s\",\"contract\":%s,\"screens\":[",
-                          enabled ? "true" : "false", app, f > 0 ? fg : "", answered && !via_launcher ? "true" : "false");
+    n += (size_t)snprintf(o + n, cap - n, "{\"enabled\":%s,\"app\":\"%s\",\"front\":\"%s\",\"contract\":%s,\"pulls\":%s,\"top\":\"%s\",\"screens\":[",
+                          enabled ? "true" : "false", app, f > 0 ? fg : "", answered && !via_launcher ? "true" : "false",
+                          board.touch && board.touch_top ? "true" : "false", board.touch_top ? board.touch_top : "");
     for (int i = 0; i < nscreens; i++)
         if (strncmp(screens[i].url, "hassmic:", 8))         /* the app's own Home and clock: the bar's Home */
             n += (size_t)snprintf(o + n, cap - n, "%s\"%s\"", n && o[n - 1] != '[' ? "," : "", screens[i].name);

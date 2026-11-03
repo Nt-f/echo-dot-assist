@@ -53,6 +53,9 @@ const struct board board = {
     /* Goodix gt9xx (getevent -il on the first Echo Show, docs/re-checkers.md): BTN_TOUCH at each touch.  Not grabbed:
      * Android wakes the screen on it as before */
     .touch = "name:goodix-ts",
+    /* landscape (Echo-Wall, the kiosk): the screen's top is the panel's x maximum (raw x = 480 - screen y); portrait (an
+     * app that asks for it, NewPipe): its y minimum, the panel's own (measured 2026-11-03 with sendevent) */
+    .touch_top = "x1 y0",
 
     .bt_dev = "/dev/stpbt",                                         /* MT7668 combo, btmtksdio.ko */
     .bt_service = NULL,                                             /* none: Android's stack (app/Bluetooth) is off the partition */

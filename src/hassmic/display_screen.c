@@ -461,16 +461,38 @@ static void *touch_thread(void *arg)
     } else fd = open(spec, O_RDONLY);
     if (fd < 0) { fprintf(stderr, "display: no touch screen (%s)\n", spec); return NULL; }
     fprintf(stderr, "display: touches from %s\n", spec);
+    /* the panel's own axes, for the swipe in from an edge (the shell's bar, docs/screen-apps.md "The shell"): seen here
+     * beside Android, so no window over the apps has to take the touch, and the app under the finger gets it all */
+    struct input_absinfo ax = { 0 }, ay = { 0 };
+    int axes = board.touch_top && !ioctl(fd, EVIOCGABS(ABS_MT_POSITION_X), &ax) && !ioctl(fd, EVIOCGABS(ABS_MT_POSITION_Y), &ay)
+               && ax.maximum > ax.minimum && ay.maximum > ay.minimum;
     long long down = 0; struct input_event ev;
+    /* the kernel drops a position equal to the last one sent, so a finger down where the last one was lifted sends none:
+     * start from the panel's current values (EVIOCGABS gave them) */
+    int x = axes ? ax.value : -1, y = axes ? ay.value : -1, sx = -1, sy = -1, pulled = 0;
     while (read(fd, &ev, sizeof ev) == (ssize_t)sizeof ev) {
+        if (axes && ev.type == EV_ABS && ev.code == ABS_MT_POSITION_X) { x = ev.value; continue; }
+        if (axes && ev.type == EV_ABS && ev.code == ABS_MT_POSITION_Y) { y = ev.value; continue; }
+        if (axes && ev.type == EV_SYN && ev.code == SYN_REPORT && down && x >= 0 && y >= 0) {
+            if (sx < 0) { sx = x; sy = y; }
+            if (!pulled) {
+                /* started within 4 % of an edge, moved in by 10 % of that axis: a pull from that edge */
+                float fx = (float)(sx - ax.minimum) / (float)(ax.maximum - ax.minimum), fy = (float)(sy - ay.minimum) / (float)(ay.maximum - ay.minimum);
+                float dx = (float)(x - sx) / (float)(ax.maximum - ax.minimum), dy = (float)(y - sy) / (float)(ay.maximum - ay.minimum);
+                const char *edge = fx < .04f && dx > .10f ? "x0" : fx > .96f && dx < -.10f ? "x1" : fy < .04f && dy > .10f ? "y0" : fy > .96f && dy < -.10f ? "y1" : NULL;
+                if (edge) { pulled = 1; kiosk_shell_pull(edge, edge[0] == 'x' ? fy : fx); }
+            }
+            continue;
+        }
         /* BTN_TOUCH, or a multitouch (protocol B) driver's tracking id alone: >= 0 a finger down, -1 lifted */
         int v;
         if (ev.type == EV_KEY && ev.code == BTN_TOUCH) v = ev.value;
         else if (ev.type == EV_ABS && ev.code == ABS_MT_TRACKING_ID) v = ev.value >= 0;
         else continue;
-        if (v == 1) { if (!down) down = mono_ms(); }
+        if (v == 1) { if (!down) { down = mono_ms(); sx = sy = -1; pulled = 0; } }
         else if (v == 0 && down) {
             long long held = mono_ms() - down; down = 0;
+            if (pulled) continue;                           /* a pull for the bar: no tap, no hold */
             if (held < TAP_MS) core_touch(0); else if (held >= HOLD_MS) core_touch(1);
         }
     }

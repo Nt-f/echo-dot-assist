@@ -305,6 +305,14 @@ int main(void)
     display_ringing("Timer"); n0 = nframes(); WAIT(nframes() > n0);
     check(nframes() > n0, "watcher: a ring over the app it reported (it draws none)");
     display_ringing(NULL);
+    /* a swipe in from an edge, seen by hassmic's touch reader: the shell's long poll has it (and waits for the next) */
+    { char o[200]; kiosk_shell_wait(0xffffffffu, 0, o, sizeof o);
+      unsigned v0 = (unsigned)atoi(strstr(o, "\"v\":") + 4);
+      kiosk_shell_pull("x1", .5f);
+      kiosk_shell_wait(v0, 2000, o, sizeof o);
+      check(strstr(o, "\"edge\":\"x1\"") && strstr(o, "\"at\":0.500") && (unsigned)atoi(strstr(o, "\"v\":") + 4) == v0 + 1, "pull: the shell's long poll has the edge and where along it");
+      struct timespec a1, a2; clock_gettime(CLOCK_MONOTONIC, &a1); kiosk_shell_wait(v0 + 1, 300, o, sizeof o); clock_gettime(CLOCK_MONOTONIC, &a2);
+      check((a2.tv_sec - a1.tv_sec) * 1000 + (a2.tv_nsec - a1.tv_nsec) / 1000000 >= 250, "pull: nothing new, it waits its time"); }
     kiosk_shell_front("org.hassmic.home"); ms(50);
     check(kiosk_in_front(NULL, 0) == 0, "watcher: hassmic's home reported: no app in front");
     kiosk_polled(1, 0);

@@ -48,5 +48,10 @@ int   kiosk_shell_peer_ok(int fd);
 /* the shell's watcher says which package's activity is in front (GET /kiosk/shell/front/<package>); believed for a
  * minute, ahead of /proc; -1: not a package name */
 int   kiosk_shell_front(const char *pkg);
+/* hassmic's touch reader saw a swipe in from an edge of the panel (edge: x0 x1 y0 y1, the panel's own axes; at: where
+ * along it, 0..1): for the shell's bar, which decides by the screen's orientation whether that edge is the top */
+void  kiosk_shell_pull(const char *edge, float at);
+/* the shell's long poll: the pulls after version v, waiting up to ms; JSON {"v","edge","at","top"} into out */
+size_t kiosk_shell_wait(unsigned v, int ms, char *out, size_t cap);
 char *kiosk_shell_json(int enabled, size_t *len);
 #endif

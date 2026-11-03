@@ -8,8 +8,11 @@
  * over loopback, GET /kiosk/shell, answered to this app's uid alone (no login in it).  Its own process (":shell"), apart
  * from the kiosk's WebView: a few MB.
  *
- * The pull: an invisible strip over the middle of the top edge (nothing is drawn over the apps); a swipe down there
- * opens the bar, a tap does nothing (it would steal a tap meant for the app's own top edge).  The bar closes on a touch
+ * The pull: hassmic reads the touch screen beside Android (display_screen.c) and tells this service of a swipe in
+ * from an edge of the panel (GET /kiosk/shell/pull/<v>, a long poll); a swipe down from the middle of the screen's top
+ * opens the bar.  No window over the apps: every touch, the swipe too, reaches the app under the finger.  Where hassmic
+ * cannot (a model without board.touch_top), an invisible strip over the middle of the top edge stands in: a swipe down
+ * there opens the bar, and a tap there does nothing (a window cannot hand a touch it took on to the app below).  The bar closes on a touch
  * anywhere else, a swipe up, a pick, or after 8 s untouched.
  *
  * Drawing over other apps needs SYSTEM_ALERT_WINDOW's app op: root's main.sh (screen_grants) allows it for this
@@ -65,8 +68,8 @@ public class Shell extends Service {
     FrameLayout bar;
     volatile boolean running;
     /* hassmic's word (UI thread) */
-    boolean enabled = true;
-    String app = "";
+    boolean enabled = true, pulls;
+    String app = "", top = "";
     String[] screens = new String[0];
     final Runnable hide = this::collapse;
 
@@ -78,6 +81,7 @@ public class Shell extends Service {
         wm = (WindowManager) getSystemService(WINDOW_SERVICE);
         running = true;
         Thread t = new Thread(this::poll, "shell-poll"); t.setDaemon(true); t.start();
+        Thread p = new Thread(this::pulls, "shell-pulls"); p.setDaemon(true); p.start();
         // an app installed or removed: the bar is built anew each time it opens, nothing to keep; the strip stays
         IntentFilter f = new IntentFilter(Intent.ACTION_PACKAGE_REMOVED); f.addDataScheme("package");
         registerReceiver(new BroadcastReceiver() { @Override public void onReceive(Context c, Intent i) { collapse(); } }, f);
@@ -111,13 +115,47 @@ public class Shell extends Service {
                     JSONArray s = j.optJSONArray("screens");
                     String[] names = new String[s == null ? 0 : s.length()];
                     for (int k = 0; k < names.length; k++) names[k] = s.getString(k);
-                    final boolean en = j.optBoolean("enabled", true); final String a = j.optString("app", "");
-                    ui.post(() -> { enabled = en; app = a; screens = names; place(); });
+                    final boolean en = j.optBoolean("enabled", true), pl = j.optBoolean("pulls", false);
+                    final String a = j.optString("app", ""), tp = j.optString("top", "");
+                    ui.post(() -> { enabled = en; app = a; screens = names; pulls = pl; top = tp; place(); });
                 }
                 c.disconnect();
             } catch (Exception e) { }           // hassmic restarting: the next look
             try { Thread.sleep(POLL_MS); } catch (InterruptedException e) { return; }
         }
+    }
+
+    /* hassmic's word of a swipe in from an edge: the bar when it is the screen's top (the panel's edge that is the top in
+     * this orientation: "<landscape> <portrait>", board.touch_top) and in its middle 40 % */
+    void pulls() {
+        long v = -1;
+        while (running) {
+            try {
+                HttpURLConnection c = (HttpURLConnection) new URL(CONFIG + "/pull/" + (v < 0 ? "now" : String.valueOf(v))).openConnection();
+                c.setConnectTimeout(2000); c.setReadTimeout(30000);
+                if (c.getResponseCode() == 200) {
+                    InputStream in = c.getInputStream(); ByteArrayOutputStream o = new ByteArrayOutputStream(); byte[] b = new byte[512]; int n;
+                    while ((n = in.read(b)) > 0) o.write(b, 0, n);
+                    JSONObject j = new JSONObject(o.toString("UTF-8"));
+                    long nv = j.optLong("v", 0);
+                    if (v >= 0 && nv != v) {
+                        final String edge = j.optString("edge", ""), tp = j.optString("top", "");
+                        final double at = j.optDouble("at", -1);
+                        ui.post(() -> { if (enabled && isTop(edge, tp) && at >= .3 && at <= .7) expand(); });
+                    }
+                    v = nv;
+                } else Thread.sleep(5000);
+                c.disconnect();
+            } catch (Exception e) { try { Thread.sleep(5000); } catch (InterruptedException x) { return; } }
+        }
+    }
+
+    boolean isTop(String edge, String tp) {
+        String[] t = tp.trim().split("\\s+");
+        if (t.length < 2) return false;
+        android.util.DisplayMetrics m = new android.util.DisplayMetrics();
+        wm.getDefaultDisplay().getRealMetrics(m);
+        return edge.equals(m.widthPixels > m.heightPixels ? t[0] : t[1]);
     }
 
     @SuppressWarnings("deprecation")
@@ -131,7 +169,7 @@ public class Shell extends Service {
 
     /* the strip while the screen is Home Assistant's (the kiosk on), none while it is off */
     void place() {
-        boolean want = enabled && (Build.VERSION.SDK_INT < 23 || Settings.canDrawOverlays(this));
+        boolean want = enabled && !pulls && (Build.VERSION.SDK_INT < 23 || Settings.canDrawOverlays(this));
         if (want && strip == null) {
             strip = new View(this) {
                 float y0; boolean opened;

@@ -1183,6 +1183,16 @@ static void handle(int fd)
         if (!from_loopback(fd) || !kiosk_shell_peer_ok(fd) || kiosk_shell_front(r.path + 19)) respond_c(fd, 0, 404, "application/json", NULL, "{}", 2);
         else respond_c(fd, 0, 200, "application/json", NULL, "{}", 2);
     }
+    else if (!strcmp(r.method, "GET") && !strncmp(r.path, "/kiosk/shell/pull/", 18)) {
+        /* the shell's long poll for a swipe in from the edge (hassmic reads the touch screen): answers once there is a
+         * newer one than <v>, or after 25 s */
+        if (!from_loopback(fd) || !kiosk_shell_peer_ok(fd)) respond_c(fd, 0, 404, "application/json", NULL, "{}", 2);
+        else {
+            char *e; unsigned long v = strtoul(r.path + 18, &e, 10);
+            char o[200]; size_t n = kiosk_shell_wait(*e ? 0xffffffffu : (unsigned)v, *e ? 0 : 25000, o, sizeof o);
+            respond_c(fd, 0, 200, "application/json", NULL, o, n < sizeof o ? n : sizeof o - 1);
+        }
+    }
     else if (!strcmp(r.method, "GET") && !strcmp(r.path, "/kiosk/shell")) {
         /* the shell's (hassmic's kiosk app's service: the bar of apps over every app): the screen app, the screens'
          * names, what is in front; no login in it.  Only to that app's uid, from this Echo */

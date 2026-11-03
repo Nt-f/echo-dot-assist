@@ -134,8 +134,15 @@ app is in front). The idle **clock** is hassmic's only while no app has the scre
 hassmic's kiosk app (`io.github.gamer92000.echodotassist.kiosk`) runs, beside whatever app is the screen app, in a
 process of its own (`:shell`):
 
-- **The bar** (`Shell.java`): an invisible strip over the middle of the top edge; a swipe down there opens the bar over
-  any app: Home (the screen app), the screen app's web screens, then the apps the owner installed. A touch elsewhere,
+- **The bar** (`Shell.java`): a swipe down from the middle of the top edge opens the bar over
+  any app. No window lies over the edge: hassmic reads the touchscreen beside Android (`display_screen.c`
+  `touch_thread`, the same evdev the app gets), and a touch that starts within 4 % of a panel edge and moves 10 %
+  inwards is a pull; the shell long-polls `GET /kiosk/shell/pull/<v>` (`{v, edge, at, top}`: the panel edge, where
+  along it, and `board.touch_top`, which panel edge is the top in landscape and in portrait) and opens the bar for the
+  screen's top edge with `at` in 0.3-0.7. The app below sees the whole touch too (a tap at the top is its own, and a
+  swipe down also reaches it, as a notification shade's does); like HTML's `preventDefault`, nothing can be taken back
+  from the app, so only a gesture an app rarely uses there opens the bar. Where hassmic reads no touchscreen (`pulls`
+  false in `/kiosk/shell`) the shell falls back to an invisible strip over the middle 40 % of the top 18 dp. The bar: Home (the screen app), the screen app's web screens, then the apps the owner installed. A touch elsewhere,
   a swipe up or 8 s close it. hassmic starts it (`am startservice`) when it has not polled `GET /kiosk/shell` for a
   minute; that answer (`{enabled, app, front, contract, screens: [names]}`) goes to this app's uid only.
 - **The watcher** (`Watcher.java`): an accessibility service that tells hassmic, `GET /kiosk/shell/front/<package>`,

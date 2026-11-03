@@ -30,6 +30,10 @@ struct board {
     int privacy_settle_ms;          /* with privacy_button: how long a press is believed before the latch must have confirmed it */
     const char *touch;              /* the touch screen's input device ("name:<its name>"), read beside Android's for the
                                        display (display_screen.c: a tap snoozes an alarm); NULL: none */
+    const char *touch_top;          /* with touch: which edge of the panel's own axes is the screen's top, "<landscape>
+                                       <portrait>" of x0 x1 y0 y1 (axis min/max; the Show 5's: "x1 y0", measured): hassmic
+                                       sees the swipe down from it that opens the shell's bar (no window over the apps);
+                                       NULL: the shell keeps a strip of its own */
 
     /* Bluetooth: raw HCI (H4) character device, the init service that owns it in stock, where the address is stored */
     const char *bt_dev;
