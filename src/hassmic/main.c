@@ -2206,6 +2206,15 @@ int core_alarm_snooze(const char *why)
     alarm_event("snoozed");
     return 1;
 }
+
+/* the home app's ring, tapped (snooze an alarm, stop a timer) or held (stop): GET /kiosk/ring/snooze|stop (kiosk.h),
+ * since an app that draws the ring itself is where the finger is.  Not the lock */
+void core_ring_tap(int stop)
+{
+    pthread_mutex_lock(&core_lock);
+    if (atomic_load(&alarm_on) && (stop || !core_alarm_snooze("the home app's ring tapped"))) core_alarm_stop(stop ? "the home app's ring held" : "the home app's ring tapped");
+    pthread_mutex_unlock(&core_lock);
+}
 int core_alarm_setting(int which, int set)
 {
     int *v[] = { &alarm_ring_min, &alarm_snooze_min, &alarm_ramp_s, &alarm_keys, &alarm_voice, NULL, &alarm_louder };

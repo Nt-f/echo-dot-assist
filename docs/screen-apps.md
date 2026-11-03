@@ -105,8 +105,8 @@ GET http://127.0.0.1:28931/kiosk/state/<v>       a long poll: answers once the v
 - `running`: a request is under way (listening, thinking, answering); `words`: show `heard` (what speech to text
   understood) and `reply` now (for 20 s after the request ended).
 - `ringing`: what rings, empty when nothing does; `ringing_alarm`: an alarm (snoozes) rather than a timer. Draw what
-  stops it and say "stop" or "snooze" through Home Assistant (the Echo's "Stop ringing" button, "Snooze alarm") or the
-  settings page API: the app has no say of its own.
+  stops it, and hand the finger on: `GET /kiosk/ring/snooze` on a tap (an alarm snoozes, a timer stops) and
+  `GET /kiosk/ring/stop` on a hold (the same rule: 127.0.0.1 and the home app's uid).
 - `h24`, `next_alarm`, `clock_set` (the Echo's clock came from Home Assistant): for a clock of the app's own.
 
 ## The drawer and the touch screen
