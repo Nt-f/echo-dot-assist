@@ -75,6 +75,113 @@ What changed for people using the Echo, newest first. Details and measurements a
   model to the Echo Show 5, and the page called that a lost sign-in ("log in again"), which changes nothing. It now
   says Amazon does not hand it out to this model, and the whisper warning and the download list point at Copy models:
   bring it over from an Echo that has it. Should Amazon hand it out later, a download still works.
+- **The drawer, pulled from anywhere along the top's middle, never reaches the app below.** The drawer no longer
+  needs the black strip along the top over an app: the Echo holds a touch that starts in the middle of the top edge
+  back from the app until it is clear whether it is a pull (a tap there goes on to the app as you lift your finger), so
+  apps have the whole screen and none of them scrolls or refreshes under a pull.
+- **An app switcher in the drawer.** Below the volume: the home app's own screens (Echo-Wall's dashboard, Music
+  Assistant, a page of yours) and every app you installed, in a row that scrolls sideways. Tap one and it opens.
+- **Echo-Wall (or any app made for it) as the home app, with Home Assistant set up from Echo Local.** The settings
+  page's Screen page or Echo Local's Screen tab pick the home app (the last choice counts); an app made for the Echo
+  gets Home Assistant's address and a login of its own, opens the screen picked in the drawer, and draws a request's
+  words and a ringing timer or alarm itself. An Echo that had Echo-Wall as its screen app keeps it as its home app.
+- **A timer or an alarm ringing over an app shows.** The face with its Stop comes over the app until nothing rings,
+  then the app is back (not over an app that draws the ring itself, as Echo-Wall does).
+- **An app on the Echo Show can be reached from your network** (issue #109): each app has a **Network** switch beside
+  its Internet one (settings page, Echo Local's Apps tab). On, the firewall admits the ports that app listens on, from
+  your own network only, and follows them when the app moves to another one: Kiosk Satellite's DLNA renderer (its port
+  and SSDP discovery on 1900) works, as does any other app that phones or media servers talk to. Off by default.
+- **Echo-Wall is an app of its own now, with its own Home Assistant integration.** Its home screens moved out of
+  Echo Local into the Echo-Wall integration (installed from github.com/Nt-f/Echo-Wall with HACS), whose sidebar panel
+  "Echo-Wall" arranges every device running the app, Echo Shows and any Android tablet alike (the app logs in to Home
+  Assistant by itself where there is no hassmic). Echo Local keeps what is the Echo's: the alarms, the screen's setup
+  (which pages, which app) and the Echo Show's apps; its panel now has the Screen and Apps tabs. Update in this order:
+  install the Echo-Wall integration and add it, then update Echo Local, then the Echo-Wall app on the Echo; the app
+  brings your layout over by itself the first time it finds the new integration.
+- **Your Echo Show's apps in Echo Local's preview.** The tiles of the apps you installed on the Echo (NewPipe and the
+  like) were missing from the panel's preview, which knew nothing of them; Echo-Wall now sends their names and icons
+  to Home Assistant, so the preview draws them and the Apps tab shows them by name with their icons. Needs this
+  Echo-Wall on the Echo.
+- **Pages from Echo Local's panel.** "Pages after Home" in the form lists every page (your own, the rooms, a
+  dashboard's sections): add a page, rename or delete your own, move any up or down, take a room or a dashboard
+  section off and show it again. On the Echo, edit mode's "Remove page" takes a room's page off too.
+- **Moving and resizing cards on the Echo, reworked.** A card held at the screen's edge now carries on to any page,
+  another room's or Home (a device dropped on Home becomes one of Home's tiles); before, it could not leave its own
+  room. Cards pushed aside stay on their page, next to where they were, instead of jumping to another page; a resized
+  card keeps its place and only the cards it grows over move; a card taken off pulls the next page's cards back. The
+  page you are on stays put when pages come and go, the edit bar's arrows and Done are always on the screen, and a
+  camera keeps its live picture in the edit mode, under your finger too.
+- **The panel's preview swipes with a mouse or a trackpad**, and a click beside the page dots turns the page; cards
+  drag with the mouse in its edit mode.
+- **Saves from the panel reach the Echo after Home Assistant restarts.** Echo-Wall logged in again before Echo Local
+  had loaded, was refused, and stopped following the layout until the app restarted; it now asks again.
+
+## 2026-11-02
+
+- **Echo Local in Home Assistant's sidebar.** Every Echo Show's screen in one place: Echo-Wall's Home as a form beside
+  **Echo-Wall itself**, running in the page with your devices at the Echo's size, where you arrange it as on the Echo
+  (drag tiles to other places, star, hide, add, the wallpaper); nothing reaches the Echo until Save. Export a Home to
+  a file and import it again, take another app's Home, copy it to your other Echos. The screen's options (which
+  screens, the screen app) are there too. Administrators only. See the guide's "Home Assistant on the screen".
+  An Echo's own login may now change only that Echo's layout (before, any Home Assistant user could change any).
+- **Your Home Assistant dashboard on the Echo Show, drawn by Echo-Wall.** Pick a dashboard in Echo Local; its sections
+  become pages after Home in Echo-Wall's own glass, quick on the Echo Show 5 (no web page). Cards Echo-Wall cannot draw
+  open that view in Home Assistant. Changes in Home Assistant show on the Echo at once.
+- **Hold a card for its menu, keep holding to edit.** As on an iPhone: controls, sizes, move to another page, remove.
+  Every card comes in the sizes that suit it (small, wide, large, extra large). Changes made on the Echo stay on it.
+- **Thermostats in colour:** orange heating, blue cooling, and a heat/cool thermostat's range in both.
+- **A paused song leaves the lock screen after 20 seconds.**
+- **Apps on the Echo Show from Home Assistant.** Echo Local's Apps tab lists the Android apps you installed (NewPipe,
+  say) with an internet switch each, removes them, and installs new ones from an APK on your computer or on Home
+  Assistant (also the action "Install app"). Apps stay off the internet until you switch them on.
+- **The screen's setup reaches the Echo after replacing the integration.** A new Echo Local entry takes over the
+  screen the Echo shows and sends it with a login of its own (before, the Echo kept the removed entry's login and
+  showed "Home Assistant refused the login"). The Screen tab says when it was last sent and has "Send to the Echo
+  again".
+- **The Home Assistant integration is now "Echo Local"** (`custom_components/echo_local`, actions `echo_local.*`, card
+  `custom:echo-local-alarms-card`): its old name, `hassmic`, is also another project's integration (jeffc/hassmic), and
+  Home Assistant can't load both. Remove the old one and add Echo Local again; the Echo asks for its button once more.
+  The home apps' intent moved to `io.github.gamer92000.echodotassist` (`docs/screen-apps.md`): an app of your own
+  needs the new intent.
+- **The Echo Show starts about 15 seconds sooner.** Turning Alexa off at each start no longer asks Android
+  questions it already knows the answers to (the Echo Show 5 took 16 of its 41 seconds there).
+
+- **Alarms nobody answers get louder.** After coming up to the timer volume, a ringing alarm keeps getting louder, 10
+  points of volume a minute up to the loudest the Echo plays ("Unanswered alarms get louder" on the "Clock & alarms"
+  page). Stopped or snoozed, everything is back at its own volume.
+- **Your alarms in Home Assistant, with a card.** A Home Assistant integration of hassmic's own
+  (`custom_components/echo_local`): a switch per alarm, actions to add, change and delete them, and a dashboard card
+  "Echo alarms" that lists them like the Alexa app (switch, tap to change time, days and label, Add, Snooze, Stop).
+  Home Assistant is let in with a press of the Echo's button, as a browser is. See the guide's "Clock and alarms".
+- **"Change my alarm to 6:30"** moves the next alarm (its days kept) instead of setting a second one.
+- **"Pause" knows which Echo you mean.** "Pause", "resume", "next", "previous", "volume up", "louder" and "set the
+  volume to 5" said to an Echo that is playing music are carried out on that Echo, rather than Home Assistant asking
+  which media player.
+- **No more ticks in music.** Music Assistant's music had a small tick several times a second on the Echo Show 5
+  while the Echo kept it in sync, most noticeable in quiet passages and while it listens; it is now kept in sync
+  without a cut. And the music no longer clicks as it is turned down for a request and back up after: it glides.
+
+- **Alarms on the Echo.** Home Assistant has timers but no alarms; now the Echo keeps its own, and they ring by
+  themselves, with or without Home Assistant. Ask for them: "<wake word>, set an alarm for 7 AM", "wake me up at 6:30
+  tomorrow", "set an alarm for 6:45 on weekdays", "wake me up in 20 minutes", "what alarms do I have", "cancel my
+  alarm", "cancel all alarms". The Echo answers these itself (Home Assistant speaks the answer; tick "Allow the device
+  to perform Home Assistant actions" in the device's options). A ringing alarm snoozes with "<wake word>, snooze", a
+  volume key or a tap on an Echo Show's screen, and stops with "<wake word>, stop", the action button (both volume
+  keys on an Echo Show) or a long press on the screen. It starts quietly and comes up to the timer volume over 30
+  seconds, plays Alexa's alarm tone, rings for 10 minutes at most and snoozes for 9 (all on the settings page's new
+  "Clock & alarms" page, which also lists, adds, edits and deletes alarms). In Home Assistant: "Next alarm" (a time:
+  a dashboard counts down to it, an automation can turn on the lights 10 minutes before), "Alarms", "Alarm ringing",
+  "Snooze alarm", an "Alarm" event entity (ringing, snoozed, stopped, ...) and the actions `set_alarm` and
+  `delete_alarm` for automations and AI agents. English sentences for now.
+
+- **Even volume steps.** Every point of the volume is now the same step: 0.5 dB a point, 5 dB a press of the volume
+  buttons, from 1 (about 50 dB under full) to 100 (as loud as before). The Echos' own volume puts most of the change at
+  one end: on an Echo Show 5 the bottom half covers 46 dB and the top half 20, and since it has only 31 steps for 100
+  points, a slider moved by one point often changed nothing; on an Echo Dot, 60 to 70 was 1 dB and 90 to 100 was 10.
+  Low volumes are louder than before (on an Echo Show 5, 5 and 10 were 60 and 51 dB under full, now 47.5 and 45.5) and
+  middle ones somewhat quieter (50 is 25 dB under full, where it was 20 to 22). Your volume stays
+  at its number through the update. "Even volume steps" on the settings page (Sound, Speaker) brings the Echo's own
+  steps back. On by default.
 
 ## 2026-11-01
 

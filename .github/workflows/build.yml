@@ -48,7 +48,8 @@ jobs:
           case "$version" in 20[0-9][0-9].[01][0-9].[0-3][0-9].[0-9][0-9][0-9][0-9][0-9][0-9]) ;; *) echo "::error::odd version '$version'"; exit 1;; esac
           if [ "$GITHUB_REF" = refs/heads/release ]; then tag=v$version prerelease=false; else tag=v$version-beta prerelease=true; fi
           publish=false
-          if [ "$GITHUB_EVENT_NAME" = push ] && { [ "$GITHUB_REF" = refs/heads/main ] || [ "$GITHUB_REF" = refs/heads/release ]; }; then
+          # a push, or the workflow run by hand on one of the two (a fork whose push events start no runs)
+          if { [ "$GITHUB_EVENT_NAME" = push ] || [ "$GITHUB_EVENT_NAME" = workflow_dispatch ]; } && { [ "$GITHUB_REF" = refs/heads/main ] || [ "$GITHUB_REF" = refs/heads/release ]; }; then
               publish=true
               # a run again for the same commit (re-run, or a push that only moved the branch back)
               if git rev-parse -q --verify "refs/tags/$tag" > /dev/null; then echo "::notice::$tag is published already"; publish=false; fi
@@ -257,6 +258,18 @@ jobs:
         env:
           HASSMIC_HA_REQUIRED: '1'
         run: .venv/bin/python tests/ha_real_end.py
+      - name: The Home Assistant integration (custom_components/echo_local) in Home Assistant
+        env:
+          HASSMIC_HA_REQUIRED: '1'
+        run: .venv/bin/python tests/ha_real_alarms.py
+      - name: The Echo Show's kiosk set up from Home Assistant, its wall panel
+        env:
+          HASSMIC_HA_REQUIRED: '1'
+        run: .venv/bin/python tests/ha_real_kiosk.py
+      - name: The Echo Local sidebar panel in Home Assistant (the screen's options, the Echo Show's apps)
+        env:
+          HASSMIC_HA_REQUIRED: '1'
+        run: .venv/bin/python tests/ha_real_panel.py
 
   release:
     needs: [version, build, test]
