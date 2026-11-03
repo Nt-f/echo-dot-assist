@@ -78,7 +78,7 @@ def screens(hass: HomeAssistant, entry: ConfigEntry) -> tuple[list[tuple[str, st
     for k in kinds:
         if k == "clock":                # drawn by a screen app that can (docs/screen-apps.md); hassmic's own kiosk skips it
             out.append((k, "Clock", "hassmic:clock"))
-        elif k == "wall":               # the screen app's own Home (Echo-Wall's WallView; home.py keeps its layout)
+        elif k == "wall":               # the screen app's own Home (Echo-Wall: its layout is its own integration's)
             out.append((k, "Home", "hassmic:home"))
         elif k == "dashboard":
             out.append((k, "Home Assistant", f"{base}/{(o.get(OPT_DASHBOARD) or 'lovelace').strip('/')}"))

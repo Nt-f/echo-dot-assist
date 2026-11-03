@@ -532,7 +532,9 @@ digital clock, the date and weather, the thermostat's temperature big, what play
 then a page per room with a tile per light, switch, fan, cover, lock, speaker and door or motion sensor, swiped
 sideways. A tap switches, a long press opens the controls (brightness, position, volume, temperature). Left alone for
 2 minutes it shows the lock screen (a photo, the time, the next alarm). Also **Home Assistant's own dashboards**,
-**Music Assistant**, and a page of your own, as tiles on Home. Echo-Wall is installed with `adb install` (its README).
+**Music Assistant**, and a page of your own, as tiles on Home. Echo-Wall is an app of its own (it runs on any Android
+tablet too) with a Home Assistant integration of its own; install both as its README says (the app with `adb install`,
+the integration from its repository with HACS).
 hassmic's own kiosk app is still there for web pages only (dashboards, Music Assistant, your page), without a Home.
 
 It is set up from Home Assistant, in the Echo Local integration (the one for the Echo's alarms): **Echo Local** in the
@@ -551,8 +553,8 @@ status show over the screen app and go again (Echo-Wall draws them on its glass 
 addresses only, so Home Assistant's address for it is its local one (the Screen tab shows which; Home Assistant
 Cloud's is not reachable from the Echo).
 
-**Your dashboard on the Echo.** Pick one of your Home Assistant dashboards in Echo Local (Home screen › "Dashboard
-after Home"): its sections become pages after Home, drawn by Echo-Wall in its own glass, not as a web page, so it stays
+**Your dashboard on the Echo.** Pick one of your Home Assistant dashboards in the Echo-Wall panel ("Dashboard after
+Home"): its sections become pages after Home, drawn by Echo-Wall in its own glass, not as a web page, so it stays
 quick on the Echo Show 5. Tiles, thermostats, media players and cameras look as Echo-Wall's own; entities, glance and
 weather cards have glass versions; cards it cannot draw (HACS cards, graphs) show as a tile that opens that view in
 Home Assistant's own interface. Change the dashboard in Home Assistant and the Echo follows at once. Without one,
@@ -565,30 +567,24 @@ the nearest free place on its page); hold it at the screen's edge and the pages 
 device dropped on Home becomes one of Home's tiles; a dashboard's card stays in its section). ★ puts it on Home, −
 takes it off the page (the next page's cards move up into the room it left), ⤡ cycles its size (it keeps its place;
 the cards it grows over move aside), + Add brings something onto this page, + Page makes a page of your own (Rename,
-Delete page on it), Remove page takes a room's page off (Echo Local's panel shows it again). What you change on the
+Delete page on it), Remove page takes a room's page off (the Echo-Wall panel shows it again). What you change on the
 Echo stays on the Echo; your dashboard is never changed. Done ends it.
 
 Thermostats show what they are doing: orange while heating, blue while cooling ("Heating to 21°"); one in heat/cool
 shows its range, the low end orange and the high end blue. Room
 names, areas and which entities exist stay Home Assistant's: hide an entity there and it is gone from the screen too.
 
-**Making Home yours, in Home Assistant: Echo Local in the sidebar** (administrators). Every Echo on the left; for
-each, two tabs.
+**Making Home yours, in Home Assistant: the Echo-Wall panel.** Echo-Wall's integration (its own repository) adds
+"Echo-Wall" to the sidebar: every device running the app, its Home as a form beside **Echo-Wall itself** running in the
+page with your devices, Save to send it, Export and Import, Copy to other devices, the pages after Home. Its README and
+`docs/integration.md` there have it all. Layouts kept in Echo Local before (up to 2026-11-03) come along by themselves:
+the app sends the one it has the first time it finds Echo-Wall's integration.
 
-- *Home screen*: the settings of Echo-Wall's Home as a form (wallpaper, Home's tiles in order: drag them or use ↑ ↓,
-  the clocks, the date, what plays, the lock screen's time, what is hidden, each room's order, the dashboard after
-  Home), and next to it
-  **Echo-Wall itself**, running in the page with your devices, at the Echo's size. Switch on "Edit on the screen" and
-  arrange it exactly as on the Echo: drag tiles to other places, ★, −, + Add, the wallpaper; the form follows. Nothing
-  reaches the Echo until **Save**; Revert throws the changes away. If someone rearranges the Echo meanwhile, a bar
-  asks whose to keep.
-  **Export** saves the Home to a file (`….echohome.json`); **Import** takes one back, or another app's Home on this
-  Echo (what both have: the wallpaper, Home's tiles, hidden ones, rooms' order, the lock screen), or another Echo's.
-  **Copy to** puts it on other Echos as it is. **Reset** forgets it: Echo-Wall picks again. Entities a file names that
-  this Home Assistant does not have are kept and marked. **Card sizes** under the preview shows every card at every
-  size with your own devices.
+**Echo Local in the sidebar** (administrators): every Echo with a screen on the left; for each, two tabs.
+
 - *Screen*: Home Assistant on the screen, the screens in the switcher's order, the one to start on and go back to,
-  the screen app and its settings (Echo-Wall's photos from Immich: `immich.url=`, `immich.key=`, `immich.album=`).
+  the screen app and its settings (one `key=value` a line, for the app; Echo-Wall's photos from Immich are set in its
+  own panel now, these still count where that is empty: `immich.url=`, `immich.key=`, `immich.album=`).
   A line at the top says when Home Assistant last sent this to the Echo, or why it could not; **Send to the Echo
   again** sends it now with a fresh login. An Echo Local entry added anew (after removing the old one) takes over the
   screen the Echo shows by itself and sends it with a login of its own: the old login went with the old entry.
@@ -598,9 +594,6 @@ each, two tabs.
   32-bit ARM (armeabi-v7a) and Android 7.1 on the Echo Show 5; Android's reason is shown when it refuses one. The
   action `echo_local.install_apk` (device, path) does the same from an automation. New apps show on Echo-Wall's Home
   and in its switcher by themselves.
-
-Echo-Wall keeps its Home in Home Assistant by itself: what you arrange on the Echo shows in the panel, and the panel's
-Save shows on the Echo at once. Layouts made for the old web wall panel were carried over into Echo-Wall's.
 
 ## Music
 

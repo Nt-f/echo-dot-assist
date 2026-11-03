@@ -266,10 +266,10 @@ jobs:
         env:
           HASSMIC_HA_REQUIRED: '1'
         run: .venv/bin/python tests/ha_real_kiosk.py
-      - name: Home screens and the Echo Local sidebar panel in Home Assistant
+      - name: The Echo Local sidebar panel in Home Assistant (the screen's options, the Echo Show's apps)
         env:
           HASSMIC_HA_REQUIRED: '1'
-        run: .venv/bin/python tests/ha_real_home.py
+        run: .venv/bin/python tests/ha_real_panel.py
 
   release:
     needs: [version, build, test]

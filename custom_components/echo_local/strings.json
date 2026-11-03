@@ -57,7 +57,7 @@
     "step": {
       "init": {
         "title": "The Echo Show's screen",
-        "description": "Home Assistant on the Echo Show's screen, in its screen app (Echo-Wall, or hassmic's kiosk for web pages only). Home's layout is edited in the sidebar: Echo Local. The Echo logs in as a user of its own, made for it here (local only, removed with this entry). Home Assistant's address as the Echo reaches it: {url}. The Echo reaches local addresses only.",
+        "description": "Home Assistant on the Echo Show's screen, in its screen app (Echo-Wall, or hassmic's kiosk for web pages only). Echo-Wall's Home is arranged in its own integration's panel (Nt-f/Echo-Wall). The Echo logs in as a user of its own, made for it here (local only, removed with this entry). Home Assistant's address as the Echo reaches it: {url}. The Echo reaches local addresses only.",
         "data": {
           "kiosk": "Show Home Assistant on the screen",
           "kiosk_screens": "Screens (a handle at the top of the screen switches)",

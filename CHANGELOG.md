@@ -4,6 +4,13 @@ What changed for people using the Echo, newest first. Details and measurements a
 
 ## 2026-11-03
 
+- **Echo-Wall is an app of its own now, with its own Home Assistant integration.** Its home screens moved out of
+  Echo Local into the Echo-Wall integration (installed from github.com/Nt-f/Echo-Wall with HACS), whose sidebar panel
+  "Echo-Wall" arranges every device running the app, Echo Shows and any Android tablet alike (the app logs in to Home
+  Assistant by itself where there is no hassmic). Echo Local keeps what is the Echo's: the alarms, the screen's setup
+  (which pages, which app) and the Echo Show's apps; its panel now has the Screen and Apps tabs. Update in this order:
+  install the Echo-Wall integration and add it, then update Echo Local, then the Echo-Wall app on the Echo; the app
+  brings your layout over by itself the first time it finds the new integration.
 - **Echo-Wall's app switcher** has no bar at the top any more: swipe down from the top edge to open it, swipe it back
   up or touch anywhere else to close it. The same over the other apps.
 - **Your Echo Show's apps in Echo Local's preview.** The tiles of the apps you installed on the Echo (NewPipe and the

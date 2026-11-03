@@ -112,21 +112,14 @@ Screens whose `url` is `hassmic:<name>` are the app's to draw: `hassmic:home`, t
 "Home" screen; Echo-Wall's WallView), and `hassmic:clock`, the clock as idle screen (the integration's "Clock"
 screen). An app that cannot draw one leaves it out (hassmic's own kiosk does: it shows web pages only).
 
-## A Home of the app's own, kept in Home Assistant
+## A Home of the app's own
 
-An app that draws a Home (tiles, a wallpaper, an order of rooms) can keep its layout in Home Assistant too, where the
-Echo Local panel in the sidebar edits it beside a preview, exports it to a file, imports it and copies it to other
-Echos. Three commands on Home Assistant's websocket, with the token above; no Echo named, the token says which:
-
-```
-echo_local/home/describe   {app: <package>, descriptor}   what the layout holds, for the panel's form (optional)
-echo_local/home/subscribe  {app: <package>}               the layout now and at every save (subscribe after each login)
-echo_local/home/set        {app: <package>, layout}       after an edit on the Echo
-```
-
-The rules (when to send, when to take, what a descriptor says, the size cap, the file format, the preview's
-protocol for an app that wants to run in the panel as Echo-Wall does) are in [home-screens.md](home-screens.md);
-Echo-Wall's `lib/home/layout_sync.dart` and `lib/preview.dart` are the reference.
+The layout an app draws on its Home (tiles, a wallpaper, an order of rooms) is the app's own business: hassmic and Echo
+Local only say which app shows the screen and give it Home Assistant's address and a login (the token above, a user
+per Echo that is no administrator). Echo-Wall keeps its Home in Home Assistant through an integration of its own
+(Nt-f/Echo-Wall, `custom_components/echo_wall`, its `docs/integration.md`): the app registers itself there with that
+login, which binds the device to it, and follows its layout over Home Assistant's websocket. Another app can do the
+same with its own integration, or keep its layout to itself.
 
 ## What the Echo lacks
 

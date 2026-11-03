@@ -3,7 +3,7 @@
 Home Assistant against build/hassmic-host: the options flow, the kiosk's own user (local only, not an administrator)
 and its token, sealed to the Echo and read back by the app's way (GET /kiosk/config from 127.0.0.1, the token only
 there), the screens (Home: hassmic:home, drawn by the screen app; a dashboard), the token taking Home Assistant's
-websocket; the entry removed, the user and its token gone.  Home's layout and the sidebar panel: tests/ha_real_home.py.
+websocket; the entry removed, the user and its token gone.  The sidebar panel (the screen's options, the Echo's apps): tests/ha_real_panel.py.
 
 Same isolation and Home Assistant as tests/ha_real_alarms.py.  Chrome: google-chrome or chromium on PATH (else that
 part is skipped)."""

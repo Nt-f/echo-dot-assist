@@ -70,10 +70,10 @@ aioesphomeapi, wyoming, aiosendspin, noiseprotocol, aiohttp):
                                              # custom component): HA's STT stream ends with it, intent and reply follow
 .venv/bin/python tests/ha_real_alarms.py      # custom_components/echo_local (alarms integration and card) in a real HA
 .venv/bin/python tests/ha_real_kiosk.py       # the Echo Show's kiosk set up from the integration: user, token, screens
-.venv/bin/python tests/ha_real_home.py        # home screens (home.py) and the sidebar panel: the store migrated, slots per
-                                             # Echo and app, the kiosk user confined, the panel in headless Chrome with
-                                             # Echo-Wall's own preview: its tiles, the draft, its edit mode, import, Save,
-                                             # export (build/test-logs/panel*.png)
+.venv/bin/python tests/ha_real_panel.py       # the sidebar panel (panel.py, apps.py): the Echos, the screen's options set
+                                             # and pushed, the kiosk user kept out, the Echo Show's apps (upload, install,
+                                             # remove), adopt, the panel's Screen and Apps tabs in headless Chrome
+                                             # (build/test-logs/panel*.png)
 .venv/bin/python tests/ha_real_dropin.py      # the blueprint in a real Home Assistant (build/ha-venv, made by --setup;
                                              # skips without it) with four Echos, one the released build: replies, timing.
                                              # All of it in an `unshare -rn` namespace with only lo
@@ -286,21 +286,13 @@ No model `#ifdef`s in shared code: new differences become a board field, a `devi
   reads `GET /kiosk/config[/front|/back]` from 127.0.0.1 and only with its own uid (`kiosk_peer_ok`: /proc/net/tcp6) and injects
   `hassTokens` into HA's origin.  Setting `display_kiosk`: display_screen.c `am start`s the app (`kiosk_tick`) and closes
   its own layer while the app is in front and it has nothing to show.  Home is the screen app's (`hassmic:home`, the
-  options' kind "wall"): Echo-Wall's WallView (Flutter, Nt-f/Echo-Wall); the web wall panel (wall.html) is gone.  Its
-  layout per Echo and app in `home.py` (docs/home-screens.md: Store `echo_local.wall` 2.2, the wall panel's layouts
-  migrated into Echo-Wall's; a slot per (Echo node, app package), descriptors per app (built in: Echo-Wall; others
-  `echo_local/home/describe`, kept per Echo), websocket `echo_local/home/list|get|set|subscribe|describe|delete`,
-  `kiosk/get|set`; the kiosk user only at its own Echo's slots, via `connection.user`), set by the sidebar panel "Echo
-  Local" (`frontend/panel.js`, panel_custom, admin: a form beside Echo-Wall itself built for the web,
-  `frontend/echowall/` from `tools/echowall-preview.sh` (Echo-Wall's `lib/preview.dart`, `lib/io/` for dart:io on the
-  web; rebuild and commit after WallView changes), its edit mode editing the draft; import/export `.echohome.json`,
-  copy, the screen's options) or Echo-Wall's own edit mode (a card or the page dots held); Echo-Wall syncs its own
-  (`layout_sync.dart`).  Layout field `dashboard`: Echo-Wall draws that Lovelace dashboard natively after Home
-  (`lib/lovelace/`: sections as pages, its own glass cards, unknown cards open the view), the Echo's changes per page
-  in its layout, never in the dashboard; every card at every size: Echo-Wall `test/gallery_test.dart`.  The Shows' own apps from the panel's Apps tab (`apps.py`: the Echo's `/api/apps` over the
+  options' kind "wall"): the screen app's own (Echo-Wall, Flutter, Nt-f/Echo-Wall: its layout lives in Echo-Wall's own
+  integration, `custom_components/echo_wall` there; nothing of it here since 2026-11-03).  The sidebar panel "Echo
+  Local" (`frontend/panel.js`, panel_custom, admin; `panel.py`: `echo_local/list`, `kiosk/get|set|push`) has the
+  screen's options (the options flow's too) and the Apps tab.  The Shows' own apps from the panel's Apps tab (`apps.py`: the Echo's `/api/apps` over the
   signed API, APKs uploaded to `/api/echo_local/apk/<echo>` and sent on in 256 kB pieces, action `install_apk`); a
   new entry adopts the screen the Echo shows (`kiosk.adopt`), each push's outcome kept for the Screen tab
-  (`kiosk.last_push`, `kiosk/push`).  `tests/ha_real_home.py`.  The start's status:
+  (`kiosk.last_push`, `kiosk/push`).  `tests/ha_real_panel.py`.  The start's status:
   `hassmic -Y <file>` (`display_splash`, main.sh `stage`), then display_screen.c's status screen until HA's link
   (`display_link`).
 - **Sound packs** (`soundpack.c`, `soundpack.h`): sets of the Sounds card's sounds in `state/sound-packs/<id>/` (`name`,

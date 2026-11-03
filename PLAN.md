@@ -2356,6 +2356,16 @@ Run in this order. Each step says what it proves.
       Not yet measured: HA's full UI logged in, the wall panel there (the user's HA has no
       integration of this version yet), a tap on the kiosk while a ring shows (passes through?).  Open: kiosk entities in HA (screen select); the wall's choice of rooms/entities (now: every
       area, registry-hidden ones left out); the screen waking on a touch while dark (the panel's touch controller).
+- [x] Echo-Wall split off (2026-11-03, asked: "keep HomeView as a fully separate application that can be installed on
+      top ... Echo Dot Assist extension ... that can be upstreamed"). Echo-Wall's layouts, the panel's Home screen tab,
+      its preview (frontend/echowall/, tools/echowall-preview.sh), home.py and docs/home-screens.md moved to the
+      Echo-Wall repository as the integration echo_wall (custom_components/echo_wall there: devices the app registers,
+      bound to the login that registered them; echo_wall/*; its own panel and preview; tools/ha_test.py, a real HA and
+      Chrome, all good). Echo Local keeps panel.py (echo_local/list, kiosk/get|set|push), apps.py and a panel of two tabs
+      (Screen, Apps); tests/ha_real_home.py became tests/ha_real_panel.py (29 checks, all good). No store migration: the
+      app sends the layout it kept in its file at its first login to echo_wall. The app logs in by itself without
+      hassmic (Home Assistant's login page in a WebView, refresh token kept): tried on an Android 16 emulator against a
+      test HA, registered, followed a save, logged in again after a restart without asking.
 - [x] Drop In between Echos (2026-10-08, asked by a user with ten Echos who used Alexa's as an intercom). `dropin.c`:
       calls signed on the arbitration network (new arb type `T_MSG`, `arb_tell`, broadcast like the rest, repeated:
       invite every 250 ms until answered), audio unicast UDP 28932 (`-i`), Opus 16 kHz 20 ms 24 kbit/s inband FEC (stock

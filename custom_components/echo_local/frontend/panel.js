@@ -1,28 +1,16 @@
-// Echo Local's sidebar panel (/echo-local, registered in __init__.py; docs/home-screens.md has the design): every Echo
-// Show's screen and the Home of each app that draws one, edited graphically.
+// Echo Local's sidebar panel (/echo-local, registered in __init__.py): every Echo Show's screen, set up graphically.
 //
 //   - left: the Echos (config entries of echo_local)
-//   - "Home screen": the apps that have a Home on that Echo (Echo-Wall always; the screen app the Echo runs; any app
-//     that saved one), a form drawn from the app's descriptor (home.py BUILTIN, or the app's own from
-//     echo_local/home/describe), beside a preview: Echo-Wall's own WallView built for the web (frontend/echowall/,
-//     its lib/preview.dart) in an iframe, whose edit mode (drag, star, hide) edits the draft here; an app without a
-//     preview page gets a sketch of its Home's tiles
-//   - Export (a .echohome.json file), Import (a file, another app on this Echo, the same app on another Echo), Copy to
-//     other Echos, Reset (the slot gone: the app's own defaults)
-//   - "Screen": the kiosk's options (kiosk.py), which the options flow also sets
+//   - "Screen": the kiosk's options (kiosk.py, panel.py), which the options flow also sets: Home Assistant on the
+//     screen or not, its screens in order, the screen app (hassmic's kiosk, Echo-Wall, any package) and its settings
+//   - "Apps": the owner's Android apps on an Echo Show (apps.py): the internet for each, remove, add an APK
 //
-// Only Home Assistant's websocket (this.hass.connection), as the rest of Home Assistant's own panels.  Nothing of the
-// layout is saved until Save: a draft per Echo and app, and the Echo's own changes meanwhile are offered, not forced.
-// Plain custom element, no build step (the integration's frontend files are served as they are).
+// A home screen app arranges its Home itself: Echo-Wall has an integration of its own with its own panel
+// (Nt-f/Echo-Wall).  Only Home Assistant's websocket (this.hass.connection).  Plain custom element, no build step.
 'use strict';
 
-const FORMAT = 'echo-local-home';
-// the screen app's window in Flutter's logical pixels (the Show 5: 960 x 480 at density 160, the light band's rows off)
-const SIZES = { 'Echo Show 5': [960, 470], 'Echo Show 8': [1280, 790], 'Echo Show': [1024, 590] };
-const ECHOWALL = 'io.github.nt_f.echowall';
-const KIND_LABEL = { wall: 'Home (Echo-Wall draws it)', clock: 'Clock', dashboard: "Home Assistant's own UI", music: 'Music Assistant', custom: 'A page of your own' };
-const KIND_NAME = { dashboard: 'Home Assistant', music: 'Music' };           // kiosk.py's names for the switcher
-const KNOWN_APPS = [[ECHOWALL, 'Echo-Wall'], ['io.github.nt_f.echoscreen', 'Echo-Screen'], ['', "hassmic's kiosk (web pages only, no Home)"]];
+const KIND_LABEL = { wall: 'Home (the screen app draws it)', clock: 'Clock', dashboard: "Home Assistant's own UI", music: 'Music Assistant', custom: 'A page of your own' };
+const KNOWN_APPS = [['io.github.nt_f.echowall', 'Echo-Wall'], ['io.github.nt_f.echoscreen', 'Echo-Screen'], ['', "hassmic's kiosk (web pages only, no Home)"]];
 
 const h = (tag, props, ...kids) => {
   const e = document.createElement(tag);
@@ -45,7 +33,6 @@ const ago = (t) => {
   return s < 60 ? 'just now' : s < 3600 ? `${Math.round(s / 60)} min ago` : s < 86400 ? `${Math.round(s / 3600)} h ago` : new Date(t * 1000).toLocaleDateString();
 };
 const domainOf = (id) => String(id).split('.')[0];
-
 const CSS = `
 :host { display: block; height: 100%; background: var(--primary-background-color); color: var(--primary-text-color);
   font-family: var(--ha-font-family-body, Roboto, sans-serif); --r: var(--ha-card-border-radius, 12px);
@@ -189,286 +176,52 @@ details.room summary .n { flex: 1; } details.room .list { margin: 0 8px 8px; }
 .inst.good { color: var(--success-color, #4caf50); }
 `;
 
+
 class EchoLocalPanel extends HTMLElement {
   constructor() {
     super();
     this.attachShadow({ mode: 'open' });
-    this.state = { echos: [], descriptors: {}, loaded: false, error: '' };
+    this.state = { echos: [], loaded: false, error: '' };
     this.echo = null;                 // the Echo's node
-    this.app = ECHOWALL;
-    this.tab = 'home';
-    this.drafts = new Map();          // "echo|app" -> { saved, draft, incoming, sub }
+    this.tab = 'screen';
     this.kiosk = null;                // { saved, draft } of the selected Echo
-    this.size = null;
-    this.editOnScreen = false;
-    this.launcher = {};               // echo -> its Android apps as Echo-Wall lists them (echo_local/home/apps/get)
-    // the preview (Echo-Wall's lib/preview.dart) asks the login, the draft and what the Echo's app would know from here
-    window.echoLocalPreview = {
-      token: async () => { const a = this._hass.auth; if (a.expired) await a.refreshAccessToken(); return a.accessToken; },
-      layout: () => (this.cur() || {}).draft,
-      info: () => this.previewInfo(),
-    };
-    this.pages = null;                // the pages after Home, as Echo-Wall's preview last made them (echo-local-pages)
-    this.onMessage = (ev) => {
-      if (ev.origin !== location.origin || !ev.data) return;
-      if (ev.data.type === 'echo-local-pages') {
-        if (JSON.stringify(ev.data.pages) === JSON.stringify(this.pages)) return;
-        this.pages = ev.data.pages;
-        const r = this.shadowRoot.querySelector('.pagesrow'); const c = this.cur();
-        if (r && c) r.replaceWith(this.pagesRow(c));
-        return;
-      }
-      if (ev.data.type !== 'echo-local-edit') return;
-      const c = this.cur(); if (!c) return;
-      c.draft = clone(ev.data.layout); this.refresh();      // not sent back: the preview has it
-    };
-  }
-
-  // what the screen app gets beside the layout: the clock's format, the other screens' names (their tiles on Home)
-  previewInfo() {
-    const loc = this._hass.locale || {};
-    const h24 = loc.time_format === '24' ? true : loc.time_format === '12' ? false
-      : new Intl.DateTimeFormat(loc.language || undefined, { hour: 'numeric' }).resolvedOptions().hour12 === false;
-    const info = this.echoInfo() || {};
-    const screens = (info.screens || []).filter((k) => KIND_NAME[k]).map((k) => KIND_NAME[k]);
-    return { h24, screens, settings: {}, editing: this.editOnScreen, gallery: this.gallery, apps: this.launcher[this.echo] || [] };
+    this.apps = null;
   }
 
   set hass(h) { const first = !this._hass; this._hass = h; if (first) this.load(); }
   get hass() { return this._hass; }
   set narrow(n) { this.toggleAttribute('narrow', !!n); }
 
-  connectedCallback() { addEventListener('message', this.onMessage); this.render(); }
-  disconnectedCallback() {
-    removeEventListener('message', this.onMessage);
-    for (const d of this.drafts.values()) if (d.sub) d.sub.then((u) => u()).catch(() => {});
-    this.drafts.clear();
-  }
+  connectedCallback() { this.render(); }
+  disconnectedCallback() { clearTimeout(this._appsPoll); }
 
   ws(msg) { return this._hass.connection.sendMessagePromise(msg); }
-  key(echo = this.echo, app = this.app) { return echo + '|' + app; }
-  cur() { return this.drafts.get(this.key()); }
-  // built in, else the one the app sent from this Echo, else an administrator's (home.py descriptor())
-  desc(app = this.app, echo = this.echo) {
-    const own = (this.echoInfo(echo) || {}).descriptors || {};
-    return ((this.state.builtin || []).includes(app) ? null : own[app]) || this.state.descriptors[app] || null;
-  }
   echoInfo(node = this.echo) { return this.state.echos.find((e) => e.echo === node); }
   toast(t) { const d = h('div', { class: 'toast' }, t); this.shadowRoot.append(d); setTimeout(() => d.remove(), 3500); }
 
   async load() {
     try {
-      const r = await this.ws({ type: 'echo_local/home/list' });
-      this.state = { echos: r.echos, descriptors: r.descriptors, builtin: r.builtin, limits: r.limits, loaded: true, error: '' };
+      const r = await this.ws({ type: 'echo_local/list' });
+      this.state = { echos: r.echos, loaded: true, error: '' };
       if (!this.echo) this.echo = (r.echos[0] || {}).echo || null;
     } catch (e) {
       this.state = { ...this.state, loaded: true, error: (e && e.message) || String(e) };
     }
     this.render();
-    if (this.echo) this.select(this.echo, this.app);
-  }
-
-  // the apps with a Home on an Echo: Echo-Wall, the screen app it runs, those with a slot
-  appsOf(node) {
-    const info = this.echoInfo(node);
-    const slots = info ? info.slots : {};
-    const out = [ECHOWALL];
-    if (info && info.app && !out.includes(info.app)) out.push(info.app);
-    for (const a of Object.keys(slots || {})) if (!out.includes(a)) out.push(a);
-    return out.map((a) => ({ app: a, desc: this.desc(a), slot: (slots || {})[a] }));
-  }
-
-  async select(node, app) {
-    this.echo = node;
-    const apps = this.appsOf(node).map((x) => x.app);
-    const running = (this.echoInfo(node) || {}).app;
-    this.app = apps.includes(app) ? app : running && this.desc(running) ? running : ECHOWALL;
-    const info = this.echoInfo(node);
-    this.size = SIZES[Object.keys(SIZES).find((k) => info && info.title.startsWith(k)) || 'Echo Show 5'];
-    this.kiosk = null;
-    this.pages = null;                      // the new preview tells its own
-    await this.open(node, this.app);
-    if (info && this.tab === 'screen') this.loadKiosk();
-    this.apps = null;
-    if (info) this.loadApps();              // whether it has apps at all (an Echo Dot has none): the tab follows
-    this.loadLauncher(node);
-    this.render();
-  }
-
-  // a slot followed live: the saved layout from Home Assistant, a draft of our own
-  async open(node, app) {
-    const k = this.key(node, app);
-    if (this.drafts.has(k)) return;
-    const d = { saved: null, draft: null, incoming: null, sub: null };
-    this.drafts.set(k, d);
-    await new Promise((res) => {
-      d.sub = this._hass.connection.subscribeMessage((ev) => {
-        const lay = ev.layout || {};
-        if (d.saved == null || same(d.saved, d.draft)) { d.saved = clone(lay); d.draft = clone(lay); d.incoming = null; }
-        else if (!same(lay, d.saved)) d.incoming = clone(lay);   // the Echo changed it while we edit: offered
-        res();
-        if (this.key() === k) { this.refresh(); this.pushPreview(); }
-      }, { type: 'echo_local/home/subscribe', echo: node, app });
-      d.sub.catch((e) => { d.saved = {}; d.draft = {}; this.toast('Not readable: ' + ((e && e.message) || e)); res(); });
-    });
-  }
-
-  dirty(c = this.cur()) { return !!c && c.saved != null && !same(c.saved, c.draft); }
-
-  // a field changed: the toolbar and the preview follow; the form is left as it is (focus stays where it is)
-  changed(rebuild) {
-    if (rebuild) this.refresh(); else this.renderBar();
-    this.pushPreview();
-  }
-
-  // the draft changed or came anew: the form, the banner and the bar drawn again, the preview left alone (an iframe
-  // rebuilt or moved loads again: Flutter would start over)
-  refresh() {
-    const grid = this.shadowRoot.querySelector('.grid');
-    const c = this.cur();
-    if (!grid || grid.dataset.key !== this.key() + '|' + this.size || !c || c.draft == null) { this.render(); return; }
-    grid.firstChild.replaceWith(this.form(c, this.desc()));
-    this.shadowRoot.querySelector('.incoming').replaceWith(this.banner(c));
-    this.renderBar();
-  }
-
-  // the Echo's Android apps with their labels and icons, as Echo-Wall on it sent them: its Home's tiles in the preview,
-  // the icons in the Apps tab (hassmic's /api/apps knows packages and versions only)
-  async loadLauncher(echo) {
-    try {
-      const r = await this.ws({ type: 'echo_local/home/apps/get', echo });
-      this.launcher[echo] = r.apps || [];
-    } catch (e) { return; }                 // an older integration: none
-    if (echo !== this.echo) return;
-    const f = this.shadowRoot.querySelector('iframe');
-    if (f && f.contentWindow) f.contentWindow.postMessage({ type: 'echo-local-apps', apps: this.launcher[echo] }, location.origin);
-    if (this.tab === 'apps') { const t = this.shadowRoot.querySelector('.appstab'); if (t) t.replaceWith(this.appsTab()); }
-  }
-
-  pushPreview() {
-    const f = this.shadowRoot.querySelector('iframe');
-    const c = this.cur();
-    if (f && f.contentWindow && c) f.contentWindow.postMessage({ type: 'echo-local-layout', layout: c.draft }, location.origin);
-    const sk = this.shadowRoot.querySelector('.sketch');
-    if (sk) sk.replaceWith(this.sketch());
-  }
-
-  async save() {
-    const c = this.cur(); if (!c) return;
-    try {
-      const lay = await this.ws({ type: 'echo_local/home/set', echo: this.echo, app: this.app, layout: c.draft });
-      c.saved = clone(lay); c.draft = clone(lay); c.incoming = null;
-      this.toast('Saved: the Echo shows it now');
-      this.refreshList();
-    } catch (e) { this.toast('Not saved: ' + ((e && e.message) || e)); }
-    this.refresh();
+    if (this.echo) this.select(this.echo);
   }
 
   async refreshList() {
-    try {
-      const r = await this.ws({ type: 'echo_local/home/list' });
-      Object.assign(this.state, { echos: r.echos, descriptors: r.descriptors });
-      this.renderNav();
-      if (this.tab === 'home') this.renderBar();
-    } catch (e) { /* the next save tells */ }
+    try { const r = await this.ws({ type: 'echo_local/list' }); this.state.echos = r.echos; this.renderNav(); } catch (e) { /* the next save tells */ }
   }
 
-  // ---------------------------------------------------------------- import and export
-
-  exportFile() {
-    const c = this.cur(); if (!c) return;
-    const d = this.desc() || { fields: [] };
-    const common = {};
-    for (const f of d.fields) if (f.common && f.key in c.draft) common[f.common] = c.draft[f.key];
-    const info = this.echoInfo();
-    const doc = { format: FORMAT, version: 1, app: this.app, app_name: d.name || this.app, echo: this.echo, echo_name: info ? info.title : this.echo,
-      exported: new Date().toISOString(), layout: c.draft, common };
-    const blob = new Blob([JSON.stringify(doc, null, 2)], { type: 'application/json' });
-    const a = h('a', { href: URL.createObjectURL(blob), download: `${(info ? info.title : this.echo).replace(/[^\w-]+/g, '-')}-${(d.name || this.app).replace(/[^\w-]+/g, '-')}.echohome.json` });
-    this.shadowRoot.append(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
-  }
-
-  pickFile() {
-    const i = h('input', { type: 'file', accept: '.json,application/json', style: 'display:none' });
-    i.onchange = async () => {
-      const f = i.files[0]; i.remove(); if (!f) return;
-      try {
-        if (f.size > 256 * 1024) throw new Error('larger than a home screen can be');
-        const doc = JSON.parse(await f.text());
-        if (doc.format !== FORMAT || typeof doc.layout !== 'object') throw new Error('not an Echo Local home screen file');
-        this.take(doc.app, doc.layout, doc.common, `${doc.app_name || doc.app} from ${doc.echo_name || 'a file'}`);
-      } catch (e) { this.toast('Not imported: ' + e.message); }
-    };
-    this.shadowRoot.append(i); i.click();
-  }
-
-  // another app's Home into this one's: the same app as it is, another by what both have (descriptor "common")
-  take(app, layout, common, what) {
-    const c = this.cur(); if (!c) return;
-    let next;
-    if (app === this.app) next = clone(layout);
-    else {
-      const src = this.desc(app, this._from || this.echo);
-      const shared = Object.assign({}, common || {});
-      if (src) for (const f of src.fields) if (f.common && f.key in layout && !(f.common in shared)) shared[f.common] = layout[f.key];
-      next = Object.assign(clone(c.draft), this.fromCommon(shared));
-      if (!Object.keys(shared).length) { this.toast(`Nothing ${what} shares with ${(this.desc() || {}).name || this.app}`); return; }
-    }
-    c.draft = next;
-    const unknown = this.ids(next).filter((x) => !this._hass.states[x]);
-    this.toast(`Imported ${what}: Save to send it to the Echo` + (unknown.length ? ` (${unknown.length} entities not in this Home Assistant, kept)` : ''));
-    this.changed(true);
-  }
-
-  fromCommon(shared) {
-    const out = {};
-    for (const f of (this.desc() || { fields: [] }).fields) {
-      if (!f.common || !(f.common in shared)) continue;
-      const v = shared[f.common];
-      if (f.type === 'select' && !(f.options || []).some((o) => o[0] === v)) continue;
-      out[f.key] = clone(v);
-    }
-    return out;
-  }
-
-  ids(lay) {
-    const out = [];
-    for (const f of (this.desc() || { fields: [] }).fields) {
-      const v = lay[f.key];
-      if (f.type === 'entities' && Array.isArray(v)) out.push(...v);
-      else if (f.type === 'entity' && v && v !== f.none) out.push(v);
-      else if (f.type === 'area_order' && v) for (const l of Object.values(v)) out.push(...l);
-    }
-    return [...new Set(out)];
-  }
-
-  async fromSlot(node, app) {
-    try {
-      const lay = await this.ws({ type: 'echo_local/home/get', echo: node, app });
-      this._from = node;
-      const name = (this.echoInfo(node) || {}).title || node;
-      this.take(app, lay, null, `${(this.desc(app, node) || {}).name || app} of ${name}`);
-      this._from = null;
-    } catch (e) { this.toast('Not read: ' + ((e && e.message) || e)); }
-  }
-
-  async copyTo(nodes) {
-    const c = this.cur(); if (!c || !nodes.length) return;
-    let n = 0;
-    for (const node of nodes) {
-      try { await this.ws({ type: 'echo_local/home/set', echo: node, app: this.app, layout: c.draft }); n++; }
-      catch (e) { this.toast(`${node}: ${(e && e.message) || e}`); }
-    }
-    this.toast(`Copied to ${n} Echo${n === 1 ? '' : 's'}`);
-    this.refreshList();
-  }
-
-  async reset() {
-    const d = this.desc();
-    if (!confirm(`Forget this Echo's ${d ? d.name : this.app} layout? It starts again from the app's own choice.`)) return;
-    await this.ws({ type: 'echo_local/home/delete', echo: this.echo, app: this.app }).catch((e) => this.toast(String(e && e.message || e)));
-    const c = this.cur(); if (c) { c.saved = null; c.draft = null; }
-    this.refreshList();
+  select(node) {
+    this.echo = node;
+    this.kiosk = null;
+    this.apps = null;
+    this.loadKiosk();
+    this.loadApps();                        // whether it has apps at all (an Echo Dot has none): the tab follows
+    this.render();
   }
 
   // ---------------------------------------------------------------- the screen's options
@@ -498,6 +251,9 @@ class EchoLocalPanel extends HTMLElement {
 
   // ---------------------------------------------------------------- drawing
 
+
+  // ---------------------------------------------------------------- drawing
+
   render() {
     const root = this.shadowRoot;
     root.textContent = '';
@@ -507,8 +263,7 @@ class EchoLocalPanel extends HTMLElement {
       h('h1', null, 'Echo Local')));
     if (!this.state.loaded) { root.append(h('main', null, h('div', { class: 'empty' }, 'Loading…'))); return; }
     if (this.state.error) { root.append(h('main', null, h('div', { class: 'banner' }, 'Echo Local did not answer: ' + this.state.error))); return; }
-    const wrap = h('div', { class: 'wrap' }, h('nav'), h('main'));
-    root.append(wrap);
+    root.append(h('div', { class: 'wrap' }, h('nav'), h('main')));
     this.renderNav();
     this.renderMain();
   }
@@ -518,10 +273,10 @@ class EchoLocalPanel extends HTMLElement {
     nav.textContent = '';
     nav.append(h('div', { class: 'lbl' }, 'Echos'));
     for (const e of this.state.echos) {
-      const apps = this.appsOf(e.echo).filter((a) => a.slot).map((a) => (a.desc && a.desc.name) || a.app);
-      nav.append(h('button', { class: 'echo' + (e.echo === this.echo ? ' sel' : ''), onclick: () => this.select(e.echo, this.app) },
+      const app = (KNOWN_APPS.find((a) => a[0] === e.app) || [e.app, e.app])[1];
+      nav.append(h('button', { class: 'echo' + (e.echo === this.echo ? ' sel' : ''), onclick: () => this.select(e.echo) },
         h('span', { class: 'dev' + (e.kiosk ? ' on' : '') }),
-        h('span', null, h('div', { class: 't' }, e.title), h('div', { class: 's' }, (e.kiosk ? 'Screen on' : 'Screen off') + (apps.length ? ' · ' + apps.join(', ') : '')))));
+        h('span', null, h('div', { class: 't' }, e.title), h('div', { class: 's' }, (e.kiosk ? 'Screen on' : 'Screen off') + (e.kiosk && app ? ' · ' + app : '')))));
     }
     if (!this.state.echos.length) nav.append(h('div', { class: 'empty' }, 'No Echo added yet: Settings › Devices & services › Add integration › Echo Local.'));
   }
@@ -529,230 +284,13 @@ class EchoLocalPanel extends HTMLElement {
   renderMain() {
     const main = this.shadowRoot.querySelector('main'); if (!main) return;
     main.textContent = '';
-    const isEcho = !!this.echoInfo();
-    if (!isEcho) { main.append(h('div', { class: 'empty' }, 'Add an Echo Show to Echo Local first.')); return; }
+    if (!this.echoInfo()) { main.append(h('div', { class: 'empty' }, 'Add an Echo to Echo Local first.')); return; }
+    const hasApps = !(this.apps && this.apps.none);
+    if (this.tab === 'apps' && !hasApps) this.tab = 'screen';
     main.append(h('div', { class: 'tabs' },
-      h('button', { class: 'tab' + (this.tab === 'home' ? ' sel' : ''), onclick: () => { this.tab = 'home'; this.render(); } }, 'Home screen'),
-      isEcho && h('button', { class: 'tab' + (this.tab === 'screen' ? ' sel' : ''), onclick: () => { this.tab = 'screen'; if (!this.kiosk) this.loadKiosk(); this.render(); } }, 'Screen'),
-      isEcho && !(this.apps && this.apps.none) && h('button', { class: 'tab' + (this.tab === 'apps' ? ' sel' : ''), onclick: () => { this.tab = 'apps'; this.loadApps(); this.render(); } }, 'Apps')));
-    if (this.tab === 'screen' && isEcho) { main.append(this.screenTab()); return; }
-    if (this.tab === 'apps' && isEcho) { main.append(this.appsTab()); return; }
-    main.append(this.homeTab());
-  }
-
-  // ---- Home screen
-
-  homeTab() {
-    const box = h('div');
-    const apps = h('div', { class: 'apps' });
-    const info = this.echoInfo();
-    for (const a of this.appsOf(this.echo)) {
-      const running = info && (info.app || '') === a.app;
-      apps.append(h('button', { class: 'chip' + (a.app === this.app ? ' sel' : ''), title: a.app, onclick: async () => { this.app = a.app; await this.open(this.echo, a.app); this.render(); } },
-        h('span', { class: 'dot' + (a.slot ? '' : ' none') }), (a.desc && a.desc.name) || a.app, running ? ' · on the screen' : ''));
-    }
-    box.append(apps);
-    const c = this.cur();
-    if (!c || c.draft == null) {         // being read (a reset: until the subscription brings the empty one)
-      if (!c) this.open(this.echo, this.app).then(() => this.render());
-      box.append(h('div', { class: 'empty' }, 'Loading…'));
-      return box;
-    }
-    box.append(this.banner(c));
-    box.append(h('div', { class: 'bar' }));
-    const d = this.desc();
-    const grid = h('div', { class: 'grid' }, this.form(c, d), this.previewPane(c, d));
-    grid.dataset.key = this.key() + '|' + this.size;
-    box.append(grid);
-    queueMicrotask(() => this.renderBar());
-    return box;
-  }
-
-  banner(c) {
-    const b = h('div', { class: 'incoming' });
-    if (c.incoming) b.append(h('div', { class: 'banner' },
-      h('span', { class: 'grow' }, 'The Echo saved a change of its own while you edit (someone arranged it on the screen).'),
-      h('button', { class: 'btn small', onclick: () => { c.saved = c.incoming; c.draft = clone(c.incoming); c.incoming = null; this.changed(true); } }, 'Take the Echo’s'),
-      h('button', { class: 'btn small', onclick: () => { c.saved = c.incoming; c.incoming = null; this.changed(true); } }, 'Keep mine')));
-    return b;
-  }
-
-  renderBar() {
-    const bar = this.shadowRoot.querySelector('.bar'); if (!bar) return;
-    const c = this.cur(); if (!c) return;
-    bar.textContent = '';
-    const dirty = this.dirty(c);
-    const slot = this.appsOf(this.echo).find((a) => a.app === this.app);
-    const st = slot && slot.slot ? `Saved ${ago(slot.slot.updated)}${slot.slot.by === 'app' ? ' by the Echo' : slot.slot.by === 'panel' ? ' here' : slot.slot.by ? ' by ' + slot.slot.by : ''}` : 'Nothing saved yet: the app’s own choice';
-    bar.append(...[
-      h('button', { class: 'btn primary', disabled: !dirty, onclick: () => this.save() }, 'Save'),
-      h('button', { class: 'btn', disabled: !dirty, onclick: () => { c.draft = clone(c.saved); this.changed(true); } }, 'Revert'),
-      h('span', { class: 'status' + (dirty ? ' dirty' : '') }, dirty ? 'Unsaved changes' : st),
-      h('span', { class: 'grow' }),
-      this.menu('Import', () => {
-        const items = [h('button', { onclick: () => this.pickFile() }, 'From a file…')];
-        const others = this.appsOf(this.echo).filter((a) => a.app !== this.app && a.slot);
-        if (others.length) items.push(h('div', { class: 'sep' }), h('div', { class: 'h' }, 'Another app on this Echo'),
-          ...others.map((a) => h('button', { onclick: () => this.fromSlot(this.echo, a.app) }, (a.desc && a.desc.name) || a.app)));
-        const echos = this.state.echos.filter((e) => e.echo !== this.echo && Object.keys(e.slots).length);
-        if (echos.length) items.push(h('div', { class: 'sep' }), h('div', { class: 'h' }, 'Another Echo'),
-          ...echos.flatMap((e) => Object.keys(e.slots).map((a) => h('button', { onclick: () => this.fromSlot(e.echo, a) }, `${e.title} · ${(this.desc(a) || {}).name || a}`))));
-        return items;
-      }),
-      h('button', { class: 'btn', onclick: () => this.exportFile() }, 'Export'),
-      this.state.echos.some((e) => e.echo !== this.echo) ? this.menu('Copy to', () => {
-        const rest = this.state.echos.filter((e) => e.echo !== this.echo);
-        return [h('div', { class: 'h' }, 'Saves this draft there as it is'),
-          ...rest.map((e) => h('button', { onclick: () => this.copyTo([e.echo]) }, e.title)),
-          rest.length > 1 && h('button', { onclick: () => this.copyTo(rest.map((e) => e.echo)) }, 'Every other Echo')];
-      }) : null,
-      h('button', { class: 'btn danger', disabled: !(slot && slot.slot), onclick: () => this.reset() }, 'Reset')].filter(Boolean));
-  }
-
-  menu(label, items) {
-    const w = h('span', { class: 'menuwrap' });
-    const b = h('button', { class: 'btn', onclick: (ev) => {
-      ev.stopPropagation();
-      const open = w.querySelector('.pop'); if (open) { open.remove(); return; }
-      const pop = h('div', { class: 'pop' }, items());
-      pop.addEventListener('click', () => pop.remove());
-      w.append(pop);
-      const close = (e) => { if (!e.composedPath().includes(w)) { pop.remove(); removeEventListener('click', close, true); } };
-      addEventListener('click', close, true);
-    } }, label + ' ▾');
-    w.append(b);
-    return w;
-  }
-
-  form(c, d) {
-    const card = h('div', { class: 'card' });
-    if (!d) {
-      card.append(h('h2', null, this.app),
-        h('div', { class: 'about' }, 'This app has not described its layout (echo_local/home/describe, docs/home-screens.md): it can be exported, imported and copied, and edited as JSON.'),
-        this.jsonRow(c));
-      return card;
-    }
-    card.append(h('h2', null, d.name), d.about && h('div', { class: 'about' }, d.about));
-    for (const f of d.fields) {
-      card.append(this.field(c, f));
-      if (this.app === ECHOWALL && f.key === 'dashboard') card.append(this.pagesRow(c));
-    }
-    card.append(h('details', { class: 'room', style: 'margin-top:12px' }, h('summary', null, h('span', { class: 'n' }, 'All of it, as JSON')), h('div', { style: 'padding:0 12px 12px' }, this.jsonRow(c))));
-    return card;
-  }
-
-  // Echo-Wall's pages after Home (the preview tells which there are: rooms, a dashboard's sections, the owner's own):
-  // in their order, moved up and down (page_order), the owner's renamed or deleted (custom_pages), the others taken
-  // off and shown again (hidden_pages), a new one added.  All of it in the draft: Save sends it to the Echo
-  pagesRow(c) {
-    const lay = c.draft;
-    const row = h('div', { class: 'row pagesrow' }, h('div', { class: 'head' }, h('span', { class: 'name' }, 'Pages after Home')));
-    const pages = this.pages;
-    if (!pages) { row.append(h('div', { class: 'help' }, 'The preview lists them once it has started.')); return row; }
-    const done = () => this.changed(true);
-    const order = () => pages.map((p) => p.group);
-    const own = (g) => (lay.custom_pages || []).find((p) => 'page:' + p.id === g);
-    const list = h('div', { class: 'list' });
-    if (!pages.length) list.append(h('div', { class: 'empty' }, 'None: Home only.'));
-    pages.forEach((p, i) => {
-      const move = (d) => { const o = order(); [o[i], o[i + d]] = [o[i + d], o[i]]; lay.page_order = o; this.pages = o.map((g) => pages.find((x) => x.group === g)); done(); };
-      const name = p.kind === 'own'
-        ? h('input', { class: 'pagename', value: p.title, 'aria-label': 'Page name', onchange: (e) => { const cp = own(p.group); if (cp && e.target.value.trim()) { cp.name = e.target.value.trim(); done(); } } })
-        : h('div', null, p.title);
-      list.append(h('div', { class: 'item page' + (p.hidden ? ' off' : '') },
-        h('div', { class: 'nm' }, name, h('div', { class: 'id' }, (p.kind === 'own' ? 'Your page' : p.kind === 'dashboard' ? 'Dashboard section' : 'Room') + (p.hidden ? ' · taken off' : ''))),
-        h('button', { class: 'btn small', disabled: i === 0, title: 'Earlier', 'aria-label': 'Move up', onclick: () => move(-1) }, '↑'),
-        h('button', { class: 'btn small', disabled: i === pages.length - 1, title: 'Later', 'aria-label': 'Move down', onclick: () => move(1) }, '↓'),
-        p.kind === 'own'
-          ? h('button', { class: 'btn small danger', onclick: () => {
-              if (!confirm(`Delete the page “${p.title}”? Its cards go with it.`)) return;
-              lay.custom_pages = (lay.custom_pages || []).filter((x) => 'page:' + x.id !== p.group);
-              for (const k of ['cards', 'place', 'sizes', 'exclude']) if (lay[k]) delete lay[k][p.group];
-              lay.page_order = (lay.page_order || []).filter((g) => g !== p.group);
-              this.pages = pages.filter((x) => x.group !== p.group); done(); } }, 'Delete')
-          : h('button', { class: 'btn small' + (p.hidden ? '' : ' danger'), onclick: () => {
-              const hp = new Set(lay.hidden_pages || []); p.hidden ? hp.delete(p.group) : hp.add(p.group);
-              lay.hidden_pages = [...hp]; p.hidden = !p.hidden; done(); } }, p.hidden ? 'Show' : 'Remove')));
-    });
-    const nm = h('input', { class: 'pagename', placeholder: 'New page’s name' });
-    const add = () => {
-      const n = nm.value.trim() || `Page ${(lay.custom_pages || []).length + 1}`;
-      const id = Date.now().toString(36);
-      lay.custom_pages = [...(lay.custom_pages || []), { id, name: n }];
-      lay.page_order = [...order(), 'page:' + id];
-      this.pages = [...pages, { group: 'page:' + id, title: n, kind: 'own', hidden: false }];
-      done();
-    };
-    nm.addEventListener('keydown', (e) => { if (e.key === 'Enter') add(); });
-    row.append(list, h('div', { class: 'addpage' }, nm, h('button', { class: 'btn small', onclick: add }, '+ Add page')),
-      h('div', { class: 'help' }, 'A page of your own starts empty: add cards to it in the preview’s edit mode (+ Add) or on the Echo. A room or a dashboard section taken off stays off until shown again.'));
-    return row;
-  }
-
-  jsonRow(c) {
-    const t = h('textarea', { spellcheck: false });
-    t.value = JSON.stringify(c.draft, null, 2);
-    const msg = h('div', { class: 'help' });
-    t.addEventListener('input', () => {
-      try { c.draft = JSON.parse(t.value); msg.textContent = ''; this.changed(false); } catch (e) { msg.textContent = 'Not JSON yet: ' + e.message; }
-    });
-    t.addEventListener('change', () => this.changed(true));
-    return h('div', { class: 'row' }, t, msg);
-  }
-
-  field(c, f) {
-    const lay = c.draft;
-    const has = f.key in lay && lay[f.key] !== undefined;
-    const val = has ? lay[f.key] : f.default;
-    const set = (v, rebuild) => { if (v === undefined) delete lay[f.key]; else lay[f.key] = v; this.changed(rebuild); };
-    const row = h('div', { class: 'row' });
-    const head = h('div', { class: 'head' }, h('span', { class: 'name' }, f.label || f.key));
-    row.append(head);
-    if (f.type === 'select') {
-      const opts = f.options || [];
-      if (opts.length <= 4) {
-        const seg = h('div', { class: 'seg' });
-        for (const [v, l] of opts) seg.append(h('button', { class: v === val ? 'sel' : '', onclick: () => { set(v); [...seg.children].forEach((b) => b.classList.toggle('sel', b.textContent === l)); } }, l));
-        head.append(seg);
-      } else {
-        const s = h('select', { onchange: () => set(s.value) }, opts.map(([v, l]) => h('option', { value: v, selected: v === val }, l)));
-        head.append(s);
-      }
-    } else if (f.type === 'number') {
-      const i = h('input', { type: 'number', min: f.min, max: f.max, step: f.step || 1 });
-      i.value = val == null ? '' : val;
-      i.addEventListener('input', () => { if (i.value === '') set(undefined); else if (i.checkValidity()) set(+i.value); });
-      head.append(i, f.unit ? h('span', { class: 'note' }, f.unit) : null);
-    } else if (f.type === 'bool') {
-      head.append(this.switch(!!val, (on) => set(on)));
-    } else if (f.type === 'dashboard') {
-      // the Home Assistant dashboards (lovelace/dashboards/list) and Overview; the field's value is the url path
-      const s = h('select', { onchange: () => set(s.value || undefined) }, h('option', { value: '' }, 'None: a page per room'));
-      const add = (v, l) => s.append(h('option', { value: v, selected: v === (val || '') }, l));
-      add('lovelace', 'Overview');
-      this.ws({ type: 'lovelace/dashboards/list' }).then((ds) => {
-        for (const d of ds) add(d.url_path, d.title || d.url_path);
-        if (val && ![...s.options].some((o) => o.value === val)) add(val, val + ' (not found)');
-        s.value = val || '';
-      }).catch(() => { if (val && val !== 'lovelace') add(val, val); s.value = val || ''; });
-      head.append(s);
-    } else if (f.type === 'text') {
-      const i = h('input', { type: 'text' }); i.value = val || '';
-      i.addEventListener('input', () => set(i.value));
-      head.append(i);
-    } else if (f.type === 'entity') {
-      head.append(this.entityInput(val && val !== f.none ? val : '', f.domain, (v) => set(v || (f.none != null ? f.none : undefined)), f.none != null ? 'None' : 'The app picks'));
-    } else if (f.type === 'entities') {
-      const auto = f.nullable && !Array.isArray(val);
-      if (f.nullable) head.append(h('span', { class: 'note' }, 'The app picks'), this.switch(auto, (on) => set(on ? null : this.autoPick(), true)));
-      if (!auto) row.append(this.entityList(Array.isArray(val) ? val : [], f.ordered !== false, (list, rebuild) => set(list, rebuild)));
-    } else if (f.type === 'strings') {
-      row.append(this.stringList(Array.isArray(val) ? val : [], (list) => set(list, true)));
-    } else if (f.type === 'area_order') {
-      row.append(this.areaOrder(val || {}, (v, rebuild) => set(v, rebuild)));
-    }
-    if (f.help) row.append(h('div', { class: 'help' }, f.help));
-    return row;
+      h('button', { class: 'tab' + (this.tab === 'screen' ? ' sel' : ''), onclick: () => { this.tab = 'screen'; if (!this.kiosk) this.loadKiosk(); this.render(); } }, 'Screen'),
+      hasApps && h('button', { class: 'tab' + (this.tab === 'apps' ? ' sel' : ''), onclick: () => { this.tab = 'apps'; this.loadApps(); this.render(); } }, 'Apps')));
+    main.append(this.tab === 'apps' ? this.appsTab() : this.screenTab());
   }
 
   switch(on, cb) {
@@ -762,178 +300,6 @@ class EchoLocalPanel extends HTMLElement {
   }
 
   // what Echo-Wall picks itself (a thermostat, a camera, scenes, locks): a start for a list of one's own
-  autoPick() {
-    const s = this._hass.states, ids = Object.keys(s);
-    const out = [];
-    const cl = ids.find((x) => domainOf(x) === 'climate' && s[x].attributes.temperature != null); if (cl) out.push(cl);
-    const cam = ids.find((x) => domainOf(x) === 'camera' && s[x].state !== 'unavailable'); if (cam) out.push(cam);
-    out.push(...ids.filter((x) => domainOf(x) === 'scene').slice(0, 3), ...ids.filter((x) => domainOf(x) === 'lock'));
-    return out;
-  }
-
-  name(id) { const s = this._hass.states[id]; return (s && s.attributes.friendly_name) || id; }
-
-  entityInput(val, domain, cb, placeholder) {
-    const listId = 'el-' + Math.random().toString(36).slice(2);
-    const i = h('input', { type: 'text', list: listId, placeholder: placeholder || 'entity id or name', style: 'min-width:220px' });
-    i.value = val || '';
-    const dl = h('datalist', { id: listId });
-    for (const id of Object.keys(this._hass.states).filter((x) => !domain || domainOf(x) === domain).sort())
-      dl.append(h('option', { value: id }, this.name(id)));
-    i.addEventListener('change', () => {
-      const v = i.value.trim();
-      const id = v === '' || this._hass.states[v] ? v : Object.keys(this._hass.states).find((x) => this.name(x).toLowerCase() === v.toLowerCase()) || v;
-      i.value = id; cb(id);
-    });
-    return h('span', null, i, dl);
-  }
-
-  // a list of entities: drag (or the arrows) to order, × to remove, a picker to add
-  entityList(list, ordered, cb) {
-    const wrap = h('div');
-    const draw = () => {
-      wrap.textContent = '';
-      const box = h('div', { class: 'list' });
-      if (!list.length) box.append(h('div', { class: 'empty' }, 'None yet.'));
-      list.forEach((id, i) => {
-        const known = !!this._hass.states[id];
-        const it = h('div', { class: 'item' + (known ? '' : ' unknown'), draggable: ordered ? 'true' : null },
-          ordered && h('span', { class: 'grip', title: 'Drag' }, '⠿'),
-          h('div', { class: 'nm' }, h('div', null, this.name(id)), h('div', { class: 'id' }, known ? id : id + ' · not in this Home Assistant')),
-          ordered && h('button', { class: 'mini', title: 'Up', disabled: i === 0, onclick: () => { list.splice(i - 1, 0, list.splice(i, 1)[0]); cb(list); draw(); } }, '↑'),
-          ordered && h('button', { class: 'mini', title: 'Down', disabled: i === list.length - 1, onclick: () => { list.splice(i + 1, 0, list.splice(i, 1)[0]); cb(list); draw(); } }, '↓'),
-          h('button', { class: 'mini', title: 'Remove', onclick: () => { list.splice(i, 1); cb(list); draw(); } }, '×'));
-        if (ordered) this.dnd(it, i, list, () => { cb(list); draw(); });
-        box.append(it);
-      });
-      wrap.append(box);
-      const add = h('div', { class: 'add' });
-      add.append(this.entityInput('', null, (v) => { if (v && !list.includes(v)) { list.push(v); cb(list); draw(); } }, 'Add: entity id or name'));
-      wrap.append(add);
-    };
-    list = list.slice(); draw();
-    return wrap;
-  }
-
-  dnd(it, i, list, done) {
-    it.addEventListener('dragstart', (ev) => { this._drag = { list, i }; it.classList.add('drag'); ev.dataTransfer.effectAllowed = 'move'; ev.dataTransfer.setData('text/plain', String(i)); });
-    it.addEventListener('dragend', () => { it.classList.remove('drag'); this._drag = null; });
-    it.addEventListener('dragover', (ev) => { if (this._drag && this._drag.list === list) { ev.preventDefault(); it.classList.add('over'); } });
-    it.addEventListener('dragleave', () => it.classList.remove('over'));
-    it.addEventListener('drop', (ev) => {
-      ev.preventDefault(); it.classList.remove('over');
-      const g = this._drag; if (!g || g.list !== list || g.i === i) return;
-      const [x] = list.splice(g.i, 1); list.splice(i, 0, x); done();
-    });
-  }
-
-  stringList(list, cb) {
-    list = list.slice();
-    const wrap = h('div', { class: 'apps', style: 'margin-top:8px' });
-    const draw = () => {
-      wrap.textContent = '';
-      list.forEach((s, i) => wrap.append(h('span', { class: 'chip' }, s, h('button', { class: 'mini', onclick: () => { list.splice(i, 1); cb(list); draw(); } }, '×'))));
-      const i = h('input', { type: 'text', placeholder: 'Add…', style: 'width:140px' });
-      i.addEventListener('change', () => { const v = i.value.trim(); if (v && !list.includes(v)) { list.push(v); cb(list); draw(); } });
-      wrap.append(i);
-    };
-    draw();
-    return wrap;
-  }
-
-  // each room's tiles in order: Home Assistant's areas, their entities (by entity or device area), the saved order first
-  areaOrder(order, cb) {
-    order = clone(order);
-    const H = this._hass;
-    const areas = Object.values(H.areas || {}).sort((a, b) => a.name.localeCompare(b.name));
-    const areaOf = (id) => { const e = (H.entities || {})[id]; if (!e) return null; return e.area_id || (e.device_id && (H.devices || {})[e.device_id] ? H.devices[e.device_id].area_id : null); };
-    const TILE = ['light', 'switch', 'fan', 'cover', 'lock', 'media_player', 'climate', 'binary_sensor', 'scene', 'script', 'camera'];
-    const wrap = h('div');
-    if (!areas.length) { wrap.append(h('div', { class: 'empty' }, 'No areas in Home Assistant: rooms come from them.')); return wrap; }
-    for (const a of areas) {
-      const ids = Object.keys(H.states).filter((x) => areaOf(x) === a.area_id && TILE.includes(domainOf(x)) && !(H.entities[x] || {}).hidden);
-      const own = order[a.area_id] || [];
-      const list = [...own.filter((x) => ids.includes(x) || !H.states[x]), ...ids.filter((x) => !own.includes(x)).sort((x, y) => this.name(x).localeCompare(this.name(y)))];
-      const d = h('details', { class: 'room' }, h('summary', null, h('span', { class: 'n' }, a.name), h('span', { class: 'note' }, own.length ? 'own order' : 'the app’s order'),
-        own.length ? h('button', { class: 'btn small', onclick: (ev) => { ev.preventDefault(); delete order[a.area_id]; cb(clone(order), true); } }, 'Reset') : null));
-      const box = h('div', { class: 'list' });
-      const draw = () => {
-        box.textContent = '';
-        list.forEach((id, i) => {
-          const it = h('div', { class: 'item', draggable: 'true' }, h('span', { class: 'grip' }, '⠿'),
-            h('div', { class: 'nm' }, h('div', null, this.name(id)), h('div', { class: 'id' }, id)),
-            h('button', { class: 'mini', disabled: i === 0, onclick: () => { list.splice(i - 1, 0, list.splice(i, 1)[0]); commit(); } }, '↑'),
-            h('button', { class: 'mini', disabled: i === list.length - 1, onclick: () => { list.splice(i + 1, 0, list.splice(i, 1)[0]); commit(); } }, '↓'));
-          this.dnd(it, i, list, commit);
-          box.append(it);
-        });
-        if (!list.length) box.append(h('div', { class: 'empty' }, 'Nothing for the screen in this room.'));
-      };
-      const commit = () => { order[a.area_id] = list.slice(); cb(clone(order)); draw(); };
-      draw();
-      d.append(box);
-      wrap.append(d);
-    }
-    return wrap;
-  }
-
-  previewPane(c, d) {
-    const [w, hgt] = this.size || SIZES['Echo Show 5'];
-    const pane = h('div', { class: 'preview' });
-    const vp = h('div', { class: 'vp' });
-    const screen = h('div', { class: 'screen' }, vp, h('div', { class: 'band' }));
-    pane.append(screen);
-    const fit = () => { const cw = vp.clientWidth || 560; vp.style.height = (cw * hgt / w) + 'px'; const f = vp.querySelector('iframe'); if (f) f.style.transform = `scale(${cw / w})`; };
-    if (d && d.preview && this.echo !== null) {
-      const src = `${d.preview}?echo=${encodeURIComponent(this.echo)}`;
-      const f = h('iframe', { src, title: 'Preview', style: `width:${w}px;height:${hgt}px` });
-      f.dataset.key = this.key();
-      f.addEventListener('load', () => { this.pushPreview(); if (this.editOnScreen) f.contentWindow.postMessage({ type: 'echo-local-editmode', on: true }, location.origin); });
-      vp.append(f);
-    } else {
-      vp.append(this.sketch());
-    }
-    new ResizeObserver(fit).observe(vp);
-    requestAnimationFrame(fit);
-    const sizeSel = h('select', { onchange: () => { this.size = SIZES[sizeSel.value]; this.render(); } },
-      Object.entries(SIZES).map(([k, v]) => h('option', { value: k, selected: same(v, this.size) }, `${k} (${v[0]}×${v[1]})`)));
-    const bar = h('div', { class: 'pbar' }, sizeSel);
-    if (d && d.preview) {
-      bar.append(h('label', { class: 'note', style: 'display:flex;gap:6px;align-items:center' },
-        this.switch(this.editOnScreen, (on) => { this.editOnScreen = on; const f = vp.querySelector('iframe'); if (f) f.contentWindow.postMessage({ type: 'echo-local-editmode', on }, location.origin); }),
-        'Edit on the screen: drag tiles, ★ for Home, − to hide'));
-      bar.append(h('label', { class: 'note', style: 'display:flex;gap:6px;align-items:center' },
-        this.switch(!!this.gallery, (on) => { this.gallery = on; const f = vp.querySelector('iframe'); if (f) f.contentWindow.postMessage({ type: 'echo-local-gallery', on }, location.origin); }),
-        'Card sizes: every card at every size, with your devices'));
-      bar.append(h('span', { class: 'note' }, 'The app itself, live with this Home Assistant’s states. Swipe sideways for the pages; hold a card for its menu.'));
-    } else {
-      bar.append(h('span', { class: 'note' }, 'A sketch of Home’s tiles: the app draws them its own way.'));
-    }
-    pane.append(bar);
-    return pane;
-  }
-
-  // other apps: their Home's order from the descriptor's common fields, as tiles
-  sketch() {
-    const c = this.cur(), d = this.desc();
-    const lay = (c && c.draft) || {};
-    let theme = 'amber', fav = null;
-    for (const f of (d || { fields: [] }).fields) {
-      if (f.common === 'theme') theme = lay[f.key] || f.default || theme;
-      if (f.common === 'favorites') fav = lay[f.key];
-    }
-    const box = h('div', { class: 'sketch ' + theme });
-    const big = (id) => ['climate', 'camera', 'media_player'].includes(domainOf(id));
-    box.append(h('div', { class: 'w big' }, h('span', { class: 'k' }, 'Clock'), new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })));
-    for (const id of (Array.isArray(fav) ? fav : this.autoPick()).slice(0, 12))
-      box.append(h('div', { class: 'w' + (big(id) ? ' big' : '') }, h('span', { class: 'k' }, domainOf(id)), this.name(id)));
-    if (!Array.isArray(fav)) box.append(h('div', { class: 'w', style: 'opacity:.6' }, h('span', { class: 'k' }, 'auto'), 'The app picks'));
-    return box;
-  }
-
-  // ---- Screen (kiosk.py's options)
-
-  // ---- Apps (apps.py; the Echo's apps.c): the owner's Android apps beside the screen app
 
   async loadApps() {
     const echo = this.echo;
@@ -969,11 +335,9 @@ class EchoLocalPanel extends HTMLElement {
     if (!a.apps.length) list.append(h('div', { class: 'empty' }, 'None yet: add one below.'));
     for (const app of a.apps.slice().sort((x, y) => x.package.localeCompare(y.package))) {
       const isScreen = app.package === screenApp;
-      const l = (this.launcher[this.echo] || []).find((x) => x.package === app.package);
       list.append(h('div', { class: 'item app' },
-        l && l.icon ? h('img', { class: 'appicon', src: 'data:image/png;base64,' + l.icon, alt: '' }) : h('div', { class: 'appicon none' }),
-        h('div', { class: 'nm' }, h('div', null, l ? l.label : app.package),
-          h('div', { class: 'id' }, (l ? app.package + ' · ' : '') + `version ${app.version}` + (isScreen ? ' · the screen app' : ''))),
+        h('div', { class: 'nm' }, h('div', null, app.package),
+          h('div', { class: 'id' }, `version ${app.version}` + (isScreen ? ' · the screen app' : ''))),
         h('span', { class: 'note' }, 'Internet'),
         this.switch(!!app.net, async (on) => {
           try { await this.ws({ type: 'echo_local/apps/net', echo: this.echo, package: app.package, on }); app.net = on; this.toast(`${app.package}: ${on ? 'may reach the internet' : 'kept off the internet'}`); }

@@ -23,8 +23,8 @@ from homeassistant.helpers.typing import ConfigType
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .api import DEFAULT_PORT, Echo, EchoAuthError, EchoError
-from . import apps, home, kiosk
-from .const import CARD_URL, CONF_KEY, DAY_KEYS, DOMAIN, PANEL_PATH, PANEL_URL, PREVIEW_URL, SCAN_INTERVAL_S
+from . import apps, kiosk, panel
+from .const import CARD_URL, CONF_KEY, DAY_KEYS, DOMAIN, PANEL_PATH, PANEL_URL, SCAN_INTERVAL_S
 
 _LOGGER = logging.getLogger(__name__)
 PLATFORMS = [Platform.SWITCH]
@@ -76,16 +76,15 @@ class EchoLocalCoordinator(DataUpdateCoordinator[dict]):
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     # the dashboard card, served from here and loaded on every dashboard
-    await home.async_setup(hass)          # the home screens' layouts (Echo-Wall, other screen apps) and their websocket commands
+    await panel.async_setup(hass)         # the sidebar panel's commands: the Echos, their screen's setup
     await apps.async_setup(hass)          # the owner's Android apps on an Echo Show: list, internet, add, remove
     fe = Path(__file__).parent / "frontend"
-    # the panel and Echo-Wall's preview: no login to fetch them (only code), their data then over the websocket with the
-    # panel's login.  The preview is cached by the browser: it changes only with the integration's version
+    # the card and the panel: no login to fetch them (only code), the panel's data then over the websocket with its login
     await hass.http.async_register_static_paths([StaticPathConfig(CARD_URL, str(fe / "echo-local-alarms-card.js"), False),
-                                                 StaticPathConfig(PANEL_URL, str(fe / "panel.js"), False),
-                                                 StaticPathConfig(PREVIEW_URL, str(fe / "echowall"), False)])
-    # the sidebar's "Echo Local": every Echo's screen and home screens, edited graphically (frontend/panel.js,
-    # docs/home-screens.md); administrators only, as the options it changes are
+                                                 StaticPathConfig(PANEL_URL, str(fe / "panel.js"), False)])
+    # the sidebar's "Echo Local": every Echo Show's screen (which pages, which app) and its Android apps (frontend/panel.js);
+    # administrators only, as the options it changes are.  A home screen app arranges its Home itself (Echo-Wall: its
+    # own integration)
     from homeassistant.components import panel_custom
     await panel_custom.async_register_panel(hass, frontend_url_path=PANEL_PATH, webcomponent_name="echo-local-panel",
                                             sidebar_title="Echo Local", sidebar_icon="mdi:tablet-dashboard",
