@@ -4,8 +4,9 @@ hassmic owns the Echo Show's screen only for its own pictures: the start's statu
 alarm, the clock. Everything else is a **screen app's**: an ordinary Android app that hassmic starts and gives the
 screen to. hassmic ships one, the Java kiosk (`tools/kiosk`, `io.github.gamer92000.echodotassist.kiosk`: web pages in a WebView, a switcher,
 a keyboard). Anyone can write another and install it with `adb install`; the Echo Local integration in Home Assistant
-names which one the Echo uses (Configure › "Screen app": its package). A Flutter template that does what the Java
-kiosk does lives at [Nt-f/Echo-Screen](https://github.com/Nt-f/Echo-Screen).
+names which one the Echo uses (Echo Local in the sidebar › Screen › "App", or Configure › "Screen app": its package).
+The Echo Show's Home is [Nt-f/Echo-Wall](https://github.com/Nt-f/Echo-Wall)'s (Flutter); a template that does what the
+Java kiosk does lives at [Nt-f/Echo-Screen](https://github.com/Nt-f/Echo-Screen).
 
 This is the whole contract between hassmic and a screen app.
 
@@ -107,8 +108,9 @@ GET http://127.0.0.1:28931/kiosk/state/<v>       a long poll: answers once the v
   or stops a timer, a press of 1.5 s stops, whoever draws the ring. Draw what stops it; do not act on it.
 - `h24`, `next_alarm`, `clock_set` (the Echo's clock came from Home Assistant): for a clock of the app's own.
 
-Screens whose `url` is `hassmic:<name>` are the app's to draw; so far `hassmic:clock`, the clock as idle screen (the
-integration's "Clock" screen). An app that cannot draw one leaves it out (hassmic's own kiosk does).
+Screens whose `url` is `hassmic:<name>` are the app's to draw: `hassmic:home`, the app's own Home (the integration's
+"Home" screen; Echo-Wall's WallView), and `hassmic:clock`, the clock as idle screen (the integration's "Clock"
+screen). An app that cannot draw one leaves it out (hassmic's own kiosk does: it shows web pages only).
 
 ## A Home of the app's own, kept in Home Assistant
 
@@ -122,8 +124,9 @@ echo_local/home/subscribe  {app: <package>}               the layout now and at 
 echo_local/home/set        {app: <package>, layout}       after an edit on the Echo
 ```
 
-The rules (when to send, when to take, what a descriptor says, the size cap, the file format) are in
-[home-screens.md](home-screens.md); Echo-Wall's `lib/home/layout_sync.dart` is the reference.
+The rules (when to send, when to take, what a descriptor says, the size cap, the file format, the preview's
+protocol for an app that wants to run in the panel as Echo-Wall does) are in [home-screens.md](home-screens.md);
+Echo-Wall's `lib/home/layout_sync.dart` and `lib/preview.dart` are the reference.
 
 ## What the Echo lacks
 

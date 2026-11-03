@@ -24,7 +24,7 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 
 from .api import DEFAULT_PORT, Echo, EchoAuthError, EchoError
 from . import home, kiosk
-from .const import CARD_URL, CONF_KEY, DAY_KEYS, DOMAIN, PANEL_PATH, PANEL_URL, SCAN_INTERVAL_S, WALL_URL
+from .const import CARD_URL, CONF_KEY, DAY_KEYS, DOMAIN, PANEL_PATH, PANEL_URL, PREVIEW_URL, SCAN_INTERVAL_S
 
 _LOGGER = logging.getLogger(__name__)
 PLATFORMS = [Platform.SWITCH]
@@ -76,13 +76,13 @@ class EchoLocalCoordinator(DataUpdateCoordinator[dict]):
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     # the dashboard card, served from here and loaded on every dashboard
-    await home.async_setup(hass)          # the home screens' layouts (wall panel, screen apps) and their websocket commands
+    await home.async_setup(hass)          # the home screens' layouts (Echo-Wall, other screen apps) and their websocket commands
     fe = Path(__file__).parent / "frontend"
-    # the wall panel: no login to fetch it (it is only a page), its data then over the websocket with the kiosk's token
+    # the panel and Echo-Wall's preview: no login to fetch them (only code), their data then over the websocket with the
+    # panel's login.  The preview is cached by the browser: it changes only with the integration's version
     await hass.http.async_register_static_paths([StaticPathConfig(CARD_URL, str(fe / "echo-local-alarms-card.js"), False),
-                                                 StaticPathConfig(WALL_URL, str(fe / "wall.html"), False),
-                                                 StaticPathConfig("/echo_local/wall.js", str(fe / "wall.js"), False),
-                                                 StaticPathConfig(PANEL_URL, str(fe / "panel.js"), False)])
+                                                 StaticPathConfig(PANEL_URL, str(fe / "panel.js"), False),
+                                                 StaticPathConfig(PREVIEW_URL, str(fe / "echowall"), False)])
     # the sidebar's "Echo Local": every Echo's screen and home screens, edited graphically (frontend/panel.js,
     # docs/home-screens.md); administrators only, as the options it changes are
     from homeassistant.components import panel_custom

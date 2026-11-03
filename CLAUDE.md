@@ -69,11 +69,11 @@ aioesphomeapi, wyoming, aiosendspin, noiseprotocol, aiohttp):
 .venv/bin/python tests/ha_real_end.py         # the Echo's end of audio in a real Home Assistant (stand-in STT and TTS as a
                                              # custom component): HA's STT stream ends with it, intent and reply follow
 .venv/bin/python tests/ha_real_alarms.py      # custom_components/echo_local (alarms integration and card) in a real HA
-.venv/bin/python tests/ha_real_kiosk.py       # the Echo Show's kiosk set up from the integration: user, token, screens,
-                                             # the wall panel in headless Chrome (build/test-logs/wall.png)
+.venv/bin/python tests/ha_real_kiosk.py       # the Echo Show's kiosk set up from the integration: user, token, screens
 .venv/bin/python tests/ha_real_home.py        # home screens (home.py) and the sidebar panel: the store migrated, slots per
-                                             # Echo and app, the kiosk user confined, the panel in headless Chrome:
-                                             # preview, import, Save, export (build/test-logs/panel*.png)
+                                             # Echo and app, the kiosk user confined, the panel in headless Chrome with
+                                             # Echo-Wall's own preview: its tiles, the draft, its edit mode, import, Save,
+                                             # export (build/test-logs/panel*.png)
 .venv/bin/python tests/ha_real_dropin.py      # the blueprint in a real Home Assistant (build/ha-venv, made by --setup;
                                              # skips without it) with four Echos, one the released build: replies, timing.
                                              # All of it in an `unshare -rn` namespace with only lo
@@ -285,14 +285,16 @@ No model `#ifdef`s in shared code: new differences become a board field, a `devi
   `io.github.gamer92000.echodotassist.action.SCREEN`; the Java kiosk by default, or the owner's, e.g. the Flutter template Nt-f/Echo-Screen)
   reads `GET /kiosk/config[/front|/back]` from 127.0.0.1 and only with its own uid (`kiosk_peer_ok`: /proc/net/tcp6) and injects
   `hassTokens` into HA's origin.  Setting `display_kiosk`: display_screen.c `am start`s the app (`kiosk_tick`) and closes
-  its own layer while the app is in front and it has nothing to show.  The wall panel is `frontend/wall.html`+`wall.js`
-  (its own page on HA's websocket, not a dashboard: memory, the Show 5 under 512 MB for all of it); its layout per Echo
-  and app in `home.py` (docs/home-screens.md: Store `echo_local.wall` v2, a slot per (Echo node, app: "wall" or a
-  screen app's package), descriptors per app (built in: wall, Echo-Wall; others `echo_local/home/describe`),
-  websocket `echo_local/home/list|get|set|subscribe|describe|delete`, `kiosk/get|set`; the kiosk user only at its own
-  Echo's slots, via `connection.user`), set by the sidebar panel "Echo Local" (`frontend/panel.js`, panel_custom,
-  admin: form + wall.html previewed in an iframe `?preview=1`, import/export `.echohome.json`, copy, the screen's
-  options), the options flow's "wall" step or the wall panel's edit mode (page dots held); Echo-Wall syncs its own
+  its own layer while the app is in front and it has nothing to show.  Home is the screen app's (`hassmic:home`, the
+  options' kind "wall"): Echo-Wall's WallView (Flutter, Nt-f/Echo-Wall); the web wall panel (wall.html) is gone.  Its
+  layout per Echo and app in `home.py` (docs/home-screens.md: Store `echo_local.wall` 2.2, the wall panel's layouts
+  migrated into Echo-Wall's; a slot per (Echo node, app package), descriptors per app (built in: Echo-Wall; others
+  `echo_local/home/describe`, kept per Echo), websocket `echo_local/home/list|get|set|subscribe|describe|delete`,
+  `kiosk/get|set`; the kiosk user only at its own Echo's slots, via `connection.user`), set by the sidebar panel "Echo
+  Local" (`frontend/panel.js`, panel_custom, admin: a form beside Echo-Wall itself built for the web,
+  `frontend/echowall/` from `tools/echowall-preview.sh` (Echo-Wall's `lib/preview.dart`, `lib/io/` for dart:io on the
+  web; rebuild and commit after WallView changes), its edit mode editing the draft; import/export `.echohome.json`,
+  copy, the screen's options) or Echo-Wall's own edit mode (page dots held); Echo-Wall syncs its own
   (`layout_sync.dart`).  `tests/ha_real_home.py`.  The start's status:
   `hassmic -Y <file>` (`display_splash`, main.sh `stage`), then display_screen.c's status screen until HA's link
   (`display_link`).

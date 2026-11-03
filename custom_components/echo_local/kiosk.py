@@ -1,15 +1,14 @@
 """The Echo Show's kiosk (src/hassmic/kiosk.c, tools/kiosk): what its screen shows, set up from here.
 
-The integration's options (config_flow.py OptionsFlow) pick the screens: the wall panel (frontend/wall.html: a page of
-its own on Home Assistant's websocket, light enough for the Show's memory), a dashboard of Home Assistant's own UI,
-Music Assistant, a page of one's own.  The Echo has no keyboard, so it gets a login of its own: a Home Assistant user
+The integration's options (config_flow.py OptionsFlow, or the sidebar panel's Screen tab) pick the screens: Home
+(hassmic:home, drawn by the screen app: Echo-Wall), the clock, a dashboard of Home Assistant's own UI, Music Assistant,
+a page of one's own.  The Echo has no keyboard, so it gets a login of its own: a Home Assistant user
 made for this Echo ("<Echo> kiosk", not an administrator unless the options say so) and a long-lived token of it, sealed
 for the Echo on the way.  Removing the integration's entry removes that user."""
 from __future__ import annotations
 
 import logging
 from datetime import timedelta
-from urllib.parse import quote
 
 from homeassistant.auth.const import GROUP_ID_ADMIN, GROUP_ID_USER
 from homeassistant.auth.models import TOKEN_TYPE_LONG_LIVED_ACCESS_TOKEN
@@ -18,7 +17,6 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.network import NoURLAvailableError, get_url
 
 from .api import Echo, EchoError
-from .const import WALL_URL
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -79,8 +77,8 @@ def screens(hass: HomeAssistant, entry: ConfigEntry) -> tuple[list[tuple[str, st
     for k in kinds:
         if k == "clock":                # drawn by a screen app that can (docs/screen-apps.md); hassmic's own kiosk skips it
             out.append((k, "Clock", "hassmic:clock"))
-        elif k == "wall":
-            out.append((k, "Home", f"{base}{WALL_URL}?echo={quote(entry.unique_id or '')}"))
+        elif k == "wall":               # the screen app's own Home (Echo-Wall's WallView; home.py keeps its layout)
+            out.append((k, "Home", "hassmic:home"))
         elif k == "dashboard":
             out.append((k, "Home Assistant", f"{base}/{(o.get(OPT_DASHBOARD) or 'lovelace').strip('/')}"))
         elif k == "music":

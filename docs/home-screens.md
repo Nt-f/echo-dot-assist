@@ -1,23 +1,28 @@
-# Home screens: the Echo Local panel, layouts per app, import and export
+# Home screens: the Echo Local panel, Echo-Wall's preview, import and export
 
 Status: **built** (2026-11-02). Integration side in `custom_components/echo_local/` (`home.py`, `frontend/panel.js`,
-the preview hooks in `frontend/wall.js`), app side in Echo-Wall (`lib/home/layout_sync.dart`), tested by
-`tests/ha_real_home.py` (a real Home Assistant, headless Chrome) and Echo-Wall's `test/layout_sync_test.dart`.
+`frontend/echowall/` = Echo-Wall built for the web by `tools/echowall-preview.sh`), app side in Echo-Wall
+(`lib/home/layout_sync.dart`, `lib/preview.dart`, `lib/io/`). Tested by `tests/ha_real_home.py` (a real Home
+Assistant, the panel and the preview in headless Chrome) and Echo-Wall's `test/layout_sync_test.dart`.
 
-An Echo Show's screen has a *Home*: the page of widgets and tiles the screen comes back to. Who draws it depends on the
-screen app (`docs/screen-apps.md`): hassmic's Java kiosk shows the wall panel (`frontend/wall.html`), Echo-Wall draws
-its own in Flutter, another app may draw another. Each Home has a layout (wallpaper, which tiles on Home and in what
-order, what is hidden, each room's order, the idle clock, the app's own extras). Before this, the wall panel's layout
-lived in Home Assistant (`wall.py`, one per Echo) and could be edited only on the Echo or through a form in the options
-flow; Echo-Wall's lived only in a file on the Echo, out of Home Assistant's reach.
+An Echo Show's screen has a *Home*: the page of widgets and tiles the screen comes back to. It is drawn by the screen
+app (`docs/screen-apps.md`), which is **Echo-Wall** (Flutter, Nt-f/Echo-Wall, package `io.github.nt_f.echowall`).
+Its layout (wallpaper, which tiles are on Home and in what order, what is hidden, each room's order, the clocks, where
+each tile was dragged on its grid) is kept on the Echo in the app's file and, with this, in Home Assistant, where the
+sidebar panel edits it.
+
+The web wall panel of before (`frontend/wall.html` + `wall.js`, shown by hassmic's Java kiosk) is **gone**: Echo-Wall
+replaced it. Its layouts were migrated into Echo-Wall's (below), and hassmic's Java kiosk now shows web pages only
+(Home Assistant's dashboards, Music Assistant, a page of one's own).
 
 What this adds:
 
-1. **A sidebar entry, "Echo Local"** (`/echo-local`, administrators only): every Echo, the Home of every app on it,
-   edited graphically beside a live preview, and the screen's options (which screens, the screen app, its settings).
-2. **One store for every app's Home** (`home.py`), a slot per Echo and app, followed live by the apps and the panel.
-3. **Export and import**: a Home to a file and back; from one app into another by what they share; copied to other
-   Echos.
+1. **A sidebar entry, "Echo Local"** (`/echo-local`, administrators only): every Echo, its Home edited in a form
+   beside **Echo-Wall itself**, running in the panel with this Home Assistant's devices, whose own edit mode (drag,
+   ★, −) edits the draft; and the screen's options.
+2. **One store for every screen app's Home** (`home.py`), a slot per Echo and app, followed live by the apps and the
+   panel.
+3. **Export and import**: a Home to a file and back; from another app by what they share; copied to other Echos.
 4. **Apps take part over Home Assistant's websocket**, with the login they already have: Echo-Wall sends its layout as
    it changes and follows what the panel saves.
 
@@ -26,39 +31,43 @@ What this adds:
 ```
                    Home Assistant                                              Echo Show
  ┌───────────────────────────────────────────────────────┐        ┌────────────────────────────────┐
- │ sidebar "Echo Local"  (frontend/panel.js)             │        │ screen app                     │
- │   Echos │ Home screen │ Screen                        │        │  Java kiosk ─ WebView:         │
- │         │  form from the descriptor  │ preview        │        │     wall.html (app "wall")     │
- │         │  Import ▾ Export Copy to ▾ │ (wall.html in  │        │  Echo-Wall (Flutter):          │
- │         │  Save Revert Reset         │  an iframe)    │        │     layout.json + layout_sync  │
- │   admin's websocket                                   │        │  the kiosk user's token        │
- ├───────────────────────────────────────────────────────┤        │  (kiosk.py made it)            │
+ │ sidebar "Echo Local"  (frontend/panel.js)             │        │ Echo-Wall (Flutter)            │
+ │   Echos │ Home screen │ Screen                        │        │   WallView: Home, rooms        │
+ │         │  form from the descriptor │ preview: an     │        │   layout.json (its file)       │
+ │         │  Import ▾ Export Copy to ▾│ iframe of        │        │   layout_sync.dart             │
+ │         │  Save Revert Reset        │ /echo_local/     │        │   the kiosk user's token       │
+ │         │                           │ echowall/: the   │        │   (kiosk.py made it)           │
+ │         │                           │ same WallView    │        │                                │
+ │   admin's websocket                                   │        │                                │
+ ├───────────────────────────────────────────────────────┤        │                                │
  │ home.py   echo_local/home/{list,get,set,subscribe,    │◄───────┤  HA's websocket, from the app  │
  │           describe,delete}  echo_local/kiosk/{get,set}│        │  (nothing through hassmic)     │
- │   Store "echo_local.wall" v2:                         │        └────────────────────────────────┘
+ │   Store "echo_local.wall" 2.2:                        │        └────────────────────────────────┘
  │     homes[echo][app] = {layout, updated, by}          │
- │     descriptors[app] (apps that described themselves) │
- │   BUILTIN descriptors: "wall", Echo-Wall              │
+ │     descriptors[echo | "*"][app]                      │
+ │   BUILTIN descriptor: Echo-Wall (preview: echowall/)  │
  │ kiosk.py  entry options → hassmic /api/kiosk (sealed) │──── signed settings-page API ───► hassmic
  └───────────────────────────────────────────────────────┘
 ```
 
 hassmic itself is not involved in layouts. The app reaches Home Assistant with the token `GET /kiosk/config` hands it
-(`docs/screen-apps.md`), exactly as the wall panel always has; the Echo's signed settings-page API carries only the
-screen's options (`kiosk.py` `push`), as before.
+(`docs/screen-apps.md`); the Echo's signed settings-page API carries only the screen's options (`kiosk.py` `push`).
+
+**Home in the screen list.** The kiosk options' screen kind `wall` (its id kept for saved options) is now "Home",
+sent to the Echo as the URL `hassmic:home`: a screen the app draws itself, like `hassmic:clock`. Echo-Wall always
+draws Home and leaves `hassmic:` screens out of its switcher; hassmic's Java kiosk skips them (web pages only).
 
 ## The store (`home.py`)
 
-A Home Assistant `Store`, key `echo_local.wall` (the wall panel's of before), version 2:
+A Home Assistant `Store`, key `echo_local.wall` (the wall panel's of before), version 2.2:
 
 ```json
 {
   "homes": {
     "echo-show-5-a1b2c3": {
-      "wall":                    {"layout": {...}, "updated": 1793677325.27, "by": "panel"},
-      "io.github.nt_f.echowall": {"layout": {...}, "updated": 1793677390.02, "by": "app"}
-    },
-    "default": {"wall": {"layout": {...}, "updated": 0, "by": "migrated"}}
+      "io.github.nt_f.echowall": {"layout": {...}, "updated": 1793677390.02, "by": "app"},
+      "org.example.screen":      {"layout": {...}, "updated": 1793677325.27, "by": "panel"}
+    }
   },
   "descriptors": {
     "echo-show-5-a1b2c3": {"org.example.screen": {"name": "Example", "fields": [...]}},
@@ -67,33 +76,40 @@ A Home Assistant `Store`, key `echo_local.wall` (the wall panel's of before), ve
 }
 ```
 
-- **A slot is (Echo, app).** The Echo is its node (`echo-show-5-5695c4`, the config entry's unique id, the wall
-  panel's `?echo=`); `default` is any browser that names none. The app is `wall` for the wall panel, else the screen
-  app's Android package. At most 8 apps per Echo.
-- **`by`** says who saved last: `panel` (an administrator), `app` (the Echo's own kiosk user), else that user's name.
-  The panel shows it ("Saved 2 min ago by the Echo").
-- **Version 1** (`{"layouts": {echo: layout}}`) is migrated on load by `_Store._async_migrate_func`: each layout
-  becomes that Echo's `wall` slot, `by: "migrated"`. Nothing is lost on update.
-- **Last writer wins**, as before: the Echo's edit mode, the panel and the options flow all write the same slot. The
-  panel does not overwrite blindly, though (below, "Conflicts").
+- **A slot is (Echo, app).** The Echo is its node (`echo-show-5-5695c4`, the config entry's unique id); the app its
+  Android package. At most 8 apps per Echo.
+- **`by`** says who saved last: `panel` (an administrator), `app` (the Echo's own kiosk user), or `migrated`. The panel
+  shows it ("Saved 2 min ago by the Echo").
+- **Migrations** (`_Store._async_migrate_func`):
+  - 1 (`wall.py`: `{"layouts": {echo: wall layout}}`) and 2.1 (this store with the web wall panel's slots under app
+    `wall`): each Echo's wall layout becomes its Echo-Wall slot unless Echo-Wall already saved one there
+    (`wall_to_echowall`: `theme` → `wallpaper`, `nowplaying` → `now_playing`; `favorites`, `hidden`, `order`, `ambient`
+    as they are). The `default` slot (the wall panel opened in a browser without `?echo=`) is dropped.
+- **Last writer wins**: the Echo's edit mode and the panel write the same slot. The panel does not overwrite blindly,
+  though (below, "Conflicts").
 
 ## Descriptors: what a layout holds
 
-An app says what its layout holds with a descriptor; the panel draws its editor from it, `home.py` checks layouts by
-it, and import between apps maps by it.
+An app says what its layout holds with a descriptor; the panel draws its form from it, `home.py` checks layouts by
+it, and import between apps maps by it. Echo-Wall's is built in (`home.py` `BUILTIN`):
 
 ```json
 {
   "name": "Echo-Wall",
-  "about": "The Flutter screen app ...",
-  "version": "1.4",
-  "preview": "/echo_local/wall.html",
+  "about": "The Echo Show's Home (Nt-f/Echo-Wall). ...",
+  "preview": "/echo_local/echowall/index.html",
   "fields": [
     {"key": "wallpaper", "type": "select", "label": "Wallpaper",
      "options": [["photo", "Photo (Immich)"], ["amber", "Amber"], ["dusk", "Dusk"], ["light", "Light"]],
      "default": "photo", "common": "theme"},
     {"key": "favorites", "type": "entities", "label": "Home's tiles", "ordered": true, "nullable": true, "common": "favorites"},
-    {"key": "ambient", "type": "number", "label": "Lock screen after untouched", "min": 0, "max": 86400, "step": 10, "unit": "s", "common": "ambient"},
+    {"key": "analog_clock", "type": "bool", "label": "Analog clock", "default": true},
+    {"key": "digital_clock", "type": "bool", "label": "Digital clock", "default": true},
+    {"key": "date_card", "type": "bool", "label": "Date", "default": true},
+    {"key": "now_playing", "type": "bool", "label": "What plays, on Home", "default": true, "common": "nowplaying"},
+    {"key": "ambient", "type": "number", "label": "Lock screen after untouched", "min": 0, "max": 86400, "unit": "s", "common": "ambient"},
+    {"key": "hidden", "type": "entities", "label": "Hidden everywhere", "ordered": false, "common": "hidden"},
+    {"key": "hidden_screens", "type": "strings", "label": "Screens off Home"},
     {"key": "order", "type": "area_order", "label": "Rooms", "common": "order"}
   ]
 }
@@ -110,99 +126,125 @@ it, and import between apps maps by it.
 | `strings` | list of strings | chips | ≤ 300 |
 | `area_order` | `{area id: [ids]}` | a fold-out per Home Assistant area with its tiles, drag to order, Reset per room | ≤ 200 areas |
 
-- **Keys a descriptor does not name are kept** as they come (Echo-Wall's `place`, `home_order`, `player`): the app's own
-  business. The only limit on them is the slot's size, **64 KB** of JSON: the Echo's kiosk user writes slots and is
-  not an administrator.
+- **Keys a descriptor does not name are kept** as they come: Echo-Wall's `place` (where each tile was dragged on its
+  grid, `{page group: {widget: [page, column, row]}}`), `home_order`, `player`. They are edited in the preview (dragging
+  there writes `place`) or in the form's JSON box. The only limit on them is the slot's size, **64 KB** of JSON: the
+  Echo's kiosk user writes slots and is not an administrator.
 - **`common`** names what apps share: `theme`, `favorites`, `hidden`, `order`, `ambient`, `nowplaying`. It is how a Home
-  moves between apps (below). A `select` maps only to a value the target offers (Echo-Wall's `photo` wallpaper has no
-  counterpart in the wall panel and is left out).
-- **`preview`**: a page of this Home Assistant that draws the Home (`/echo_local/wall.html`). With it the panel shows
-  the real thing; without it, a sketch of Home's tiles from the `common` fields.
-- **Where descriptors come from.** `home.py` `BUILTIN` has the wall panel's and Echo-Wall's. Any other app sends its
-  own with `echo_local/home/describe` (checked: ≤ 40 fields, keys `[a-z][a-z0-9_]*`, at most 32 apps per scope).
-  Sent by an Echo's kiosk user, it is kept **for that Echo only** (`descriptors[<node>]`); sent by an administrator,
-  for every Echo (`descriptors["*"]`). Looked up in that order: built in, the Echo's own, the administrator's. So one
-  Echo's login cannot change how another Echo's layouts are checked or edited (a descriptor whose `select` offers
-  nothing would otherwise refuse every other Echo's layout of that app), and no app can replace a built-in one. An
-  app without a descriptor still gets Export, Import, Copy and a JSON editor.
+  moves between apps (below). A `select` maps only to a value the target offers.
+- **`preview`**: a page of this Home Assistant that draws the Home with the panel's draft (below). Without one, the
+  panel shows a sketch of Home's tiles from the `common` fields.
+- **Where descriptors come from.** Built in: Echo-Wall's. Any other app sends its own with `echo_local/home/describe`
+  (checked: ≤ 40 fields, keys `[a-z][a-z0-9_]*`, at most 32 apps per scope). Sent by an Echo's kiosk user it is kept
+  **for that Echo only** (`descriptors[<node>]`); sent by an administrator, for every Echo (`descriptors["*"]`).
+  Looked up in that order: built in, the Echo's own, the administrator's. So one Echo's login cannot change how another
+  Echo's layouts are checked or edited, and no app can replace a built-in one. An app without a descriptor still gets
+  Export, Import, Copy and a JSON editor.
 
 ## Who may touch which slot
 
-| who | read | write | list, delete, the screen's options |
+| who | read | write | list, delete, describe for all, the screen's options |
 |---|---|---|---|
 | administrator (the panel) | any | any | yes |
-| an Echo's kiosk user (`kiosk.py`, `DATA_USER` of its entry) | **its own Echo's**, whatever `echo` it names | the same | no |
-| any other user | any | `default` only | no |
+| an Echo's kiosk user (`kiosk.py`, `DATA_USER` of its entry) | **its own Echo's**, whatever `echo` it names | the same | no (describe: for its Echo) |
+| any other user | any | no | no |
 
 The kiosk user is mapped to its Echo by `connection.user.id` against the entries' `DATA_USER`, so an app never needs to
-know which Echo it runs on, and a token leaked from one Echo cannot rewrite another's Home. Before, any logged-in user
-could write any Echo's wall layout; `tests/ha_real_home.py` checks the new rule.
+know which Echo it runs on, and a token leaked from one Echo cannot rewrite another's Home.
 
 ## Websocket commands
 
-All on Home Assistant's own websocket (`/api/websocket`). `echo` may be left out where the table says "own".
+All on Home Assistant's own websocket (`/api/websocket`). `echo` may be left out where the kiosk user asks (its own);
+`app` defaults to Echo-Wall's package.
 
 | command | fields | answer |
 |---|---|---|
-| `echo_local/home/list` | — | admin. `{echos: [{echo, title, entry_id, kiosk, app, screens, slots: {app: {updated, by}}, descriptors}], default: {...}, descriptors (built in + every Echo's), builtin, common, limits}` |
-| `echo_local/home/get` | `echo?`, `app` (default `wall`) | the layout; the `default` slot's if the Echo has none; `{}` if neither |
-| `echo_local/home/set` | `echo?`, `app`, `layout` | the layout as stored (checked by the descriptor); every subscriber gets it |
-| `echo_local/home/subscribe` | `echo?`, `app` | result, then an event `{layout, echo}` now and at every change of that slot (or of `default`'s while the Echo has none) |
+| `echo_local/home/list` | — | admin. `{echos: [{echo, title, entry_id, kiosk, app, screens, slots: {app: {updated, by}}, descriptors}], descriptors (built in + every Echo's), builtin, common, limits}` |
+| `echo_local/home/get` | `echo?`, `app?` | the layout; `{}` if none (the app's own choice) |
+| `echo_local/home/set` | `echo?`, `app?`, `layout` | the layout as stored (checked by the descriptor); every subscriber gets it |
+| `echo_local/home/subscribe` | `echo?`, `app?` | result, then an event `{layout, echo}` now and at every change of that slot |
 | `echo_local/home/describe` | `app`, `descriptor` | `{builtin: false}` stored (for the kiosk user's Echo, or every Echo from an administrator), `{builtin: true}` ignored |
 | `echo_local/home/delete` | `echo`, `app` | admin. The slot gone: the app goes back to its own defaults |
 | `echo_local/kiosk/get` | `echo` | admin. `{options, kinds, music_panel, ha_url}` |
 | `echo_local/kiosk/set` | `echo`, `options` | admin. Checked (`kiosk.py`'s keys and kinds), saved into the entry's options, the entry reloaded: its setup sends them on to the Echo as the options flow's Submit does |
-| `echo_local/wall/get\|set\|subscribe` | `echo?` (`layout`) | the old names: `home/*` with app `wall`, for a wall panel cached from before |
 
-App ids are `wall` or a package name (`^[a-zA-Z][a-zA-Z0-9_]*(\.[a-zA-Z0-9_]+)+$`); anything else is refused.
+App ids are package names (`^[a-zA-Z][a-zA-Z0-9_]*(\.[a-zA-Z0-9_]+)+$`); `wall` and anything else is refused. The web
+wall panel's `echo_local/wall/*` commands are gone.
 
 ## The sidebar panel (`frontend/panel.js`)
 
 Registered by `__init__.py` `async_setup` through `panel_custom.async_register_panel` (`frontend_url_path`
 `echo-local`, element `echo-local-panel`, module `/echo_local/panel.js`, icon `mdi:tablet-dashboard`,
-`require_admin`). A plain custom element with a shadow root, no build step, like the integration's other frontend
-files; it takes Home Assistant's theme through its CSS variables (`--primary-color`, `--card-background-color`, ...)
-and talks only over `hass.connection`.
+`require_admin`). A plain custom element with a shadow root, no build step; it takes Home Assistant's theme through its
+CSS variables and talks only over `hass.connection`.
 
-**Left**: the Echos (each with "Screen on/off" and the apps that have a Home there), then "Any other browser"
-(`default`). On a phone (`narrow`) they become a row of chips.
+**Left**: the Echos, each with "Screen on/off" and the apps that saved a Home there. On a phone (`narrow`) they become a
+row of chips.
 
 **Home screen tab**:
 
-- **App chips**: the wall panel always; the screen app the Echo runs (its entry's `kiosk_app`); any app with a slot
-  there. A green dot: something saved; "· on the screen": the one the Echo shows now.
+- **App chips**: Echo-Wall always; the screen app the Echo runs (its entry's `kiosk_app`) if another; any app with a
+  slot there. A green dot: something saved; "· on the screen": the one the Echo shows now.
 - **Bar**: Save (only with changes), Revert, the status ("Unsaved changes" / "Saved 2 min ago by the Echo"), Import ▾,
   Export, Copy to ▾, Reset.
-- **Form**: one row per descriptor field, then "All of it, as JSON" (also the whole editor for an app without a
-  descriptor). Lists drag with the mouse (HTML5 drag and drop) and have ↑ ↓ for touch and keyboards. An entity not in
-  this Home Assistant (from another one's export) shows in the warning colour, "not in this Home Assistant", and is
+- **Form**: one row per descriptor field, then "All of it, as JSON". Lists drag with the mouse and have ↑ ↓ for touch
+  and keyboards. An entity not in this Home Assistant (from another one's export) shows in the warning colour and is
   kept.
-- **Preview**, at the Echo's screen size (Show 5 960×470, Show 8 1280×790, others 1024×590: the WebView above the
-  light band; picked from the Echo's name, changeable): for an app with `preview`, that page in a same-origin iframe
-  with `?preview=1`; otherwise a sketch.
+- **Preview**: Echo-Wall itself, at the Echo's screen size in Flutter's logical pixels (Show 5: 960×470, the window
+  above the light band at density 160; Show 8 1280×790; others 1024×590; picked from the Echo's name, changeable),
+  scaled to the column. The switch "Edit on the screen" turns Echo-Wall's own edit mode on: drag a tile to another
+  cell, ★ a room's tile onto Home, − to take one off, + Add, its wallpaper swatches; each change lands in the panel's
+  draft and the form follows.
 
-**Editing in the preview.** The wall panel in the iframe is the real one with the panel's draft, so its own edit mode
-works there: the switch "Edit on the screen" turns it on, and a drag, ★ or − changes the draft in the panel (not Home
-Assistant) and the form follows. The protocol (`wall.js`, all `postMessage` checked against `location.origin`):
-
-| from | message | what it does |
-|---|---|---|
-| panel → preview | `{type: 'echo-local-layout', layout}` | draws the draft (after every change in the form) |
-| panel → preview | `{type: 'echo-local-editmode', on}` | the wall panel's edit mode on/off |
-| panel → preview | `{type: 'echo-local-page', name}` | scrolls to a page (a room) |
-| preview → panel | `{type: 'echo-local-edit', layout}` | the edit mode changed the layout: the panel's draft |
-| preview → panel | `parent.echoLocalPreview.token()` / `.layout()` | the login (the panel's own access token, refreshed when expired) and the draft at the start |
-
-In preview mode `wall.js` neither subscribes to nor writes the store, and never goes to the big clock.
+A draft change from the form redraws the form and the bar only (`refresh()`): the iframe stays, since an iframe
+rebuilt or moved in the DOM loads again and Flutter would start over (2-3 s).
 
 **Conflicts.** Each (Echo, app) the panel opens is subscribed. A change from elsewhere replaces the panel's copy only
 while there is no unsaved draft; with one, a banner offers "Take the Echo's" or "Keep mine" (Keep mine: Save then
 overwrites). So someone arranging tiles on the Echo while the owner edits in Home Assistant loses nothing silently.
 
-**Screen tab** (an Echo only): the kiosk's options, as the options flow has them, with switches and a reorderable list
-of screens; the screen app from a list (hassmic's kiosk, Echo-Wall, Echo-Screen, or a package typed in); its settings
-(`key=value` lines). Save goes through `echo_local/kiosk/set`. The options flow stays as it was, its "wall" step a
-short form of the same slot.
+**Screen tab**: the kiosk's options, as the options flow has them, with switches and a reorderable list of screens
+(Home first by default); the screen app from a list (Echo-Wall, Echo-Screen, hassmic's kiosk for web pages only, or a
+package typed in); its settings (`key=value` lines). Save goes through `echo_local/kiosk/set`. The options flow has
+the same first page and no second one any more.
+
+## Echo-Wall's preview (`frontend/echowall/`, Echo-Wall's `lib/preview.dart`)
+
+The preview is not a re-drawing of Echo-Wall: it is Echo-Wall's own `WallView`, compiled for the web.
+
+**The build.** `tools/echowall-preview.sh [path to Echo-Wall]` runs `flutter build web -t lib/preview.dart --release
+--base-href /echo_local/echowall/ --no-web-resources-cdn --pwa-strategy=none` there and copies what a browser loads
+into `custom_components/echo_local/frontend/echowall/` (16 MB: `main.dart.js` 2.5 MB, CanvasKit 7 MB, Inter and the
+stock photos 5 MB, licences 1.3 MB), with `BUILT_FROM` naming Echo-Wall's commit. CanvasKit is served by Home
+Assistant (a Home Assistant may have no internet), only its build for every browser (Echo-Wall's
+`web/flutter_bootstrap.js` asks for `canvasKitVariant: "full"`, so the Chromium-only copy and the wasm renderers stay
+out), and no service worker (the page is Home Assistant's origin: nothing of ours should stay behind there). Rerun it
+after a change to Echo-Wall's WallView and commit the result with the integration.
+
+**One code base for both.** Echo-Wall's files import `lib/io/io.dart` instead of `dart:io`: on the Echo that is
+`dart:io` itself (`io_native.dart`), on the web `io_web.dart`, stand-ins with the same names over the browser's
+`fetch` and `WebSocket` (the few members the app uses: `HttpClient.getUrl/openUrl`, headers, `close()`, the response
+as a byte stream; `WebSocket.connect/listen/add/close`; a `File` that never exists). Home Assistant is the page's own
+origin, so its websocket, camera stills and streams work as on the Echo; Immich (another origin) only if it allows
+CORS, else the stock photos, as when Immich is unreachable on the Echo. Method channels (Android's) fail on the web
+and the app already treats them as optional.
+
+**`lib/preview.dart`** is the web entry point: a `WallView` with `preview: true` (never the lock screen) and an
+`editMode` notifier (the panel's switch; the bar's Done turns the switch back off). It takes from the panel, through
+`window.parent.echoLocalPreview` (same origin):
+
+| from | what | |
+|---|---|---|
+| `token()` | the panel's own access token (refreshed by `hass.auth` when expired) | asked again when Home Assistant refuses it |
+| `layout()` | the draft to start with | |
+| `info()` | `{h24, screens, settings, editing}`: Home Assistant's clock format, the other screens' names (their tiles on Home), the edit switch | |
+| message `echo-local-layout` | a new draft (the form changed) | applied without being sent back |
+| message `echo-local-editmode` | the switch | |
+| posts `echo-local-edit` | the layout after an edit in the preview (Echo-Wall's own save, 500 ms after the last change) | the panel's draft |
+
+Objects of the panel's frame are read through `JSON.stringify` (`dartify()` and `isA<JSObject>()` know only the
+frame's own `Object`), and every message is checked against `location.origin`. The preview turns on Flutter's
+semantics tree, so the browser's accessibility nodes name what is drawn (and the test finds the tiles by name).
 
 ## Export and import
 
@@ -212,43 +254,34 @@ short form of the same slot.
 {
   "format": "echo-local-home",
   "version": 1,
-  "app": "wall",
-  "app_name": "Wall panel",
+  "app": "io.github.nt_f.echowall",
+  "app_name": "Echo-Wall",
   "echo": "echo-show-5-a1b2c3",
   "echo_name": "Echo Show 5 a1b2c3",
   "exported": "2026-11-02T22:43:01.512Z",
-  "layout": { "theme": "light", "favorites": ["light.kitchen_lights"], "nowplaying": false },
-  "common": { "theme": "light", "favorites": ["light.kitchen_lights"], "nowplaying": false }
+  "layout": { "wallpaper": "light", "favorites": ["light.kitchen_lights"], "place": {"home": {"clock": [0, 0, 0]}} },
+  "common": { "theme": "light", "favorites": ["light.kitchen_lights"] }
 }
 ```
 
-`layout` is the app's whole layout, its own keys included; `common` the shared part by common name, so that a later
+`layout` is the app's whole layout, its own keys included; `common` the shared part by common name, so that another
 app can take it without knowing this one's descriptor.
 
-**Import ▾** offers:
+**Import ▾**: **from a file** (`.echohome.json` up to 256 KB; the same app: its layout as it is; another: what both
+share), **another app on this Echo**, or **another Echo**'s slot. Import fills the **draft** only; Save sends it.
+Entities the file names that this Home Assistant lacks are counted in the message and kept.
 
-- **From a file…**: a `.echohome.json` up to 256 KB. The same app: its layout as it is. Another app: what both share.
-- **Another app on this Echo**: e.g. Echo-Wall's Home into the wall panel's (both from the store).
-- **Another Echo**: any app's slot on another Echo.
+**Between apps** (`take()` in panel.js, `home.from_common` in Python): the source's fields with a `common` name (and the
+file's `common`) give the shared values; each target field with that `common` name gets the value, a `select` only if
+the target offers it. Everything else of the target's draft stays (Echo-Wall's `place` included).
 
-Import fills the **draft** only; Save sends it. Entities the file names that this Home Assistant lacks are counted in
-the message and kept (a later rename back makes them show again).
-
-**Between apps** (`take()` in panel.js, `home.from_common` in Python for the same rule): the source's fields with a
-`common` name (and the file's `common`) give the shared values; each target field with that `common` name gets the
-value, a `select` only if the target offers it. Everything else of the target's draft stays. Example from the test:
-Echo-Wall's `{wallpaper: light, now_playing: false, favorites: [...], place: {...}}` into the wall panel gives
-`{theme: light, nowplaying: false, favorites: [...]}`, and `place` (Echo-Wall's own) stays behind.
-
-**Copy to ▾**: the draft saved as it is into the same app's slot on another Echo, or every other Echo.
-
-**Reset**: the slot deleted; the app starts again from its own choice (the wall panel picks a thermostat, a camera,
-scenes, locks).
+**Copy to ▾**: the draft saved as it is into the same app's slot on another Echo, or every other Echo. **Reset**: the
+slot deleted; the app starts again from its own choice (Echo-Wall picks a thermostat, a camera, scenes, locks).
 
 ## Apps: taking part
 
 A screen app with a Home of its own takes part with three commands on Home Assistant's websocket, logged in with the
-token from `/kiosk/config` (it already holds it):
+token from `/kiosk/config`:
 
 ```
 → {"id": 7, "type": "echo_local/home/describe", "app": "org.example.screen", "descriptor": {...}}   (once, optional)
@@ -264,39 +297,39 @@ every login. Echo-Wall's `LayoutSync` (`lib/home/layout_sync.dart`) is the refer
 - **At each login**, subscribe. The first event is what Home Assistant has: empty → send ours (the first start with
   Echo Local); different from ours → take theirs (the panel saved while the app was not running), unless ours was
   changed since this start and never got through (then ours goes: the last change wins).
-- **After each save of its own** (Echo-Wall's 500 ms after the last change): send it, unless it is what just came in
-  (`_agreed`), so a save from the panel does not bounce back.
+- **After each save of its own** (500 ms after the last change): send it, unless it is what just came in.
 - **Each later event**: take it, draw it, write it to the file (`Layout.apply`) without sending it back.
 - **Without Echo Local** (the command unknown) or Home Assistant: the app's file alone, as before.
 
+An app that wants a real preview in the panel too names a page in its descriptor's `preview` that speaks the protocol
+in the table above.
+
 ## What was decided and why
 
-- **Home Assistant's websocket, not hassmic.** The app already has a Home Assistant token and a websocket to it; the
-  wall panel always kept its layout this way. Going through hassmic (`/kiosk/...` on 127.0.0.1, then the signed API to
-  Home Assistant) would add a hop, a second store and a sync problem, for no gain in safety: the token is the app's
-  either way.
+- **The preview is the app**, its WallView compiled for the web, not a second renderer in the panel: what the owner sees
+  is what the Echo shows (the same packing on the same 960×470 logical pixels, the same glass), and Echo-Wall's own
+  edit mode is the graphical editor, grid and all. The price: 16 MB in the integration, rebuilt with Echo-Wall.
+- **The web wall panel removed** (asked 2026-11-02: "everything should've been switched to the Flutter UI"): two Homes
+  to keep alike was one too many. Its layouts carry over into Echo-Wall's.
+- **Home Assistant's websocket, not hassmic.** The app already has a Home Assistant token and a websocket to it. Going
+  through hassmic would add a hop, a second store and a sync problem, for no gain in safety.
 - **The user decides the Echo, not a parameter.** The kiosk user is per Echo (`kiosk.py`), so `connection.user` is a
-  proof of which Echo is asking. Apps need no node, and one Echo cannot write another's slot.
-- **Descriptors instead of a fixed schema.** `wall.py`'s schema dropped unknown keys (`REMOVE_EXTRA`), which would have
-  thrown away Echo-Wall's tile placement. A descriptor checks what it names and keeps the rest under a size cap; new
-  apps need no integration release.
-- **A same-origin iframe for the preview**, the real `wall.html`, rather than a second renderer in the panel: what the
-  owner sees is what the Echo shows, and the wall panel's edit mode (drag, ★, −) is the graphical editor for free.
-- **A draft and Save**, not saving each change as the Echo's edit mode does: in the panel the owner tries things
-  against the preview and the Echo should not flicker through them.
-- **One Store key kept** (`echo_local.wall`, version 2 with a migration) rather than a new key, so an update keeps every
-  layout. The price: a downgrade to a release with `wall.py` finds version 2 data with no `layouts` in it, and its wall
-  panels fall back to their own choice. Accepted: downgrades are rare, and the export file is the backup.
+  proof of which Echo is asking.
+- **Descriptors instead of a fixed schema.** A fixed schema drops unknown keys and would throw away Echo-Wall's tile
+  placement. A descriptor checks what it names and keeps the rest under a size cap; new apps need no integration
+  release.
+- **A draft and Save**, not saving each change as the Echo's edit mode does: the owner tries things against the preview
+  and the Echo should not flicker through them.
+- **One Store key kept** (`echo_local.wall`, now 2.2) so an update keeps every layout. A downgrade to a release with
+  `wall.py` finds no `layouts` and its wall panels fall back to their own choice; the export file is the backup.
 
 ## Limits and open ends
 
-- 64 KB a slot, 8 apps an Echo, 300 ids a list, 32 described apps per Echo. A non-administrator writes slots; the caps keep a
-  leaked kiosk token from filling Home Assistant's storage.
-- The sketch preview for apps without a `preview` page is only that: Echo-Wall's real Home (photo wallpaper, analog
-  clock, its placement grid) is not drawn in the panel. A web build of Echo-Wall's `WallView` could serve as its
-  `preview` later.
-- Echo-Wall's `place` (where each tile was dragged on its grid) is kept and copied but not editable in the form (the
-  JSON editor can). Reordering favourites in the panel leaves `place` as it is; Echo-Wall packs what has no place.
+- 64 KB a slot, 8 apps an Echo, 300 ids a list, 32 described apps per Echo.
+- The preview's photos: Echo-Wall's stock ones (Immich only if it answers the browser with CORS headers). Cameras
+  play what the browser can (HLS where the browser has it).
+- Flutter's web engine asks fonts.gstatic.com for a fallback font for glyphs Inter lacks; offline it logs a warning and
+  draws without it.
 - No undo beyond Revert; the export file is the backup.
-- The panel is administrators only, like the options it changes. A non-administrator can still arrange the wall panel
-  on the Echo or in a browser (the `default` slot).
+- The panel is administrators only, like the options it changes. Others arrange Home on the Echo itself (hold the
+  page dots).

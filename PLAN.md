@@ -2322,6 +2322,18 @@ Run in this order. Each step says what it proves.
       kiosk user confined, kiosk/set reaching the Echo, live events, the panel drawn (51 widgets in the preview),
       import from Echo-Wall, Save, the preview's edit mode into the draft, Export; Echo-Wall's
       test/layout_sync_test.dart against a stand-in websocket.  Not yet on the device: Echo-Wall's sync on the Show 5.
+      Then (asked the same day: "everything should've been switched to the flutter ui"; the web wall panel to be deleted,
+      a real Flutter preview): wall.html/wall.js and the options' "wall" step removed; the kind "wall" = Home =
+      `hassmic:home` (kiosk.c already passes any hassmic:<name>, the Java kiosk skips them, Echo-Wall drops them from
+      its switcher); store 2.2 moves "wall" slots into Echo-Wall's (theme -> wallpaper, nowplaying -> now_playing),
+      drops "default"; other users read only.  The preview: Echo-Wall's WallView for the web (lib/preview.dart;
+      lib/io/io.dart = dart:io on the Echo, fetch/WebSocket stand-ins on the web, the five files that used dart:io),
+      tools/echowall-preview.sh -> frontend/echowall/ (16 MB: main.dart.js 2.5, CanvasKit 7 "full" only, fonts and
+      photos 5, NOTICES 1.3; no CDN, no service worker).  Cross-frame: isA<JSObject>() and dartify() are this frame's
+      Object only (the token was never read: "Connecting to Home Assistant…"), read through JSON.stringify.  The
+      panel redraws only the form on a draft change (an iframe rebuilt restarts Flutter, 2-3 s).  ha_real_home:
+      the preview's semantics nodes name HA's demo devices, light vs dusk wallpaper 168 vs 77 mean grey in the
+      iframe, the panel's switch -> Echo-Wall's edit mode, a CDP click on its − -> the draft (analog_clock), not HA.
       Not yet measured: HA's full UI logged in, the wall panel there (the user's HA has no
       integration of this version yet), a tap on the kiosk while a ring shows (passes through?).  Open: kiosk entities in HA (screen select); the wall's choice of rooms/entities (now: every
       area, registry-hidden ones left out); the screen waking on a touch while dark (the panel's touch controller).

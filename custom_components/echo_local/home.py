@@ -1,13 +1,13 @@
 """Home screens: the layout of each screen app's Home on each Echo Show, kept in Home Assistant, edited in the sidebar
 panel (frontend/panel.js), exported to a file and imported again.  docs/home-screens.md is the whole design.
 
-One store for every app that draws a Home of its own: hassmic's wall panel (frontend/wall.js, app id "wall", shown by
-the Java kiosk) and screen apps (docs/screen-apps.md; app id = their Android package, e.g. Echo-Wall's
-io.github.nt_f.echowall).  A slot is (Echo node, app id); "default" is the Echo of any browser that names none.
+One store for every screen app that draws a Home of its own (docs/screen-apps.md; app id = its Android package):
+Echo-Wall (io.github.nt_f.echowall), the Flutter app the Echo Show shows, and any other.  A slot is (Echo node, app
+id).  The web wall panel (wall.html, app id "wall") is gone: its layouts became Echo-Wall's (_Store below).
 
 Each app says what its layout holds with a *descriptor* (fields with a type, a label and the "common" name of what
-apps share: favourites, hidden entities, room order, theme, idle clock, now playing).  Built in here for the wall
-panel and Echo-Wall; any other app publishes its own over the websocket (echo_local/home/describe), so the panel draws
+apps share: favourites, hidden entities, room order, theme, idle clock, now playing).  Built in here for Echo-Wall,
+whose preview (its WallView built for the web, frontend/echowall/, tools/echowall-preview.sh) the panel shows; any other app publishes its own over the websocket (echo_local/home/describe), so the panel draws
 an editor for an app this integration has never heard of.  An app's own descriptor counts for its Echo only (one sent
 by an administrator for every Echo): one Echo's login must not change how another Echo's layouts are checked.  Keys a descriptor does not name are the app's own (Echo-Wall's
 "place": where each tile was dragged) and are kept as they come, within a size cap.
@@ -22,11 +22,10 @@ Websocket (Home Assistant's own, the token the kiosk already holds; the Echo's s
     echo_local/home/delete     {echo, app}                admin: the slot gone (the app starts from its own defaults)
     echo_local/kiosk/get       {echo}                     admin: the screen's options (kiosk.py), for the panel
     echo_local/kiosk/set       {echo, options}            admin: the same, saved; the entry reloads and sends them on
-    echo_local/wall/get|set|subscribe {echo}              the wall panel's old names = home/* with app "wall"
 
 Who may touch which slot: an administrator any.  An Echo's kiosk user (kiosk.py makes one per Echo: not an
 administrator, local only) only its own Echo's slots, whatever echo it names: the connection's user says which Echo it
-is, so an app never needs to know its node.  Any other user reads, and writes "default" only."""
+is, so an app never needs to know its node.  Any other user only reads."""
 from __future__ import annotations
 
 import json
@@ -46,10 +45,10 @@ from .const import DOMAIN
 _LOGGER = logging.getLogger(__name__)
 
 STORE_KEY = "echo_local.wall"           # the wall panel's store of before; version 2 holds every app's
-STORE_VERSION = 2
+STORE_VERSION, STORE_MINOR = 2, 2       # 2.2: the wall panel's slots became Echo-Wall's
 SIGNAL = "echo_local_home_changed"
 DEFAULT = "default"
-WALL = "wall"
+ECHOWALL = "io.github.nt_f.echowall"
 MAX_LAYOUT = 64 * 1024                  # bytes of JSON a slot may hold (a kiosk user writes it: not an administrator)
 MAX_APPS = 8                            # slots per Echo
 MAX_IDS = 300                           # entity ids in one list
@@ -60,28 +59,14 @@ COMMON = ("theme", "favorites", "hidden", "order", "ambient", "nowplaying")
 
 _opts = [["amber", "Amber"], ["dusk", "Dusk"], ["light", "Light"]]
 BUILTIN: dict[str, dict] = {
-    WALL: {
-        "name": "Wall panel", "about": "hassmic's own Home (the Java kiosk's \"Home\" screen). Previewed here as it draws.",
-        "preview": "/echo_local/wall.html",
-        "fields": [
-            {"key": "theme", "type": "select", "label": "Wallpaper", "options": _opts, "default": "amber", "common": "theme"},
-            {"key": "favorites", "type": "entities", "label": "Home's tiles", "ordered": True, "nullable": True,
-             "help": "In order. A thermostat shows big, a camera its picture. None: the panel picks.", "common": "favorites"},
-            {"key": "weather", "type": "entity", "label": "Weather on the date", "domain": "weather", "none": "none"},
-            {"key": "nowplaying", "type": "bool", "label": "What plays, on Home", "default": True, "common": "nowplaying"},
-            {"key": "ambient", "type": "number", "label": "Big clock after untouched", "min": 0, "max": 86400, "step": 10,
-             "unit": "s", "default": 120, "help": "0: never.", "common": "ambient"},
-            {"key": "hidden", "type": "entities", "label": "Hidden everywhere", "ordered": False, "common": "hidden"},
-            {"key": "order", "type": "area_order", "label": "Rooms", "help": "A room page's tiles in this order, the rest after them.",
-             "common": "order"},
-        ],
-    },
-    "io.github.nt_f.echowall": {
-        "name": "Echo-Wall", "about": "The Flutter screen app (Nt-f/Echo-Wall). It sends its layout here as it changes and follows what is saved here.",
+    ECHOWALL: {
+        "name": "Echo-Wall", "about": "The Echo Show's Home (Nt-f/Echo-Wall). It sends its layout here as it changes and follows what is saved here.",
+        "preview": "/echo_local/echowall/index.html",
         "fields": [
             {"key": "wallpaper", "type": "select", "label": "Wallpaper",
              "options": [["photo", "Photo (Immich)"], *_opts], "default": "photo", "common": "theme"},
-            {"key": "favorites", "type": "entities", "label": "Home's tiles", "ordered": True, "nullable": True, "common": "favorites"},
+            {"key": "favorites", "type": "entities", "label": "Home's tiles", "ordered": True, "nullable": True,
+             "help": "In order. A thermostat shows big, a camera its picture. Off: Echo-Wall picks.", "common": "favorites"},
             {"key": "analog_clock", "type": "bool", "label": "Analog clock", "default": True},
             {"key": "digital_clock", "type": "bool", "label": "Digital clock", "default": True},
             {"key": "date_card", "type": "bool", "label": "Date", "default": True},
@@ -117,15 +102,30 @@ DESCRIPTOR = vol.Schema({
     vol.Optional("version"): vol.All(str, vol.Length(max=40)),
     vol.Required("fields"): vol.All([FIELD], vol.Length(max=MAX_FIELDS)),
 }, extra=vol.REMOVE_EXTRA)
-APP = vol.All(str, vol.Match(r"^(wall|[a-zA-Z][a-zA-Z0-9_]*(\.[a-zA-Z0-9_]+)+)$"), vol.Length(max=120))
+APP = vol.All(str, vol.Match(r"^[a-zA-Z][a-zA-Z0-9_]*(\.[a-zA-Z0-9_]+)+$"), vol.Length(max=120))
+
+
+def wall_to_echowall(l: dict) -> dict:
+    """the web wall panel's layout as Echo-Wall's: what both have (theme -> wallpaper, nowplaying -> now_playing)"""
+    out = {k: l[k] for k in ("favorites", "hidden", "order", "ambient") if k in l}
+    if l.get("theme") in ("amber", "dusk", "light"):
+        out["wallpaper"] = l["theme"]
+    if "nowplaying" in l:
+        out["now_playing"] = l["nowplaying"]
+    return out
 
 
 class _Store(Store):
     async def _async_migrate_func(self, old_major: int, old_minor: int, old: dict) -> dict:
-        # 1: {"layouts": {echo: wall layout}} (wall.py)
+        # 1: {"layouts": {echo: wall layout}} (wall.py); 2.1: every app's, the web wall panel's as app "wall"
         if old_major == 1:
-            return {"homes": {e: {WALL: {"layout": l, "updated": 0, "by": "migrated"}} for e, l in (old.get("layouts") or {}).items()},
-                    "descriptors": {}}
+            old = {"homes": {e: {"wall": {"layout": l, "updated": 0, "by": "migrated"}} for e, l in (old.get("layouts") or {}).items()},
+                   "descriptors": {}}
+        (old.get("homes") or {}).pop(DEFAULT, None)     # the web wall panel opened without an Echo: no such Home now
+        for slots in (old.get("homes") or {}).values():
+            w = slots.pop("wall", None)
+            if w and ECHOWALL not in slots:     # Echo-Wall's own, where it saved one, wins
+                slots[ECHOWALL] = {**w, "layout": wall_to_echowall(w.get("layout") or {}), "by": "migrated"}
         return old
 
 
@@ -200,14 +200,13 @@ def from_common(hass: HomeAssistant, app: str, shared: dict) -> dict:
     return out
 
 
-def get(hass: HomeAssistant, echo: str | None, app: str = WALL) -> dict:
-    """the Echo's layout of that app, else the default one's"""
-    h = _data(hass)["homes"]
-    slot = (h.get(echo or DEFAULT) or {}).get(app) or (h.get(DEFAULT) or {}).get(app) or {}
+def get(hass: HomeAssistant, echo: str | None, app: str = ECHOWALL) -> dict:
+    """the Echo's layout of that app ({}: the app's own choice)"""
+    slot = (_data(hass)["homes"].get(echo or DEFAULT) or {}).get(app) or {}
     return dict(slot.get("layout") or {})
 
 
-async def put(hass: HomeAssistant, echo: str | None, layout: dict, app: str = WALL, by: str = "") -> dict:
+async def put(hass: HomeAssistant, echo: str | None, layout: dict, app: str = ECHOWALL, by: str = "") -> dict:
     layout = check(hass, app, layout, echo or DEFAULT)
     d = _data(hass)
     slots = d["homes"].setdefault(echo or DEFAULT, {})
@@ -232,11 +231,10 @@ async def _save(hass: HomeAssistant) -> None:
 
 
 async def async_setup(hass: HomeAssistant) -> None:
-    store = _Store(hass, STORE_VERSION, STORE_KEY)
+    store = _Store(hass, STORE_VERSION, STORE_KEY, minor_version=STORE_MINOR)
     saved = await store.async_load() or {}
     hass.data[DOMAIN + "_home"] = {"store": store, "homes": saved.get("homes", {}), "descriptors": saved.get("descriptors", {})}
-    for c in (ws_list, ws_get, ws_set, ws_subscribe, ws_describe, ws_delete, ws_kiosk_get, ws_kiosk_set,
-              ws_wall_get, ws_wall_set, ws_wall_subscribe):
+    for c in (ws_list, ws_get, ws_set, ws_subscribe, ws_describe, ws_delete, ws_kiosk_get, ws_kiosk_set):
         websocket_api.async_register_command(hass, c)
 
 
@@ -260,7 +258,7 @@ def _slot(hass: HomeAssistant, connection, echo: str, write: bool) -> str:
     own = _own_echo(hass, user)
     if own:
         return own                      # its own, whatever it named
-    if write and (echo or DEFAULT) != DEFAULT:
+    if write:                           # any other user: reads only
         raise websocket_api.Unauthorized()
     return echo or DEFAULT
 
@@ -287,12 +285,11 @@ def ws_list(hass: HomeAssistant, connection, msg: dict) -> None:
                     "descriptors": _data(hass)["descriptors"].get(node, {})})
     connection.send_result(msg["id"], {
         "echos": out,
-        "default": {a: {"updated": s.get("updated", 0), "by": s.get("by", "")} for a, s in (homes.get(DEFAULT) or {}).items()},
         "descriptors": {**_data(hass)["descriptors"].get(ANY, {}), **BUILTIN}, "builtin": list(BUILTIN), "common": list(COMMON),
         "limits": {"layout": MAX_LAYOUT, "apps": MAX_APPS, "ids": MAX_IDS}})
 
 
-_slotkeys = {vol.Optional("echo", default=""): str, vol.Optional("app", default=WALL): APP}
+_slotkeys = {vol.Optional("echo", default=""): str, vol.Optional("app", default=ECHOWALL): APP}
 
 
 @websocket_api.websocket_command({vol.Required("type"): "echo_local/home/get", **_slotkeys})
@@ -319,12 +316,10 @@ async def ws_set(hass: HomeAssistant, connection, msg: dict) -> None:
 
 def _subscribe(hass, connection, msg, app):
     echo = _slot(hass, connection, msg["echo"], False)
-    homes = _data(hass)["homes"]
 
     @callback
     def changed(key: str, which: str) -> None:
-        # this app's layout on the Echo changed, or the default one it falls back to
-        if which == app and (key == echo or (key == DEFAULT and app not in (homes.get(echo) or {}))):
+        if which == app and key == echo:
             connection.send_message(websocket_api.event_message(msg["id"], {"layout": get(hass, echo, app), "echo": echo}))
 
     connection.subscriptions[msg["id"]] = async_dispatcher_connect(hass, SIGNAL, changed)
@@ -424,23 +419,3 @@ async def ws_kiosk_set(hass: HomeAssistant, connection, msg: dict) -> None:
     # as the options flow's Submit (OptionsFlowWithReload): the setup sends it all to the Echo
     hass.config_entries.async_schedule_reload(e.entry_id)
     connection.send_result(msg["id"], {"options": dict(e.options)})
-
-
-# ---------------------------------------------------------------- the wall panel's old names (a page cached from before)
-
-@websocket_api.websocket_command({vol.Required("type"): "echo_local/wall/get", vol.Optional("echo", default=""): str})
-@callback
-def ws_wall_get(hass: HomeAssistant, connection, msg: dict) -> None:
-    connection.send_result(msg["id"], get(hass, _slot(hass, connection, msg["echo"], False), WALL))
-
-
-@websocket_api.websocket_command({vol.Required("type"): "echo_local/wall/set", vol.Optional("echo", default=""): str, vol.Required("layout"): dict})
-@websocket_api.async_response
-async def ws_wall_set(hass: HomeAssistant, connection, msg: dict) -> None:
-    await _set(hass, connection, msg, WALL)
-
-
-@websocket_api.websocket_command({vol.Required("type"): "echo_local/wall/subscribe", vol.Optional("echo", default=""): str})
-@callback
-def ws_wall_subscribe(hass: HomeAssistant, connection, msg: dict) -> None:
-    _subscribe(hass, connection, msg, WALL)

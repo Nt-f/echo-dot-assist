@@ -4,12 +4,15 @@ What changed for people using the Echo, newest first. Details and measurements a
 
 ## 2026-11-02
 
-- **Echo Local in Home Assistant's sidebar.** Every Echo Show's screen in one place: its Home (the wall panel, or the
-  Home of a screen app such as Echo-Wall) as a form beside a live preview of the screen, where you can also drag tiles,
-  star and hide them; nothing reaches the Echo until Save. Export a Home to a file and import it again, take one app's
-  Home into another's, copy it to your other Echos. The screen's options (which screens, the screen app) are there
-  too. Administrators only. Layouts saved before are kept. See the guide's "Home Assistant on the screen".
+- **Echo Local in Home Assistant's sidebar.** Every Echo Show's screen in one place: Echo-Wall's Home as a form beside
+  **Echo-Wall itself**, running in the page with your devices at the Echo's size, where you arrange it as on the Echo
+  (drag tiles to other places, star, hide, add, the wallpaper); nothing reaches the Echo until Save. Export a Home to
+  a file and import it again, take another app's Home, copy it to your other Echos. The screen's options (which
+  screens, the screen app) are there too. Administrators only. See the guide's "Home Assistant on the screen".
   An Echo's own login may now change only that Echo's layout (before, any Home Assistant user could change any).
+- **The web wall panel is gone: Home is Echo-Wall's.** The Echo Show's Home is drawn by the Echo-Wall app; the
+  integration's HTML wall panel and its options page are removed, and their layouts were carried over into
+  Echo-Wall's. hassmic's own kiosk app now shows web pages only (dashboards, Music Assistant, your page).
 - **The Home Assistant integration is now "Echo Local"** (`custom_components/echo_local`, actions `echo_local.*`, card
   `custom:echo-local-alarms-card`): its old name, `hassmic`, is also another project's integration (jeffc/hassmic), and
   Home Assistant can't load both. Remove the old one and add Echo Local again; the Echo asks for its button once more.

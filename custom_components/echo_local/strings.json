@@ -56,7 +56,7 @@
     "step": {
       "init": {
         "title": "The Echo Show's screen",
-        "description": "Home Assistant on the Echo Show's screen, in hassmic's kiosk app. The Echo logs in as a user of its own, made for it here (local only, removed with this entry). Home Assistant's address as the Echo reaches it: {url}. The Echo reaches local addresses only.",
+        "description": "Home Assistant on the Echo Show's screen, in its screen app (Echo-Wall, or hassmic's kiosk for web pages only). Home's layout is edited in the sidebar: Echo Local. The Echo logs in as a user of its own, made for it here (local only, removed with this entry). Home Assistant's address as the Echo reaches it: {url}. The Echo reaches local addresses only.",
         "data": {
           "kiosk": "Show Home Assistant on the screen",
           "kiosk_screens": "Screens (a handle at the top of the screen switches)",
@@ -69,19 +69,7 @@
           "kiosk_admin": "The Echo's user is an administrator (Home Assistant's settings on the Echo)",
           "kiosk_ha_url": "Home Assistant's address for the Echo (empty: the one found)",
           "kiosk_app": "Screen app: the package of an app of your own that shows the screens (empty: hassmic's own)",
-          "kiosk_app_settings": "Screen app settings, one key=value a line (the HomeView's photos: immich.url=, immich.key=, immich.album=)"
-        }
-      },
-      "wall": {
-        "title": "The wall panel",
-        "description": "How the wall panel looks on this Echo and what its Home page shows. You can also change it on the Echo: hold the dots at the bottom of the screen to edit (drag tiles, star them for Home, hide them).",
-        "data": {
-          "theme": "Wallpaper",
-          "favorites": "Home's tiles, in order (a thermostat shows big, a camera its picture; empty: the panel picks)",
-          "weather": "Weather",
-          "nowplaying": "Show what plays on Home",
-          "ambient": "Big clock after untouched for (0: never)",
-          "hidden": "Hide these everywhere"
+          "kiosk_app_settings": "Screen app settings, one key=value a line (Echo-Wall's photos: immich.url=, immich.key=, immich.album=)"
         }
       }
     }

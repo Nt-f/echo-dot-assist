@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 """Home screens (custom_components/echo_local home.py, frontend/panel.js; docs/home-screens.md) in a real Home Assistant
-against build/hassmic-host: the wall panel's store of before (version 1) migrated; the sidebar panel registered for
-administrators; the slots per Echo and app over the websocket, checked by each app's descriptor (Echo-Wall's own keys
-kept, a wrong value refused, the size cap); the Echo's kiosk user only at its own Echo's slots, whatever it names; an
-app's own descriptor; the screen's options set from the panel's command and sent on to the Echo; then the panel in
-headless Chrome as an administrator: the Echo listed, the wall panel's preview drawn from the draft, an import from
-another app by what both share, Save, the layout in Home Assistant; an edit made in the preview's own edit mode reaching
-the draft.  build/test-logs/panel.png shows the panel for the eye.
+against build/hassmic-host: the web wall panel's layouts of before (store version 1) migrated into Echo-Wall's; the
+sidebar panel registered for administrators; the slots per Echo and app over the websocket, checked by each app's
+descriptor (Echo-Wall's own keys kept, a wrong value refused, the size cap); the Echo's kiosk user only at its own
+Echo's slots, whatever it names; an app's own descriptor, for its Echo; the screen's options set from the panel's
+command and sent on to the Echo; then the panel in headless Chrome as an administrator: the Echo listed, Echo-Wall's
+own WallView as the preview (frontend/echowall/, its lib/preview.dart built for the web) logged in with the panel's
+token and drawing this Home Assistant's devices, the draft drawn there, an import from another app by what both
+share, Save, the layout in Home Assistant, the preview's edit mode switched from the panel and its edit (a tile hidden)
+reaching the draft, not Home Assistant; Export.  build/test-logs/panel*.png show it for the eye.
 
 Same isolation and Home Assistant as tests/ha_real_kiosk.py.  Chrome: google-chrome or chromium on PATH (else that
 part is skipped)."""
@@ -63,17 +65,22 @@ async def browser(session, token, png):
         page = next(t for t in tabs if t.get("type") == "page")
         ws = await session.ws_connect(page["webSocketDebuggerUrl"], max_msg_size=0)
         n = [0]
+        console = []
         async def cdp(method, **params):
             n[0] += 1; i = n[0]
             await ws.send_json({"id": i, "method": method, "params": params})
             while True:
                 m = await ws.receive_json()
                 if m.get("id") == i: return m.get("result", m.get("error"))
+                if m.get("method") == "Runtime.consoleAPICalled":
+                    console.append(" ".join(str(a.get("value", a.get("description", ""))) for a in m["params"].get("args", []))[:300])
+                elif m.get("method") == "Runtime.exceptionThrown":
+                    console.append("exception: " + json.dumps(m["params"]["exceptionDetails"])[:400])
         async def js(expr):
             r = await cdp("Runtime.evaluate", expression=expr, returnByValue=True, awaitPromise=True)
             if r and r.get("exceptionDetails"): return {"error": json.dumps(r["exceptionDetails"])[:400]}
             return (r.get("result") or {}).get("value")
-        await cdp("Page.enable")
+        await cdp("Page.enable"); await cdp("Runtime.enable")
         await cdp("Emulation.setDeviceMetricsOverride", width=1500, height=1000, deviceScaleFactor=1, mobile=False)
         await cdp("Page.navigate", url=f"{hr.HA}/echo_local/panel-test-404")
         await asyncio.sleep(1)
@@ -85,38 +92,66 @@ async def browser(session, token, png):
         find = """(() => { const walk = (r) => { if (!r) return null; const p = r.querySelector('echo-local-panel'); if (p) return p;
             for (const e of r.querySelectorAll('*')) { if (e.shadowRoot) { const f = walk(e.shadowRoot); if (f) return f; } } return null; };
             return walk(document); })()"""
+        # the preview's accessibility nodes (lib/preview.dart turns them on): what Echo-Wall drew, by name
+        labels = f"""(() => {{ const f = {find}.shadowRoot.querySelector('iframe'); const d = f && f.contentDocument; if (!d) return [];
+            return [...d.querySelectorAll('flt-semantics')].map(e => (e.getAttribute('aria-label') || e.textContent || '').trim()).filter(Boolean); }})()"""
         out = {}
-        for _ in range(80):
+        for _ in range(120):
             await asyncio.sleep(0.5)
             out = await js(f"""(() => {{ const p = {find}; if (!p) return {{}}; const r = p.shadowRoot;
-                const f = r.querySelector('iframe'); let tiles = 0; try {{ tiles = f.contentDocument.querySelectorAll('.w').length; }} catch (e) {{}}
+                const f = r.querySelector('iframe'); const d = f && f.contentDocument;
                 return {{ echos: [...r.querySelectorAll('.echo .t')].map(e => e.textContent), apps: [...r.querySelectorAll('.chip')].map(e => e.textContent),
-                         fields: r.querySelectorAll('.card .row').length, iframe: !!f, tiles,
-                         theme: f && f.contentDocument ? f.contentDocument.documentElement.dataset.theme || '' : '' }}; }})()""") or {}
-            if out.get("tiles", 0) > 2: break
-        async def shot(name):
-            r = await cdp("Page.captureScreenshot", format="png")
+                         fields: r.querySelectorAll('.card .row').length, flutter: !!(d && d.querySelector('flutter-view')) }}; }})()""") or {}
+            out["labels"] = await js(labels) or []
+            if out.get("flutter") and len(out["labels"]) > 3: break
+        await asyncio.sleep(2)
+        out["labels"] = await js(labels) or []
+        async def shot(name, clip=None):
+            r = await cdp("Page.captureScreenshot", format="png", **({"clip": clip} if clip else {}))
             if r and r.get("data"):
                 os.makedirs(os.path.dirname(png), exist_ok=True); open(png.replace(".png", name + ".png"), "wb").write(base64.b64decode(r["data"]))
+                return base64.b64decode(r["data"])
         await shot("")
-        # another app's Home into the wall panel's, by what both share (Echo-Wall's "light" wallpaper = the wall's theme)
+        # the draft drawn: the wallpaper as the form sets it, seen in the iframe's pixels (Flutter draws on a canvas)
+        rect = await js(f"(() => {{ const b = {find}.shadowRoot.querySelector('iframe').getBoundingClientRect(); return {{x: b.x, y: b.y, width: b.width, height: b.height, scale: b.width / 960}}; }})()")
+        clip = {"x": rect["x"], "y": rect["y"], "width": rect["width"], "height": rect["height"], "scale": 1}
+        out["bright"] = {}
+        for wp in ("dusk", "light"):
+            await js(f"(() => {{ const p = {find}; p.cur().draft.wallpaper = '{wp}'; p.changed(true); }})()")
+            await asyncio.sleep(2.5)
+            png_ = await shot("-" + wp, clip)
+            try:
+                from PIL import Image, ImageStat
+                import io as _io
+                out["bright"][wp] = round(ImageStat.Stat(Image.open(_io.BytesIO(png_)).convert("L")).mean[0])
+            except Exception as e:
+                out["bright"][wp] = str(e)
+        # another app's Home into Echo-Wall's, by what both share (its descriptor: tint = theme, favs = favorites)
         out["import"] = await js(f"""(async () => {{ const p = {find};
-            p.take('{EW}', {{ wallpaper: 'light', now_playing: false, favorites: ['light.kitchen_lights', 'light.ceiling_lights'], place: {{}} }}, null, 'a test');
-            await new Promise(r => setTimeout(r, 1200));
-            const f = p.shadowRoot.querySelector('iframe');
-            return {{ dirty: p.dirty(), draft: p.cur().draft, theme: f.contentDocument.documentElement.dataset.theme || '',
-                     save: !p.shadowRoot.querySelector('.bar .primary').disabled }}; }})()""")
+            p.take('org.example.screen', {{ tint: 'light', favs: ['light.kitchen_lights', 'light.ceiling_lights'] }}, null, 'a test');
+            await new Promise(r => setTimeout(r, 800));
+            return {{ dirty: p.dirty(), draft: p.cur().draft, save: !p.shadowRoot.querySelector('.bar .primary').disabled }}; }})()""")
         await shot("-import")
         out["saved"] = await js(f"""(async () => {{ const p = {find}; p.shadowRoot.querySelector('.bar .primary').click();
             await new Promise(r => setTimeout(r, 1500)); return {{ dirty: p.dirty(), status: p.shadowRoot.querySelector('.bar .status').textContent }}; }})()""")
-        # the preview's own edit mode: a hide (⊖ on a room's tile) comes back as the draft, not saved
-        out["edit"] = await js(f"""(async () => {{ const p = {find}; const f = p.shadowRoot.querySelector('iframe');
-            f.contentWindow.echoLocalWallEdit(true); await new Promise(r => setTimeout(r, 500));
-            const d = f.contentDocument; const t = [...d.querySelectorAll('.page')].find(x => x.dataset.name !== 'Home');
-            const b = t && t.querySelector('.w[data-id] .badge.hide'); const id = b && b.closest('.w').dataset.id; if (b) b.click();
-            await new Promise(r => setTimeout(r, 500));
-            return {{ id, hidden: (p.cur().draft.hidden || []), dirty: p.dirty() }}; }})()""")
-        out["export"] = await js(f"""(() => {{ const p = {find}; let doc; const o = URL.createObjectURL;
+        # the panel's switch: the preview's edit mode; then a − in it (a real click on the canvas, where its node is)
+        await js(f"(() => {{ const i = {find}.shadowRoot.querySelector('.pbar .switch input'); i.click(); }})()")
+        await asyncio.sleep(1.5)
+        minus = await js(f"""(() => {{ const f = {find}.shadowRoot.querySelector('iframe'); const d = f.contentDocument;
+            const m = [...d.querySelectorAll('flt-semantics')].find(e => (e.getAttribute('aria-label') || e.textContent || '').trim() === '−');
+            if (!m) return null; const b = m.getBoundingClientRect(); return {{ x: b.x + b.width / 2, y: b.y + b.height / 2 }}; }})()""")
+        out["edit"] = {"editing": bool(minus)}
+        if minus:
+            x, y = rect["x"] + minus["x"] * rect["scale"], rect["y"] + minus["y"] * rect["scale"]
+            for t in ("mousePressed", "mouseReleased"):
+                await cdp("Input.dispatchMouseEvent", type=t, x=x, y=y, button="left", clickCount=1)
+                await asyncio.sleep(0.05)
+            await asyncio.sleep(1.5)
+            out["edit"].update(await js(f"""(() => {{ const p = {find}; const c = p.cur();
+                const changed = Object.keys(Object.assign({{}}, c.draft, c.saved)).filter(k => JSON.stringify(c.draft[k]) !== JSON.stringify(c.saved[k]));
+                return {{ dirty: p.dirty(), changed, hidden: changed }}; }})()""") or {})
+        await shot("-edit")
+        out["export"] = await js(f"""(() => {{ const p = {find}; const o = URL.createObjectURL;
             URL.createObjectURL = (b) => {{ b.text().then(t => window.__exp = t); return 'blob:x'; }};
             p.exportFile(); URL.createObjectURL = o; return true; }})()""")
         await asyncio.sleep(0.5)
@@ -124,6 +159,8 @@ async def browser(session, token, png):
         out["screen"] = await js(f"""(async () => {{ const p = {find}; p.tab = 'screen'; await p.loadKiosk();
             await new Promise(r => setTimeout(r, 300)); return [...p.shadowRoot.querySelectorAll('.card .row .name')].map(e => e.textContent); }})()""")
         await asyncio.sleep(0.5); await shot("-screen")
+        out["console"] = console
+        open(png.replace(".png", "-console.txt"), "w").write("\n".join(console))
         return out
     finally:
         proc.terminate()
@@ -168,11 +205,21 @@ async def run(tmp):
                 if reg[eid].get("device_id"): await c.ws(type="config/device_registry/update", device_id=reg[eid]["device_id"], area_id=areas[a])
                 else: await c.ws(type="config/entity_registry/update", entity_id=eid, area_id=areas[a])
 
-            # the store of before, migrated: the wall panel's layouts under app "wall"
-            lay = await c.ws(type="echo_local/home/get", echo=NODE, app="wall")
-            check(lay == {"theme": "dusk", "favorites": ["light.bed_light"], "ambient": 30}, f"version 1's layout migrated ({lay})")
-            old = await c.ws(type="echo_local/wall/get", echo="another-echo")
-            check(old == {"theme": "light"}, f"the old command name, the default for an Echo without one ({old})")
+            # the store of before, migrated: the web wall panel's layouts became Echo-Wall's
+            lay = await c.ws(type="echo_local/home/get", echo=NODE, app=EW)
+            check(lay == {"wallpaper": "dusk", "favorites": ["light.bed_light"], "ambient": 30}, f"version 1's wall layout migrated into Echo-Wall's ({lay})")
+            e = await fails(c.ws(type="echo_local/wall/get", echo=NODE))
+            check("unknown" in e.lower(), "the web wall panel's commands are gone")
+            e = await fails(c.ws(type="echo_local/home/get", echo=NODE, app="wall"))
+            check(e != "", "... and its app id")
+            async with session.get(f"{hr.HA}/echo_local/wall.html") as r:
+                check(r.status == 404, f"wall.html is gone ({r.status})")
+            async with session.get(f"{hr.HA}/echo_local/echowall/index.html") as r:
+                t = await r.text()
+            async with session.get(f"{hr.HA}/echo_local/echowall/main.dart.js") as r2:
+                n = len(await r2.read())
+            check(r.status == 200 and "flutter_bootstrap.js" in t and r2.status == 200 and n > 500000,
+                  f"Echo-Wall's preview served ({r.status}, main.dart.js {n} bytes)")
             panels = await c.ws(type="get_panels")
             p = panels.get("echo-local") or {}
             check(p.get("component_name") == "custom" and p.get("require_admin") and p.get("title") == "Echo Local"
@@ -181,7 +228,8 @@ async def run(tmp):
             async with session.get(f"{hr.HA}/echo_local/panel.js") as r:
                 check(r.status == 200 and "echo-local-panel" in await r.text(), f"panel.js served ({r.status})")
             lst = await c.ws(type="echo_local/home/list")
-            check([e["echo"] for e in lst["echos"]] == [NODE] and "wall" in lst["echos"][0]["slots"] and EW in lst["descriptors"],
+            check([e["echo"] for e in lst["echos"]] == [NODE] and EW in lst["echos"][0]["slots"] and EW in lst["descriptors"]
+                  and "wall" not in lst["descriptors"] and lst["descriptors"][EW].get("preview") == "/echo_local/echowall/index.html",
                   f"the list: the Echo, its slot, the descriptors ({[e['echo'] for e in lst['echos']]}, {sorted(lst['descriptors'])})")
 
             # descriptors check what they name, and keep what they do not
@@ -198,7 +246,7 @@ async def run(tmp):
 
             # the kiosk on: its user and token, as the Echo has them
             r = await c.ws(type="echo_local/kiosk/set", echo=NODE, options={"kiosk": True, "kiosk_screens": ["wall", "dashboard"], "kiosk_default": "wall",
-                                                                            "kiosk_return": 60, "kiosk_app": ""})
+                                                                            "kiosk_return": 60, "kiosk_app": EW})
             check(r["options"].get("kiosk") and r["options"].get("kiosk_return") == 60, f"the screen's options from the panel's command ({r['options']})")
             e = await fails(c.ws(type="echo_local/kiosk/set", echo=NODE, options={"kiosk_screens": ["nonsense"]}))
             check("nonsense" in e or "value" in e, "a screen kind there is none of: refused")
@@ -210,7 +258,7 @@ async def run(tmp):
                     if cfg.get("token") and cfg.get("return") == 60: break
                 except aiohttp.ClientError: pass
                 await asyncio.sleep(0.5)
-            check(cfg.get("return") == 60 and [s["name"] for s in cfg.get("screens", [])] == ["Home", "Home Assistant"],
+            check(cfg.get("return") == 60 and [(s["name"], s["url"][:13]) for s in cfg.get("screens", [])] == [("Home", "hassmic:home"), ("Home Assistant", hr.HA[:13])],
                   f"... and the entry reloaded: the Echo has them ({cfg.get('return')}, {[s['name'] for s in cfg.get('screens', [])]})")
             k = await as_user(session, cfg.get("token", ""))
             got = await k.ws(type="echo_local/home/get", app=EW)
@@ -224,30 +272,31 @@ async def run(tmp):
             e = await fails(k.ws(type="echo_local/kiosk/set", echo=NODE, options={"kiosk_admin": True}))
             check("unauthorized" in e.lower(), "the screen's options: administrators only (the kiosk does not make itself one)")
             d = await k.ws(type="echo_local/home/describe", app="org.example.screen",
-                           descriptor={"name": "Example", "fields": [{"key": "tint", "type": "select", "label": "Tint", "options": [["a", "A"], ["b", "B"]], "common": "theme"}]})
+                           descriptor={"name": "Example", "fields": [{"key": "tint", "type": "select", "label": "Tint", "options": [["a", "A"], ["light", "B"]], "common": "theme"},
+                                                                      {"key": "favs", "type": "entities", "label": "Tiles", "common": "favorites"}]})
             check(d == {"builtin": False}, "an app describes its own layout")
-            d = await k.ws(type="echo_local/home/describe", app="wall", descriptor={"name": "Mine", "fields": []})
+            d = await k.ws(type="echo_local/home/describe", app=EW, descriptor={"name": "Mine", "fields": []})
             check(d == {"builtin": True}, "... but not the built-in ones")
             e = await fails(k.ws(type="echo_local/home/set", app="org.example.screen", layout={"tint": "c"}))
             check("one of" in e, "its descriptor checks its layout")
             lst = await c.ws(type="echo_local/home/list")
             check(lst["echos"][0]["descriptors"]["org.example.screen"]["name"] == "Example" and "org.example.screen" not in lst["descriptors"]
-                  and lst["descriptors"]["wall"]["name"] == "Wall panel" and lst["echos"][0]["slots"][EW]["by"] == "app",
+                  and lst["descriptors"][EW]["name"] == "Echo-Wall" and lst["echos"][0]["slots"][EW]["by"] == "app",
                   f"the list: the app's descriptor with its Echo, who saved ({lst['echos'][0]['slots'].get(EW)})")
             got = await c.ws(type="echo_local/home/set", echo="another-echo", app="org.example.screen", layout={"tint": "c"})
             check(got == {"tint": "c"}, "... and for its Echo only: another Echo's layouts of that app are not checked by it")
-            # live: the wall panel's subscription gets the panel's save
-            await k.sock.send_json({"id": 900, "type": "echo_local/home/subscribe", "app": "wall"})
+            # live: the app's subscription (Echo-Wall's layout_sync.dart) gets the panel's save
+            await k.sock.send_json({"id": 900, "type": "echo_local/home/subscribe", "app": EW})
             first = []
             while len(first) < 2:
                 m = await k.sock.receive_json()
                 if m.get("id") == 900: first.append(m)
-            await c.ws(type="echo_local/home/set", echo=NODE, app="wall", layout={"theme": "amber", "favorites": None})
+            await c.ws(type="echo_local/home/set", echo=NODE, app=EW, layout={"wallpaper": "dusk", "favorites": None, "place": ew["place"]})
             ev = None
             for _ in range(10):
                 m = await asyncio.wait_for(k.sock.receive_json(), 5)
                 if m.get("id") == 900 and m.get("type") == "event": ev = m["event"]; break
-            check(ev and ev["layout"] == {"theme": "amber", "favorites": None} and ev["echo"] == NODE, f"a subscriber gets the save at once ({ev})")
+            check(ev and ev["layout"] == {"wallpaper": "dusk", "favorites": None, "place": ew["place"]} and ev["echo"] == NODE, f"a subscriber gets the save at once ({ev})")
             await k.sock.close()
 
             # the frontend's onboarding's last step (hr.onboard leaves it: the other tests use no browser as an administrator)
@@ -255,24 +304,28 @@ async def run(tmp):
                                     json={"client_id": f"{hr.HA}/", "redirect_uri": f"{hr.HA}/?auth_callback=1"}) as r: pass
             out = await browser(session, admin_tok, os.path.join(hr.ROOT, "build", "test-logs", "panel.png"))
             if out is not None:
-                check(out.get("echos", [None])[0] == "Echo Show 5 a1b2c3" and any("Wall panel" in a for a in out.get("apps", []))
-                      and any("Echo-Wall" in a for a in out.get("apps", [])), f"the panel: the Echo, its apps ({out.get('echos')}, {out.get('apps')})")
-                check(out.get("iframe") and out.get("tiles", 0) > 2 and out.get("fields", 0) >= 7,
-                      f"the wall panel's preview drawn, the form from its descriptor ({out.get('tiles')} widgets, {out.get('fields')} rows)")
+                check(out.get("echos") == ["Echo Show 5 a1b2c3"] and any("Echo-Wall" in a and "on the screen" in a for a in out.get("apps", [])),
+                      f"the panel: the Echo, Echo-Wall on its screen ({out.get('echos')}, {out.get('apps')})")
+                check(out.get("flutter") and out.get("fields", 0) >= 9, f"Echo-Wall's own preview started, the form from its descriptor ({out.get('fields')} rows)")
+                check(any(n in " ".join(out.get("labels", [])) for n in ("Kitchen", "Living Room", "Ceiling Lights")),
+                      f"the preview logged in with the panel's token: this Home Assistant's rooms and devices drawn ({out.get('labels', [])[:12]})")
+                check(out.get("bright", {}).get("light", 0) > out.get("bright", {}).get("dusk", 255) + 30,
+                      f"the draft drawn in the preview: the light wallpaper lighter than dusk ({out.get('bright')})")
                 im = out.get("import") or {}
-                check(im.get("dirty") and (im.get("draft") or {}).get("theme") == "light" and im["draft"].get("nowplaying") is False
-                      and im["draft"].get("favorites") == ["light.kitchen_lights", "light.ceiling_lights"] and "place" not in im["draft"]
-                      and im.get("theme") == "light" and im.get("save"),
-                      f"an import from Echo-Wall by what both share: the draft, the preview following, Save offered ({im})")
-                lay = await c.ws(type="echo_local/home/get", echo=NODE, app="wall")
-                check(not (out.get("saved") or {}).get("dirty") and lay.get("theme") == "light" and lay.get("favorites") == ["light.kitchen_lights", "light.ceiling_lights"],
+                check(im.get("dirty") and (im.get("draft") or {}).get("wallpaper") == "light"
+                      and im["draft"].get("favorites") == ["light.kitchen_lights", "light.ceiling_lights"] and "tint" not in im["draft"]
+                      and (im["draft"].get("place") or {}) == ew["place"] and im.get("save"),
+                      f"an import from another app by what both share, Echo-Wall's own keys kept, Save offered ({im})")
+                lay = await c.ws(type="echo_local/home/get", echo=NODE, app=EW)
+                check(not (out.get("saved") or {}).get("dirty") and lay.get("wallpaper") == "light" and lay.get("favorites") == ["light.kitchen_lights", "light.ceiling_lights"],
                       f"Save: in Home Assistant ({out.get('saved')}, {lay})")
                 ed = out.get("edit") or {}
-                check(ed.get("id") and ed["id"] in ed.get("hidden", []) and ed.get("dirty") and ed["id"] not in (lay.get("hidden") or []),
-                      f"the preview's edit mode edits the draft, not Home Assistant ({ed})")
+                lay2 = await c.ws(type="echo_local/home/get", echo=NODE, app=EW)
+                check(ed.get("editing") and ed.get("changed") and ed.get("dirty") and lay2 == lay,
+                      f"the panel's switch: the preview's edit mode; a tile hidden there reaches the draft, not Home Assistant ({ed})")
                 x = out.get("exported") or {}
-                check(x.get("format") == "echo-local-home" and x.get("app") == "wall" and x.get("echo") == NODE
-                      and (x.get("common") or {}).get("theme") == "light" and x.get("layout", {}).get("theme") == "light",
+                check(x.get("format") == "echo-local-home" and x.get("app") == EW and x.get("echo") == NODE
+                      and (x.get("common") or {}).get("theme") == "light" and x.get("layout", {}).get("wallpaper") == "light",
                       f"Export: the file ({ {k: x.get(k) for k in ('format', 'app', 'echo', 'common')} })")
                 check("Show Home Assistant on the screen" in (out.get("screen") or []), f"the Screen tab: the kiosk's options ({list(out.get('screen') or [])[:3]})")
     finally:

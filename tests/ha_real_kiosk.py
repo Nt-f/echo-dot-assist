@@ -2,9 +2,8 @@
 """The Echo Show's kiosk set up from Home Assistant (custom_components/echo_local kiosk.py, src/hassmic/kiosk.c) in a real
 Home Assistant against build/hassmic-host: the options flow, the kiosk's own user (local only, not an administrator)
 and its token, sealed to the Echo and read back by the app's way (GET /kiosk/config from 127.0.0.1, the token only
-there), the screens (the wall panel, a dashboard), the token taking Home Assistant's websocket; the wall panel
-(frontend/wall.html) in headless Chrome logged in by the kiosk's token as the app logs it in: rooms, tiles, a tap that
-toggles; the entry removed, the user and its token gone.  build/test-logs/wall.png shows the panel for the eye.
+there), the screens (Home: hassmic:home, drawn by the screen app; a dashboard), the token taking Home Assistant's
+websocket; the entry removed, the user and its token gone.  Home's layout and the sidebar panel: tests/ha_real_home.py.
 
 Same isolation and Home Assistant as tests/ha_real_alarms.py.  Chrome: google-chrome or chromium on PATH (else that
 part is skipped)."""
@@ -23,115 +22,12 @@ def write_config(conf):
         f.write("demo:\n")
 
 
-async def browser_wall(session, token, png):
-    """the wall panel in headless Chrome, logged in as Kiosk.java does it: hassTokens in the origin's localStorage"""
-    chrome = shutil.which("google-chrome") or shutil.which("chromium") or shutil.which("chromium-browser")
-    if not chrome:
-        print("note: no Chrome here, the wall panel's page is not drawn"); return None
-    prof = tempfile.mkdtemp(prefix="wall-chrome-")
-    proc = subprocess.Popen([chrome, "--headless=new", "--no-sandbox", "--disable-gpu", "--remote-debugging-port=9333",
-                             f"--user-data-dir={prof}", "--window-size=960,470", "--force-device-scale-factor=1", "about:blank"],
-                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    try:
-        for _ in range(100):
-            try:
-                async with session.get("http://127.0.0.1:9333/json") as r:
-                    tabs = await r.json(); break
-            except Exception: await asyncio.sleep(0.2)
-        page = next(t for t in tabs if t.get("type") == "page")
-        ws = await session.ws_connect(page["webSocketDebuggerUrl"], max_msg_size=0)
-        n = [0]
-        async def cdp(method, **params):
-            n[0] += 1; i = n[0]
-            await ws.send_json({"id": i, "method": method, "params": params})
-            while True:
-                m = await ws.receive_json()
-                if m.get("id") == i: return m.get("result", m.get("error"))
-        async def js(expr):
-            r = await cdp("Runtime.evaluate", expression=expr, returnByValue=True, awaitPromise=True)
-            return (r.get("result") or {}).get("value")
-        await cdp("Page.enable")
-        # the Show 5's WebView: 960 x 470 above the light band
-        await cdp("Emulation.setDeviceMetricsOverride", width=960, height=470, deviceScaleFactor=1, mobile=False)
-        await cdp("Page.navigate", url=f"{hr.HA}/echo_local/kiosk-test-404")   # the origin, for its localStorage
-        await asyncio.sleep(1)
-        tokens = {"access_token": token, "token_type": "Bearer", "expires_in": 315360000, "hassUrl": hr.HA,
-                  "clientId": hr.HA + "/", "expires": 4102444800000, "refresh_token": ""}
-        await js(f"localStorage.setItem('hassTokens', {json.dumps(json.dumps(tokens))})")
-        await cdp("Page.navigate", url=f"{hr.HA}/echo_local/wall.html?echo=echo-show-5-a1b2c3")      # as the kiosk opens it
-        out = {}
-        for _ in range(60):
-            await asyncio.sleep(0.5)
-            out = await js("({tiles: document.querySelectorAll('.tile').length, pages: [...document.querySelectorAll('.page')].map(p=>p.dataset.name),"
-                           " on: document.querySelectorAll('.tile.on').length, msg: (document.querySelector('.msg')||{}).textContent||'',"
-                           " clock: !!document.querySelector('.clockw svg'), thermo: (document.querySelector('.thermo .t')||{}).textContent||'',"
-                           " names: [...document.querySelectorAll('.tile .nm')].map(e=>e.textContent)})") or {}
-            if out.get("tiles", 0) > 3: break
-        await asyncio.sleep(0.5)
-        async def shot(name):
-            r = await cdp("Page.captureScreenshot", format="png")
-            if r and r.get("data"):
-                os.makedirs(os.path.dirname(png), exist_ok=True); open(png.replace(".png", name + ".png"), "wb").write(base64.b64decode(r["data"]))
-        await shot("")
-        await js("(() => { const p = [...document.querySelectorAll('.page')].findIndex(p => p.dataset.name === 'Living Room'); document.getElementById('pages').scrollLeft = p * innerWidth; })()")
-        await asyncio.sleep(0.6); await shot("-room")
-        out["tap"] = await js("""(async () => {
-            const t = [...document.querySelectorAll('.tile')].find(e => e.querySelector('.nm').textContent === 'Ceiling Lights');
-            if (!t) return 'no tile';
-            const was = t.classList.contains('on');
-            const o = {bubbles: true, clientX: 10, clientY: 10, pointerId: 1};
-            t.dispatchEvent(new PointerEvent('pointerdown', o)); t.dispatchEvent(new PointerEvent('pointerup', o));
-            for (let i = 0; i < 40; i++) { await new Promise(r => setTimeout(r, 100)); if (t.classList.contains('on') !== was) return was ? 'off' : 'on'; }
-            return 'unchanged';
-        })()""")
-        await js("(() => { document.getElementById('adigits').textContent = '10:09'; document.getElementById('ambient').classList.add('show'); })()")
-        await asyncio.sleep(0.3); await shot("-ambient")
-        await js("document.getElementById('ambient').classList.remove('show')")
-
-        # the edit mode, by real pointer input (CDP's mouse is the page's pointer): held dots, a tile hidden, one
-        # dragged in front of another, one starred for Home
-        async def mouse(kind, x, y, down):
-            await cdp("Input.dispatchMouseEvent", type=kind, x=x, y=y, button="left", buttons=1 if down else 0, clickCount=1)
-        async def rect(expr):
-            return await js(f"(() => {{ const e = {expr}; if (!e) return null; const r = e.getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; }})()")
-        tileq = lambda name: f"[...document.querySelectorAll('.tile')].find(e => e.querySelector('.nm') && e.querySelector('.nm').textContent === '{name}' && e.getBoundingClientRect().left >= 0 && e.getBoundingClientRect().left < innerWidth)"
-        d = await rect("document.getElementById('dots')")
-        await mouse("mousePressed", d[0], d[1], True); await asyncio.sleep(1.0); await mouse("mouseReleased", d[0], d[1], False)
-        await asyncio.sleep(0.4)
-        out["editing"] = await js("document.body.classList.contains('editing') && !!document.getElementById('editbar')")
-        await js("(() => { const p = [...document.querySelectorAll('.page')].findIndex(p => p.dataset.name === 'Living Room'); document.getElementById('pages').scrollLeft = p * innerWidth; })()")
-        await asyncio.sleep(0.5); await shot("-edit")
-        b = await rect(tileq("Decorative Lights") + ".querySelector('.badge.hide')")
-        if b: await mouse("mousePressed", b[0], b[1], True); await mouse("mouseReleased", b[0], b[1], False)
-        await asyncio.sleep(0.8)
-        a, t = await rect(tileq("Ceiling Lights")), await rect(tileq("Bed Light"))
-        if a and t:
-            await mouse("mousePressed", a[0], a[1], True)
-            for i in range(1, 11):
-                await mouse("mouseMoved", a[0] + (t[0] - a[0]) * i / 10, a[1] + (t[1] - a[1]) * i / 10, True); await asyncio.sleep(0.04)
-            await mouse("mouseReleased", t[0], t[1], False)
-        await asyncio.sleep(0.8)
-        s_ = await rect(tileq("Ceiling Lights") + ".querySelector('.badge.fav')")
-        if s_: await mouse("mousePressed", s_[0], s_[1], True); await mouse("mouseReleased", s_[0], s_[1], False)
-        await asyncio.sleep(1.2)
-        out["after_edit"] = await js("[...document.querySelectorAll('.page')].find(p => p.dataset.name === 'Living Room').querySelectorAll('.w[data-id]').length")
-        await js("echoLocalWallEdit(false)")
-        await ws.close()
-        return out
-    finally:
-        proc.terminate()
-        try: proc.wait(5)
-        except subprocess.TimeoutExpired: proc.kill()
-        shutil.rmtree(prof, ignore_errors=True)
-
-
 async def api_kiosk_app(c, entry, app):
     """the options again, with another screen app"""
     o = await c.post("/api/config/config_entries/options/flow", {"handler": entry["entry_id"]})
     o = await c.post(f"/api/config/config_entries/options/flow/{o['flow_id']}",
                      {"kiosk": True, "kiosk_screens": ["wall", "dashboard"], "kiosk_default": "wall", "kiosk_return": 90, "kiosk_admin": False,
                       "kiosk_app": app})
-    await c.post(f"/api/config/config_entries/options/flow/{o['flow_id']}", {"theme": "amber", "nowplaying": True, "ambient": 120, "favorites": [], "hidden": []})
     await asyncio.sleep(2)
 
 
@@ -186,9 +82,6 @@ async def run(tmp):
                               "kiosk_admin": False, "kiosk_dashboard": "lovelace", "kiosk_music": "", "kiosk_custom_name": "",
                               "kiosk_custom_url": "", "kiosk_ha_url": "",
                               "kiosk_app_settings": "# the HomeView's photos\nimmich.url = http://192.168.1.9:2283\nimmich.key=s3cret-immich-key\n"})
-            check(o.get("step_id") == "wall", f"then the wall panel's step ({o.get('step_id')})")
-            o = await c.post(f"/api/config/config_entries/options/flow/{o['flow_id']}",
-                             {"theme": "amber", "nowplaying": True, "ambient": 120, "favorites": [], "hidden": []})
             check(o.get("type") == "create_entry", f"saved ({o.get('type')})")
 
             cfg = {}
@@ -216,7 +109,7 @@ async def run(tmp):
                     check(r.status == 404, f"the state feed from another address: not found ({r.status})")
             check(tok and cfg.get("ha") == hr.HA, f"the Echo has the address and a token ({cfg.get('ha')}, {len(tok)} chars)")
             check([s["name"] for s in cfg.get("screens", [])] == ["Home", "Home Assistant"]
-                  and cfg["screens"][0]["url"].startswith(f"{hr.HA}/echo_local/wall.html") and cfg["screens"][1]["url"] == f"{hr.HA}/lovelace"
+                  and cfg["screens"][0]["url"] == "hassmic:home" and cfg["screens"][1]["url"] == f"{hr.HA}/lovelace"
                   and cfg.get("default") == 0 and cfg.get("return") == 90, f"its screens: {cfg.get('screens')}, default {cfg.get('default')}, return {cfg.get('return')}")
             check((cfg.get("settings") or {}) == {"immich.url": "http://192.168.1.9:2283", "immich.key": "s3cret-immich-key"},
                   f"the screen app's settings, sealed on the way, in its config ({cfg.get('settings')})")
@@ -245,43 +138,10 @@ async def run(tmp):
             await w.receive_json(); await w.send_json({"type": "auth", "access_token": tok})
             check((await w.receive_json()).get("type") == "auth_ok", "the token takes Home Assistant's websocket")
             await w.close()
-            async with session.get(f"{hr.HA}/echo_local/wall.html") as r:
-                body = await r.text()
-            check(r.status == 200 and "/echo_local/wall.js" in body, f"the wall panel is served ({r.status})")
-
-            entry_opts = lambda: {"kiosk": True, "kiosk_screens": ["wall", "dashboard"], "kiosk_default": "wall", "kiosk_return": 90, "kiosk_admin": False}
-            out = await browser_wall(session, tok, os.path.join(hr.ROOT, "build", "test-logs", "wall.png"))
-            if out is not None:
-                check(out.get("tiles", 0) >= 4 and out.get("pages", [""])[0] == "Home" and "Kitchen" in out.get("pages", []) and "Living Room" in out.get("pages", []),
-                      f"the wall: Home, then a page per room ({out.get('tiles')} tiles, pages {out.get('pages')}, {out.get('msg')!r})")
-                check(out.get("clock") and out.get("thermo", "").strip() not in ("", "—"), f"Home: the clock, the thermostat's number ({out.get('thermo')!r})")
-                check("Ceiling Lights" in out.get("names", []), f"names without their room's ({out.get('names')})")
-                check(out.get("tap") in ("on", "off") and await c.state("light.ceiling_lights") == out.get("tap"),
-                      f"a tap toggles the light ({out.get('tap')}, now {await c.state('light.ceiling_lights')})")
-                check(out.get("editing"), "the dots held: the edit mode")
-                lay = await c.ws(type="echo_local/wall/get", echo="echo-show-5-a1b2c3")
-                check("switch.decorative_lights" in (lay.get("hidden") or []), f"⊖: hidden, saved in Home Assistant as the kiosk's user ({lay.get('hidden')})")
-                lo = (lay.get("order") or {}).get(areas["Living Room"], [])
-                check("light.ceiling_lights" in lo and "light.bed_light" in lo and lo.index("light.ceiling_lights") < lo.index("light.bed_light"), f"a drag: Ceiling Lights before Bed Light ({lo})")
-                check("light.ceiling_lights" in (lay.get("favorites") or []), f"★: on Home ({lay.get('favorites')})")
-
-            # the wall step of the options sets the same layout
-            o = await c.post("/api/config/config_entries/options/flow", {"handler": entry["entry_id"]})
-            o = await c.post(f"/api/config/config_entries/options/flow/{o['flow_id']}", {**{k: v for k, v in entry_opts().items()}})
-            o = await c.post(f"/api/config/config_entries/options/flow/{o['flow_id']}",
-                             {"theme": "dusk", "nowplaying": False, "ambient": 0, "favorites": ["climate.hvac", "light.kitchen_lights"], "hidden": []})
-            lay = await c.ws(type="echo_local/wall/get", echo="echo-show-5-a1b2c3")
-            check(o.get("type") == "create_entry" and lay.get("theme") == "dusk" and lay.get("favorites") == ["climate.hvac", "light.kitchen_lights"]
-                  and lay.get("ambient") == 0 and lay.get("nowplaying") is False and lay.get("hidden") == []
-                  and (lay.get("order") or {}).get(areas["Living Room"]), f"the options' wall step: the layout, the panel's own order kept ({lay})")
-            other = await c.ws(type="echo_local/wall/get", echo="another-echo")
-            check(other == {}, f"another Echo without one: nothing set ({other})")
-
             # options again, the kiosk off: the Echo's setting off, the user kept
             o = await c.post("/api/config/config_entries/options/flow", {"handler": entry["entry_id"]})
             o = await c.post(f"/api/config/config_entries/options/flow/{o['flow_id']}", {"kiosk": False, "kiosk_screens": ["wall"], "kiosk_default": "wall",
                              "kiosk_return": 0, "kiosk_admin": False})
-            o = await c.post(f"/api/config/config_entries/options/flow/{o['flow_id']}", {"theme": "dusk", "nowplaying": False, "ambient": 0, "favorites": [], "hidden": []})
             check(o.get("type") == "create_entry", "the kiosk switched off")
             # removed: its user and the token gone
             await session.delete(f"{hr.HA}/api/config/config_entries/entry/{entry['entry_id']}", headers=c.h)

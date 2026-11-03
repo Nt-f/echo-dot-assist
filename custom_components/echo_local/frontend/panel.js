@@ -1,11 +1,12 @@
 // Echo Local's sidebar panel (/echo-local, registered in __init__.py; docs/home-screens.md has the design): every Echo
 // Show's screen and the Home of each app that draws one, edited graphically.
 //
-//   - left: the Echos (config entries of echo_local), and "Any other browser" (the slot named "default")
-//   - "Home screen": the apps that have a Home on that Echo (the wall panel always; the screen app the Echo runs; any
-//     app that saved one), a form drawn from the app's descriptor (home.py BUILTIN, or the app's own from
-//     echo_local/home/describe), beside a preview: the wall panel itself in an iframe (wall.js ?preview=1), whose own
-//     edit mode (drag, star, hide) edits the draft here; other apps get a sketch of their Home's tiles
+//   - left: the Echos (config entries of echo_local)
+//   - "Home screen": the apps that have a Home on that Echo (Echo-Wall always; the screen app the Echo runs; any app
+//     that saved one), a form drawn from the app's descriptor (home.py BUILTIN, or the app's own from
+//     echo_local/home/describe), beside a preview: Echo-Wall's own WallView built for the web (frontend/echowall/,
+//     its lib/preview.dart) in an iframe, whose edit mode (drag, star, hide) edits the draft here; an app without a
+//     preview page gets a sketch of its Home's tiles
 //   - Export (a .echohome.json file), Import (a file, another app on this Echo, the same app on another Echo), Copy to
 //     other Echos, Reset (the slot gone: the app's own defaults)
 //   - "Screen": the kiosk's options (kiosk.py), which the options flow also sets
@@ -16,9 +17,12 @@
 'use strict';
 
 const FORMAT = 'echo-local-home';
-const SIZES = { 'Echo Show 5': [960, 470], 'Echo Show 8': [1280, 790], 'Echo Show': [1024, 590] };   // the WebView above the light band
-const KIND_LABEL = { clock: 'Clock', wall: 'Wall panel', dashboard: "Home Assistant's own UI", music: 'Music Assistant', custom: 'A page of your own' };
-const KNOWN_APPS = [['', "hassmic's kiosk (shows the wall panel)"], ['io.github.nt_f.echowall', 'Echo-Wall'], ['io.github.nt_f.echoscreen', 'Echo-Screen']];
+// the screen app's window in Flutter's logical pixels (the Show 5: 960 x 480 at density 160, the light band's rows off)
+const SIZES = { 'Echo Show 5': [960, 470], 'Echo Show 8': [1280, 790], 'Echo Show': [1024, 590] };
+const ECHOWALL = 'io.github.nt_f.echowall';
+const KIND_LABEL = { wall: 'Home (Echo-Wall draws it)', clock: 'Clock', dashboard: "Home Assistant's own UI", music: 'Music Assistant', custom: 'A page of your own' };
+const KIND_NAME = { dashboard: 'Home Assistant', music: 'Music' };           // kiosk.py's names for the switcher
+const KNOWN_APPS = [[ECHOWALL, 'Echo-Wall'], ['io.github.nt_f.echoscreen', 'Echo-Screen'], ['', "hassmic's kiosk (web pages only, no Home)"]];
 
 const h = (tag, props, ...kids) => {
   const e = document.createElement(tag);
@@ -173,24 +177,35 @@ class EchoLocalPanel extends HTMLElement {
   constructor() {
     super();
     this.attachShadow({ mode: 'open' });
-    this.state = { echos: [], descriptors: {}, defaultSlots: {}, loaded: false, error: '' };
-    this.echo = null;                 // node, or 'default'
-    this.app = 'wall';
+    this.state = { echos: [], descriptors: {}, loaded: false, error: '' };
+    this.echo = null;                 // the Echo's node
+    this.app = ECHOWALL;
     this.tab = 'home';
     this.drafts = new Map();          // "echo|app" -> { saved, draft, incoming, sub }
     this.kiosk = null;                // { saved, draft } of the selected Echo
     this.size = null;
     this.editOnScreen = false;
-    // the wall panel's preview (wall.js ?preview=1) asks the login and the draft from here
+    // the preview (Echo-Wall's lib/preview.dart) asks the login, the draft and what the Echo's app would know from here
     window.echoLocalPreview = {
       token: async () => { const a = this._hass.auth; if (a.expired) await a.refreshAccessToken(); return a.accessToken; },
       layout: () => (this.cur() || {}).draft,
+      info: () => this.previewInfo(),
     };
     this.onMessage = (ev) => {
       if (ev.origin !== location.origin || !ev.data || ev.data.type !== 'echo-local-edit') return;
       const c = this.cur(); if (!c) return;
-      c.draft = clone(ev.data.layout); this.changed(true);
+      c.draft = clone(ev.data.layout); this.refresh();      // not sent back: the preview has it
     };
+  }
+
+  // what the screen app gets beside the layout: the clock's format, the other screens' names (their tiles on Home)
+  previewInfo() {
+    const loc = this._hass.locale || {};
+    const h24 = loc.time_format === '24' ? true : loc.time_format === '12' ? false
+      : new Intl.DateTimeFormat(loc.language || undefined, { hour: 'numeric' }).resolvedOptions().hour12 === false;
+    const info = this.echoInfo() || {};
+    const screens = (info.screens || []).filter((k) => KIND_NAME[k]).map((k) => KIND_NAME[k]);
+    return { h24, screens, settings: {}, editing: this.editOnScreen };
   }
 
   set hass(h) { const first = !this._hass; this._hass = h; if (first) this.load(); }
@@ -218,8 +233,8 @@ class EchoLocalPanel extends HTMLElement {
   async load() {
     try {
       const r = await this.ws({ type: 'echo_local/home/list' });
-      this.state = { echos: r.echos, descriptors: r.descriptors, builtin: r.builtin, defaultSlots: r.default, limits: r.limits, loaded: true, error: '' };
-      if (!this.echo) this.echo = (r.echos[0] || {}).echo || 'default';
+      this.state = { echos: r.echos, descriptors: r.descriptors, builtin: r.builtin, limits: r.limits, loaded: true, error: '' };
+      if (!this.echo) this.echo = (r.echos[0] || {}).echo || null;
     } catch (e) {
       this.state = { ...this.state, loaded: true, error: (e && e.message) || String(e) };
     }
@@ -227,11 +242,11 @@ class EchoLocalPanel extends HTMLElement {
     if (this.echo) this.select(this.echo, this.app);
   }
 
-  // the apps with a Home on an Echo: the wall panel, the screen app it runs, those with a slot
+  // the apps with a Home on an Echo: Echo-Wall, the screen app it runs, those with a slot
   appsOf(node) {
     const info = this.echoInfo(node);
-    const slots = node === 'default' ? this.state.defaultSlots : (info ? info.slots : {});
-    const out = ['wall'];
+    const slots = info ? info.slots : {};
+    const out = [ECHOWALL];
     if (info && info.app && !out.includes(info.app)) out.push(info.app);
     for (const a of Object.keys(slots || {})) if (!out.includes(a)) out.push(a);
     return out.map((a) => ({ app: a, desc: this.desc(a), slot: (slots || {})[a] }));
@@ -240,7 +255,8 @@ class EchoLocalPanel extends HTMLElement {
   async select(node, app) {
     this.echo = node;
     const apps = this.appsOf(node).map((x) => x.app);
-    this.app = apps.includes(app) ? app : (this.echoInfo(node) && this.echoInfo(node).app && this.desc(this.echoInfo(node).app) ? this.echoInfo(node).app : 'wall');
+    const running = (this.echoInfo(node) || {}).app;
+    this.app = apps.includes(app) ? app : running && this.desc(running) ? running : ECHOWALL;
     const info = this.echoInfo(node);
     this.size = SIZES[Object.keys(SIZES).find((k) => info && info.title.startsWith(k)) || 'Echo Show 5'];
     this.kiosk = null;
@@ -261,7 +277,7 @@ class EchoLocalPanel extends HTMLElement {
         if (d.saved == null || same(d.saved, d.draft)) { d.saved = clone(lay); d.draft = clone(lay); d.incoming = null; }
         else if (!same(lay, d.saved)) d.incoming = clone(lay);   // the Echo changed it while we edit: offered
         res();
-        if (this.key() === k) { this.render(); this.pushPreview(); }
+        if (this.key() === k) { this.refresh(); this.pushPreview(); }
       }, { type: 'echo_local/home/subscribe', echo: node, app });
       d.sub.catch((e) => { d.saved = {}; d.draft = {}; this.toast('Not readable: ' + ((e && e.message) || e)); res(); });
     });
@@ -271,8 +287,19 @@ class EchoLocalPanel extends HTMLElement {
 
   // a field changed: the toolbar and the preview follow; the form is left as it is (focus stays where it is)
   changed(rebuild) {
-    if (rebuild) this.render(); else this.renderBar();
+    if (rebuild) this.refresh(); else this.renderBar();
     this.pushPreview();
+  }
+
+  // the draft changed or came anew: the form, the banner and the bar drawn again, the preview left alone (an iframe
+  // rebuilt or moved loads again: Flutter would start over)
+  refresh() {
+    const grid = this.shadowRoot.querySelector('.grid');
+    const c = this.cur();
+    if (!grid || grid.dataset.key !== this.key() + '|' + this.size || !c || c.draft == null) { this.render(); return; }
+    grid.firstChild.replaceWith(this.form(c, this.desc()));
+    this.shadowRoot.querySelector('.incoming').replaceWith(this.banner(c));
+    this.renderBar();
   }
 
   pushPreview() {
@@ -291,14 +318,15 @@ class EchoLocalPanel extends HTMLElement {
       this.toast('Saved: the Echo shows it now');
       this.refreshList();
     } catch (e) { this.toast('Not saved: ' + ((e && e.message) || e)); }
-    this.render();
+    this.refresh();
   }
 
   async refreshList() {
     try {
       const r = await this.ws({ type: 'echo_local/home/list' });
-      Object.assign(this.state, { echos: r.echos, descriptors: r.descriptors, defaultSlots: r.default });
+      Object.assign(this.state, { echos: r.echos, descriptors: r.descriptors });
       this.renderNav();
+      if (this.tab === 'home') this.renderBar();
     } catch (e) { /* the next save tells */ }
   }
 
@@ -310,10 +338,10 @@ class EchoLocalPanel extends HTMLElement {
     const common = {};
     for (const f of d.fields) if (f.common && f.key in c.draft) common[f.common] = c.draft[f.key];
     const info = this.echoInfo();
-    const doc = { format: FORMAT, version: 1, app: this.app, app_name: d.name || this.app, echo: this.echo, echo_name: info ? info.title : 'Any other browser',
+    const doc = { format: FORMAT, version: 1, app: this.app, app_name: d.name || this.app, echo: this.echo, echo_name: info ? info.title : this.echo,
       exported: new Date().toISOString(), layout: c.draft, common };
     const blob = new Blob([JSON.stringify(doc, null, 2)], { type: 'application/json' });
-    const a = h('a', { href: URL.createObjectURL(blob), download: `${(info ? info.title : 'default').replace(/[^\w-]+/g, '-')}-${(d.name || this.app).replace(/[^\w-]+/g, '-')}.echohome.json` });
+    const a = h('a', { href: URL.createObjectURL(blob), download: `${(info ? info.title : this.echo).replace(/[^\w-]+/g, '-')}-${(d.name || this.app).replace(/[^\w-]+/g, '-')}.echohome.json` });
     this.shadowRoot.append(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
   }
 
@@ -375,7 +403,7 @@ class EchoLocalPanel extends HTMLElement {
     try {
       const lay = await this.ws({ type: 'echo_local/home/get', echo: node, app });
       this._from = node;
-      const name = node === 'default' ? 'any other browser' : (this.echoInfo(node) || {}).title || node;
+      const name = (this.echoInfo(node) || {}).title || node;
       this.take(app, lay, null, `${(this.desc(app, node) || {}).name || app} of ${name}`);
       this._from = null;
     } catch (e) { this.toast('Not read: ' + ((e && e.message) || e)); }
@@ -452,14 +480,13 @@ class EchoLocalPanel extends HTMLElement {
         h('span', null, h('div', { class: 't' }, e.title), h('div', { class: 's' }, (e.kiosk ? 'Screen on' : 'Screen off') + (apps.length ? ' · ' + apps.join(', ') : '')))));
     }
     if (!this.state.echos.length) nav.append(h('div', { class: 'empty' }, 'No Echo added yet: Settings › Devices & services › Add integration › Echo Local.'));
-    nav.append(h('button', { class: 'echo' + (this.echo === 'default' ? ' sel' : ''), onclick: () => { this.tab = 'home'; this.select('default', this.app); } },
-      h('span', { class: 'dev' }), h('span', null, h('div', { class: 't' }, 'Any other browser'), h('div', { class: 's' }, 'The wall panel opened without an Echo'))));
   }
 
   renderMain() {
     const main = this.shadowRoot.querySelector('main'); if (!main) return;
     main.textContent = '';
-    const isEcho = this.echo !== 'default';
+    const isEcho = !!this.echoInfo();
+    if (!isEcho) { main.append(h('div', { class: 'empty' }, 'Add an Echo Show to Echo Local first.')); return; }
     main.append(h('div', { class: 'tabs' },
       h('button', { class: 'tab' + (this.tab === 'home' ? ' sel' : ''), onclick: () => { this.tab = 'home'; this.render(); } }, 'Home screen'),
       isEcho && h('button', { class: 'tab' + (this.tab === 'screen' ? ' sel' : ''), onclick: () => { this.tab = 'screen'; if (!this.kiosk) this.loadKiosk(); this.render(); } }, 'Screen')));
@@ -474,7 +501,7 @@ class EchoLocalPanel extends HTMLElement {
     const apps = h('div', { class: 'apps' });
     const info = this.echoInfo();
     for (const a of this.appsOf(this.echo)) {
-      const running = info && (info.app || '') === (a.app === 'wall' ? '' : a.app);
+      const running = info && (info.app || '') === a.app;
       apps.append(h('button', { class: 'chip' + (a.app === this.app ? ' sel' : ''), title: a.app, onclick: async () => { this.app = a.app; await this.open(this.echo, a.app); this.render(); } },
         h('span', { class: 'dot' + (a.slot ? '' : ' none') }), (a.desc && a.desc.name) || a.app, running ? ' · on the screen' : ''));
     }
@@ -485,16 +512,23 @@ class EchoLocalPanel extends HTMLElement {
       box.append(h('div', { class: 'empty' }, 'Loading…'));
       return box;
     }
-    if (c.incoming) box.append(h('div', { class: 'banner' },
-      h('span', { class: 'grow' }, 'The Echo saved a change of its own while you edit (someone edited it on the screen).'),
-      h('button', { class: 'btn small', onclick: () => { c.saved = c.incoming; c.draft = clone(c.incoming); c.incoming = null; this.changed(true); } }, 'Take the Echo’s'),
-      h('button', { class: 'btn small', onclick: () => { c.saved = c.incoming; c.incoming = null; this.changed(true); } }, 'Keep mine')));
+    box.append(this.banner(c));
     box.append(h('div', { class: 'bar' }));
     const d = this.desc();
     const grid = h('div', { class: 'grid' }, this.form(c, d), this.previewPane(c, d));
+    grid.dataset.key = this.key() + '|' + this.size;
     box.append(grid);
     queueMicrotask(() => this.renderBar());
     return box;
+  }
+
+  banner(c) {
+    const b = h('div', { class: 'incoming' });
+    if (c.incoming) b.append(h('div', { class: 'banner' },
+      h('span', { class: 'grow' }, 'The Echo saved a change of its own while you edit (someone arranged it on the screen).'),
+      h('button', { class: 'btn small', onclick: () => { c.saved = c.incoming; c.draft = clone(c.incoming); c.incoming = null; this.changed(true); } }, 'Take the Echo’s'),
+      h('button', { class: 'btn small', onclick: () => { c.saved = c.incoming; c.incoming = null; this.changed(true); } }, 'Keep mine')));
+    return b;
   }
 
   renderBar() {
@@ -619,7 +653,7 @@ class EchoLocalPanel extends HTMLElement {
     return h('label', { class: 'switch' }, i, h('span'));
   }
 
-  // what the wall panel would pick itself (wall.js favorites()): a start for a list of one's own
+  // what Echo-Wall picks itself (a thermostat, a camera, scenes, locks): a start for a list of one's own
   autoPick() {
     const s = this._hass.states, ids = Object.keys(s);
     const out = [];
@@ -743,8 +777,9 @@ class EchoLocalPanel extends HTMLElement {
     pane.append(screen);
     const fit = () => { const cw = vp.clientWidth || 560; vp.style.height = (cw * hgt / w) + 'px'; const f = vp.querySelector('iframe'); if (f) f.style.transform = `scale(${cw / w})`; };
     if (d && d.preview && this.echo !== null) {
-      const src = `${d.preview}?preview=1&echo=${encodeURIComponent(this.echo === 'default' ? '' : this.echo)}`;
+      const src = `${d.preview}?echo=${encodeURIComponent(this.echo)}`;
       const f = h('iframe', { src, title: 'Preview', style: `width:${w}px;height:${hgt}px` });
+      f.dataset.key = this.key();
       f.addEventListener('load', () => { this.pushPreview(); if (this.editOnScreen) f.contentWindow.postMessage({ type: 'echo-local-editmode', on: true }, location.origin); });
       vp.append(f);
     } else {
@@ -759,7 +794,7 @@ class EchoLocalPanel extends HTMLElement {
       bar.append(h('label', { class: 'note', style: 'display:flex;gap:6px;align-items:center' },
         this.switch(this.editOnScreen, (on) => { this.editOnScreen = on; const f = vp.querySelector('iframe'); if (f) f.contentWindow.postMessage({ type: 'echo-local-editmode', on }, location.origin); }),
         'Edit on the screen: drag tiles, ★ for Home, − to hide'));
-      bar.append(h('span', { class: 'note' }, 'Live, with this Home Assistant’s states. Swipe sideways for the rooms.'));
+      bar.append(h('span', { class: 'note' }, 'The app itself, live with this Home Assistant’s states. Swipe sideways for the rooms.'));
     } else {
       bar.append(h('span', { class: 'note' }, 'A sketch of Home’s tiles: the app draws them its own way.'));
     }

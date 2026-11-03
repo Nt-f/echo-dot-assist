@@ -526,66 +526,54 @@ screen says so until it is back.
 
 ### Home Assistant on the screen (kiosk)
 
-An Echo Show can show Home Assistant itself, in hassmic's kiosk app: a **wall panel** in the manner of Apple's
-HomeView (square glass widgets over an amber wallpaper; `?theme=dusk` or `?theme=light` for others): a Home page with
-an analog clock, the date and weather, the thermostat's temperature big with arrows to change it, what plays (its
-cover, title, buttons), a camera, your scenes and locks; then a page per room with a tile per light, switch, fan,
-cover, lock, speaker and door or motion sensor, swiped sideways. A tap switches, a long press opens the controls
-(brightness, position, volume, temperature). Left alone for 2 minutes it shows the time in big glass digits; a touch
-brings the widgets back. Also **Home Assistant's own dashboards**, **Music Assistant**, and a page of your own. A small handle at the top
-edge of the screen switches between them; left alone on another screen for 2 minutes, it goes back to the first.
+An Echo Show can show Home Assistant itself, through a **screen app**: **Echo-Wall** (Flutter, Nt-f/Echo-Wall), in
+the manner of Apple's HomeView. Frosted-glass widgets over a photo or a gradient: a Home page with an analog and a
+digital clock, the date and weather, the thermostat's temperature big, what plays, a camera, your scenes and locks;
+then a page per room with a tile per light, switch, fan, cover, lock, speaker and door or motion sensor, swiped
+sideways. A tap switches, a long press opens the controls (brightness, position, volume, temperature). Left alone for
+2 minutes it shows the lock screen (a photo, the time, the next alarm). Also **Home Assistant's own dashboards**,
+**Music Assistant**, and a page of your own, as tiles on Home. Echo-Wall is installed with `adb install` (its README).
+hassmic's own kiosk app is still there for web pages only (dashboards, Music Assistant, your page), without a Home.
 
-It is set up from Home Assistant, in the Echo Local integration (the one for the Echo's alarms): *Settings › Devices &
-services › hassmic › Configure* on the Echo Show. Tick "Show Home Assistant on the screen", pick the screens and the
-one to start on. The Echo has no keyboard to log in with, so the integration makes a Home Assistant user for it
-("Echo Show 5 … kiosk": local network only, not an administrator unless you tick that) and hands the Echo a token of
-it, sealed for that Echo on the way; deleting the integration's entry deletes the user. The screen setting "Home
-Assistant on the screen" (Clock & alarms page) switches it off and on again.
+It is set up from Home Assistant, in the Echo Local integration (the one for the Echo's alarms): **Echo Local** in the
+sidebar › the Echo › *Screen* (or *Settings › Devices & services › Echo Local › Configure*). Switch on "Show Home
+Assistant on the screen", pick the screens (Home first) and the screen app (Echo-Wall). The Echo has no keyboard to
+log in with, so the integration makes a Home Assistant user for it ("Echo Show 5 … kiosk": local network only, not an
+administrator unless you tick that) and hands the Echo a token of it, sealed for that Echo on the way; deleting the
+integration's entry deletes the user. The screen setting "Home Assistant on the screen" (Clock & alarms page) switches
+it off and on again.
 
-The Echo has no keyboard of its own, so the kiosk brings one: it slides up when you tap a text field (Home Assistant's
-login, a search, a name) and goes again with ⌄ or when the field loses the focus; ⇧ for one capital, ?123 for digits
-and signs, ⌫ held deletes on. A screen whose login you would rather type by hand (or a Home Assistant without the
-integration) can be logged into that way, "Keep me logged in" ticked.
+The Echo has no keyboard of its own, so the screen app brings one: it slides up when you tap a text field and goes
+again when the field loses the focus.
 
 The Echo's own pictures still come first: the words of a request, a ringing alarm (tap to snooze) and the start's
-status show over the kiosk and go again. The Echo reaches local addresses only, so Home Assistant's address for it is
-its local one (the options show which; Home Assistant Cloud's is not reachable from the Echo).
+status show over the screen app and go again (Echo-Wall draws them on its glass itself). The Echo reaches local
+addresses only, so Home Assistant's address for it is its local one (the Screen tab shows which; Home Assistant
+Cloud's is not reachable from the Echo).
 
-The wall panel is a page of its own, not a dashboard, so that the Echo Show 5 stays well within its memory: Home
-Assistant's full interface takes 150–250 MB in the browser, the wall panel a small part of that, and only one screen
-is loaded at a time. It shows the rooms (areas) that have something to show, each with its temperature and humidity
-under the page dots where a sensor in it has them.
+**Making Home yours, on the Echo.** Hold the page dots at the bottom for a moment. The widgets wobble; drag one to
+another place, tap ★ to put a room's tile on Home (a thermostat shows big there, a camera its picture), tap − to take
+one off, + Add to bring something back. The bar picks the wallpaper, lists what is hidden, and Done ends it. Room
+names, areas and which entities exist stay Home Assistant's: hide an entity there and it is gone from the screen too.
 
-**Making it yours.** On the Echo: hold the page dots at the bottom for a moment. The tiles wobble; drag one to move
-it, tap ★ to put it on Home (a thermostat shows big there, a camera its picture), tap − to hide it (on Home: off
-Home). The bar at the top picks the wallpaper (amber, dusk, light), lists what is hidden (tap one to show it again),
-puts everything back as the panel would have it (Reset), and Done ends it. In Home Assistant: **Echo Local** in the
-sidebar (administrators), below. Both change the same layout, kept in Home Assistant per Echo, and every screen
-showing that panel follows a change at once. A rooms' names, areas and which entities exist
-stay Home Assistant's: hide an entity there and it is gone from the panel too. In the address (any browser):
-`?theme=`, `?favorites=light.desk,lock.front`, `?thermostat=`, `?camera=`, `?weather=`, `?ambient=0` win over the
-layout; `?echo=` names whose layout it shows (none: a layout of its own, "default"). Edits made there are saved to
-that Echo only by an administrator or the Echo's own login; anyone else's go to "default". It works in any browser too:
-`http://<home assistant>:8123/echo_local/wall.html`, once logged into Home Assistant there with "Keep me logged in".
+**Making Home yours, in Home Assistant: Echo Local in the sidebar** (administrators). Every Echo on the left; for
+each, two tabs.
 
-**Echo Local in the sidebar.** Every Echo on the left; for each, two tabs.
+- *Home screen*: the settings of Echo-Wall's Home as a form (wallpaper, Home's tiles in order: drag them or use ↑ ↓,
+  the clocks, the date, what plays, the lock screen's time, what is hidden, each room's order), and next to it
+  **Echo-Wall itself**, running in the page with your devices, at the Echo's size. Switch on "Edit on the screen" and
+  arrange it exactly as on the Echo: drag tiles to other places, ★, −, + Add, the wallpaper; the form follows. Nothing
+  reaches the Echo until **Save**; Revert throws the changes away. If someone rearranges the Echo meanwhile, a bar
+  asks whose to keep.
+  **Export** saves the Home to a file (`….echohome.json`); **Import** takes one back, or another app's Home on this
+  Echo (what both have: the wallpaper, Home's tiles, hidden ones, rooms' order, the lock screen), or another Echo's.
+  **Copy to** puts it on other Echos as it is. **Reset** forgets it: Echo-Wall picks again. Entities a file names that
+  this Home Assistant does not have are kept and marked.
+- *Screen*: Home Assistant on the screen, the screens in the switcher's order, the one to start on and go back to,
+  the screen app and its settings (Echo-Wall's photos from Immich: `immich.url=`, `immich.key=`, `immich.album=`).
 
-- *Home screen*: a chip per app that has a Home on that Echo (the wall panel; Echo-Wall or another screen app once it
-  saved one; "on the screen" marks the one the Echo shows). The settings of that Home as a form (wallpaper, Home's
-  tiles in order: drag them or use ↑ ↓, the weather, what plays, the big clock, what is hidden, each room's order), and
-  next to it the screen itself, live: the wall panel as the Echo draws it, at the Echo's size. Switch on "Edit on the
-  screen" to drag, ★ and hide right in the preview. Nothing reaches the Echo until **Save**; Revert throws the changes
-  away. If someone rearranges the Echo meanwhile, a bar asks whose to keep.
-  **Export** saves the Home to a file (`….echohome.json`); **Import** takes one back, or takes another app's Home on
-  this Echo (Echo-Wall's into the wall panel: what both have, the wallpaper, Home's tiles, hidden ones, rooms' order,
-  the clock), or another Echo's. **Copy to** puts it on other Echos as it is. **Reset** forgets it: the app picks again.
-  Entities the file names that this Home Assistant does not have are kept and marked.
-- *Screen*: what Configure on the Echo sets, with switches: Home Assistant on the screen, the screens in the switcher's
-  order, the one to start on and go back to, the screen app and its settings.
-
-Echo-Wall keeps its Home in Home Assistant by itself (from its version with Echo Local support): what you arrange on
-the Echo shows in the panel, and the panel's Save shows on the Echo at once. "Any other browser" is the wall panel
-opened without `?echo=`.
+Echo-Wall keeps its Home in Home Assistant by itself: what you arrange on the Echo shows in the panel, and the panel's
+Save shows on the Echo at once. Layouts made for the old web wall panel were carried over into Echo-Wall's.
 
 ## Music
 
