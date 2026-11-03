@@ -559,14 +559,33 @@ under the page dots where a sensor in it has them.
 **Making it yours.** On the Echo: hold the page dots at the bottom for a moment. The tiles wobble; drag one to move
 it, tap ★ to put it on Home (a thermostat shows big there, a camera its picture), tap − to hide it (on Home: off
 Home). The bar at the top picks the wallpaper (amber, dusk, light), lists what is hidden (tap one to show it again),
-puts everything back as the panel would have it (Reset), and Done ends it. In Home Assistant: the hassmic
-integration's Configure has a second page, "The wall panel": the wallpaper, Home's tiles in order, the weather, what
-plays on Home or not, the big clock's time, what to hide. Both change the same layout, kept in Home Assistant per
-Echo, and every screen showing that panel follows a change at once. A rooms' names, areas and which entities exist
+puts everything back as the panel would have it (Reset), and Done ends it. In Home Assistant: **Echo Local** in the
+sidebar (administrators), below. Both change the same layout, kept in Home Assistant per Echo, and every screen
+showing that panel follows a change at once. A rooms' names, areas and which entities exist
 stay Home Assistant's: hide an entity there and it is gone from the panel too. In the address (any browser):
 `?theme=`, `?favorites=light.desk,lock.front`, `?thermostat=`, `?camera=`, `?weather=`, `?ambient=0` win over the
-layout; `?echo=` names whose layout it shows (none: a layout of its own, "default"). It works in any browser too:
+layout; `?echo=` names whose layout it shows (none: a layout of its own, "default"). Edits made there are saved to
+that Echo only by an administrator or the Echo's own login; anyone else's go to "default". It works in any browser too:
 `http://<home assistant>:8123/echo_local/wall.html`, once logged into Home Assistant there with "Keep me logged in".
+
+**Echo Local in the sidebar.** Every Echo on the left; for each, two tabs.
+
+- *Home screen*: a chip per app that has a Home on that Echo (the wall panel; Echo-Wall or another screen app once it
+  saved one; "on the screen" marks the one the Echo shows). The settings of that Home as a form (wallpaper, Home's
+  tiles in order: drag them or use ↑ ↓, the weather, what plays, the big clock, what is hidden, each room's order), and
+  next to it the screen itself, live: the wall panel as the Echo draws it, at the Echo's size. Switch on "Edit on the
+  screen" to drag, ★ and hide right in the preview. Nothing reaches the Echo until **Save**; Revert throws the changes
+  away. If someone rearranges the Echo meanwhile, a bar asks whose to keep.
+  **Export** saves the Home to a file (`….echohome.json`); **Import** takes one back, or takes another app's Home on
+  this Echo (Echo-Wall's into the wall panel: what both have, the wallpaper, Home's tiles, hidden ones, rooms' order,
+  the clock), or another Echo's. **Copy to** puts it on other Echos as it is. **Reset** forgets it: the app picks again.
+  Entities the file names that this Home Assistant does not have are kept and marked.
+- *Screen*: what Configure on the Echo sets, with switches: Home Assistant on the screen, the screens in the switcher's
+  order, the one to start on and go back to, the screen app and its settings.
+
+Echo-Wall keeps its Home in Home Assistant by itself (from its version with Echo Local support): what you arrange on
+the Echo shows in the panel, and the panel's Save shows on the Echo at once. "Any other browser" is the wall panel
+opened without `?echo=`.
 
 ## Music
 

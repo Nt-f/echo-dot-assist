@@ -110,6 +110,21 @@ GET http://127.0.0.1:28931/kiosk/state/<v>       a long poll: answers once the v
 Screens whose `url` is `hassmic:<name>` are the app's to draw; so far `hassmic:clock`, the clock as idle screen (the
 integration's "Clock" screen). An app that cannot draw one leaves it out (hassmic's own kiosk does).
 
+## A Home of the app's own, kept in Home Assistant
+
+An app that draws a Home (tiles, a wallpaper, an order of rooms) can keep its layout in Home Assistant too, where the
+Echo Local panel in the sidebar edits it beside a preview, exports it to a file, imports it and copies it to other
+Echos. Three commands on Home Assistant's websocket, with the token above; no Echo named, the token says which:
+
+```
+echo_local/home/describe   {app: <package>, descriptor}   what the layout holds, for the panel's form (optional)
+echo_local/home/subscribe  {app: <package>}               the layout now and at every save (subscribe after each login)
+echo_local/home/set        {app: <package>, layout}       after an edit on the Echo
+```
+
+The rules (when to send, when to take, what a descriptor says, the size cap, the file format) are in
+[home-screens.md](home-screens.md); Echo-Wall's `lib/home/layout_sync.dart` is the reference.
+
 ## What the Echo lacks
 
 - **No keyboard.** Fire OS's input method went with Amazon's apps; the Echo has none. A screen app that offers text
@@ -127,5 +142,6 @@ integration's "Clock" screen). An app that cannot draw one leaves it out (hassmi
 adb install my-screen.apk
 ```
 
-then in Home Assistant: hassmic › Configure on the Echo › "Screen app": its package. The Java kiosk stays
+then in Home Assistant: the sidebar's Echo Local › the Echo › Screen › "App" (or Configure on the Echo › "Screen
+app"): its package. The Java kiosk stays
 installed and comes back when the field is empty.

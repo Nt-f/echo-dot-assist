@@ -4,6 +4,12 @@ What changed for people using the Echo, newest first. Details and measurements a
 
 ## 2026-11-02
 
+- **Echo Local in Home Assistant's sidebar.** Every Echo Show's screen in one place: its Home (the wall panel, or the
+  Home of a screen app such as Echo-Wall) as a form beside a live preview of the screen, where you can also drag tiles,
+  star and hide them; nothing reaches the Echo until Save. Export a Home to a file and import it again, take one app's
+  Home into another's, copy it to your other Echos. The screen's options (which screens, the screen app) are there
+  too. Administrators only. Layouts saved before are kept. See the guide's "Home Assistant on the screen".
+  An Echo's own login may now change only that Echo's layout (before, any Home Assistant user could change any).
 - **The Home Assistant integration is now "Echo Local"** (`custom_components/echo_local`, actions `echo_local.*`, card
   `custom:echo-local-alarms-card`): its old name, `hassmic`, is also another project's integration (jeffc/hassmic), and
   Home Assistant can't load both. Remove the old one and add Echo Local again; the Echo asks for its button once more.

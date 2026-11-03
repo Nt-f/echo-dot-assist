@@ -9,11 +9,17 @@
 // The login: the kiosk app puts the Echo's token into this origin's localStorage as the frontend keeps its own
 // ("hassTokens"), so a browser logged into Home Assistant here ("Keep me logged in") opens this page as well.
 // window.HassmicKiosk (the kiosk app's, Kiosk.java Bridge): the other screens, to switch to.
+//
+// ?preview=1: inside the sidebar panel (panel.js, docs/home-screens.md), in a same-origin iframe: the login is the
+// panel's (parent.echoLocalPreview.token()), the layout the panel's draft (posted in as 'echo-local-layout'), and what
+// the edit mode changes goes back to the panel ('echo-local-edit') instead of into Home Assistant: the panel saves.
 'use strict';
 (() => {
   const $ = (id) => document.getElementById(id);
   const el = (tag, cls, txt) => { const e = document.createElement(tag); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; };
   const params = new URLSearchParams(location.search);
+  const host = (() => { try { return params.get('preview') && parent !== window && parent.echoLocalPreview; } catch (e) { return null; } })();
+  const PREVIEW = !!host;
 
   // ---------------------------------------------------------------- icons (drawn for this page, 24 x 24)
   const P = {
@@ -76,7 +82,7 @@
   const call = (domain, service, entity_id, data) => send({ type: 'call_service', domain, service, service_data: data || {}, target: { entity_id } }).catch((e) => console.warn(service, e));
 
   async function connect() {
-    let t = tokens();
+    let t = PREVIEW ? { access_token: await host.token() } : tokens();
     if (!t || !t.access_token) { message('Not logged in', 'Set the kiosk up from the Echo Local integration, or log into Home Assistant in this browser with "Keep me logged in".'); return; }
     if (t.expires && Date.now() > t.expires - 60000 && t.refresh_token) t = (await refresh(t).catch(() => null)) || t;
     ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/api/websocket');
@@ -126,9 +132,10 @@
   }
 
   async function started() {
-    // the layout (custom_components/echo_local wall.py): this Echo's, followed live; without the integration, this
+    // the layout (custom_components/echo_local home.py, app "wall"): this Echo's, followed live; without the integration, this
     // browser's own (localStorage)
-    subscribe({ type: 'echo_local/wall/subscribe', echo: ECHO }, (ev) => { layout = ev.layout || {}; local = false; applyLayout(); })
+    if (PREVIEW) { layout = host.layout() || {}; applyLayout(); }
+    else subscribe({ type: 'echo_local/home/subscribe', echo: ECHO, app: 'wall' }, (ev) => { layout = ev.layout || {}; local = false; applyLayout(); })
       .catch(() => { local = true; try { layout = JSON.parse(localStorage.getItem('echoLocalWall') || '{}'); } catch (e) { layout = {}; } applyLayout(); });
     subscribe({ type: 'subscribe_entities' }, onEntities);
     await registries().catch((e) => message('No rooms', 'Home Assistant did not give the areas: ' + (e && e.message || e)));
@@ -563,7 +570,7 @@
   }
 
   // left alone, the ambient clock (?ambient=<s>, 0 never; 120 s by default); a touch brings the widgets back
-  const ambientS = () => params.has('ambient') ? +params.get('ambient') : layout.ambient ?? 120;
+  const ambientS = () => PREVIEW ? 0 : params.has('ambient') ? +params.get('ambient') : layout.ambient ?? 120;
   let lastTouch = Date.now();
   function ambientDraw() {
     const d = new Date(), st = wx();
@@ -612,10 +619,11 @@
   function save(patch) {
     layout = Object.assign({}, layout, patch);
     applyLayout();
+    if (PREVIEW) { parent.postMessage({ type: 'echo-local-edit', layout }, location.origin); return; }
     clearTimeout(saveTimer);
     saveTimer = setTimeout(() => {
       if (local) { try { localStorage.setItem('echoLocalWall', JSON.stringify(layout)); } catch (e) { /* private window */ } return; }
-      send({ type: 'echo_local/wall/set', echo: ECHO, layout }).catch((e) => toast('Not saved: ' + (e && e.message || e)));
+      send({ type: 'echo_local/home/set', echo: ECHO, app: 'wall', layout }).catch((e) => toast('Not saved: ' + (e && e.message || e)));
     }, 500);
   }
   function toast(t) {
@@ -637,6 +645,13 @@
     render();
   }
   window.echoLocalWallEdit = edit;              // tests
+  // the panel: its draft in, its edit button
+  if (PREVIEW) addEventListener('message', (ev) => {
+    if (ev.origin !== location.origin || !ev.data) return;
+    if (ev.data.type === 'echo-local-layout') { layout = ev.data.layout || {}; applyLayout(); }
+    else if (ev.data.type === 'echo-local-editmode' && !!ev.data.on !== editing) edit(!!ev.data.on);
+    else if (ev.data.type === 'echo-local-page') { const i = pageNames.indexOf(ev.data.name); if (i >= 0) { $('pages').scrollLeft = i * innerWidth; } }
+  });
   // nothing of a widget's own while editing: its buttons, a scene's run
   document.addEventListener('click', (ev) => {
     if (editing && !ev.target.closest('.badge, #editbar, .sheet, #dots')) { ev.stopPropagation(); ev.preventDefault(); }

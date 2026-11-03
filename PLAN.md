@@ -2305,6 +2305,23 @@ Run in this order. Each step says what it proves.
       moving the node in the grid drops its pointer capture), a bar (wallpaper, Hidden, Reset, Done), saved 500 ms
       after the last change; without the integration's commands, localStorage.  ha_real_kiosk drives it by CDP mouse
       input as the kiosk's user.
+      The sidebar panel and home screens (asked the same day: "a sidebar, Import/Export home screens from apps, the
+      layout and settings graphically"; docs/home-screens.md): wall.py became home.py, one Store (`echo_local.wall`
+      v2, v1 migrated) with a slot per (Echo node, app id: "wall" or a screen app's package), apps described by
+      descriptors (built in: wall, Echo-Wall; others by echo_local/home/describe; fields checked, the rest kept, 64 KB
+      a slot), echo_local/home/list|get|set|subscribe|describe|delete and kiosk/get|set (admin) beside the old
+      wall/* names.  The kiosk user is mapped to its Echo by connection.user (entries' DATA_USER): its own slots only,
+      whatever it names; other users write "default" only.  panel_custom panel `echo-local` (panel.js, admin): Echos,
+      app chips, a form from the descriptor, wall.html in a same-origin iframe (?preview=1: the panel's token and
+      draft by parent.echoLocalPreview / postMessage; its edit mode edits the draft), a sketch for apps without a
+      preview page, draft + Save, a banner when the Echo saved meanwhile, Import (file, another app by the
+      descriptors' "common" names, another Echo), Export (.echohome.json), Copy to, Reset; the Screen tab = the
+      options flow's first step.  Echo-Wall: LayoutSync (ha.onConnected, Layout.onSaved/apply): subscribe at each
+      login, first event empty -> ours, else theirs unless ours changed unsent; saves sent unless what came in.
+      tests/ha_real_home.py (HA 2026.10.1, Chrome): migration, the panel registered, descriptors, size cap, the
+      kiosk user confined, kiosk/set reaching the Echo, live events, the panel drawn (51 widgets in the preview),
+      import from Echo-Wall, Save, the preview's edit mode into the draft, Export; Echo-Wall's
+      test/layout_sync_test.dart against a stand-in websocket.  Not yet on the device: Echo-Wall's sync on the Show 5.
       Not yet measured: HA's full UI logged in, the wall panel there (the user's HA has no
       integration of this version yet), a tap on the kiosk while a ring shows (passes through?).  Open: kiosk entities in HA (screen select); the wall's choice of rooms/entities (now: every
       area, registry-hidden ones left out); the screen waking on a touch while dark (the panel's touch controller).

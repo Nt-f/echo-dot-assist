@@ -15,7 +15,7 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.service_info.zeroconf import ZeroconfServiceInfo
 
 from .api import DEFAULT_PORT, Echo, EchoError, new_key
-from . import kiosk as k, wall
+from . import home, kiosk as k
 from .const import CONF_KEY, CONF_MAC, CONF_NODE, DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
@@ -159,17 +159,18 @@ class EchoLocalOptionsFlow(OptionsFlowWithReload):
                                     description_placeholders={"url": k.ha_url(self.hass, self.config_entry)})
 
     async def async_step_wall(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
-        """The wall panel on this Echo (wall.py): its look and what Home shows.  The same layout the panel's own edit
+        """The wall panel on this Echo (home.py, app "wall"): its look and what Home shows; the sidebar's Echo Local
+        panel edits the same with a preview (and every other app's Home).  The same layout the panel's own edit
         mode changes (hold the page dots on the Echo): whichever was last."""
         echo = self.config_entry.unique_id
-        lay = wall.get(self.hass, echo)
+        lay = home.get(self.hass, echo, home.WALL)
         if user_input is not None:
             new = {**lay, "theme": user_input["theme"], "ambient": int(user_input["ambient"]),
                    "nowplaying": user_input["nowplaying"], "hidden": user_input.get("hidden") or []}
             new["weather"] = user_input.get("weather") or ""
             fav = user_input.get("favorites") or []
             new["favorites"] = fav if fav else None         # none: the panel picks (thermostat, camera, scenes, locks)
-            await wall.put(self.hass, echo, new)
+            await home.put(self.hass, echo, new, home.WALL, "panel")
             return self.async_create_entry(data={**self.config_entry.options, **self.kiosk})
         sel = lambda **kw: selector.EntitySelector(selector.EntitySelectorConfig(**kw))
         theme = [selector.SelectOptionDict(value=v, label=l) for v, l in (("amber", "Amber"), ("dusk", "Dusk"), ("light", "Light"))]

@@ -71,6 +71,9 @@ aioesphomeapi, wyoming, aiosendspin, noiseprotocol, aiohttp):
 .venv/bin/python tests/ha_real_alarms.py      # custom_components/echo_local (alarms integration and card) in a real HA
 .venv/bin/python tests/ha_real_kiosk.py       # the Echo Show's kiosk set up from the integration: user, token, screens,
                                              # the wall panel in headless Chrome (build/test-logs/wall.png)
+.venv/bin/python tests/ha_real_home.py        # home screens (home.py) and the sidebar panel: the store migrated, slots per
+                                             # Echo and app, the kiosk user confined, the panel in headless Chrome:
+                                             # preview, import, Save, export (build/test-logs/panel*.png)
 .venv/bin/python tests/ha_real_dropin.py      # the blueprint in a real Home Assistant (build/ha-venv, made by --setup;
                                              # skips without it) with four Echos, one the released build: replies, timing.
                                              # All of it in an `unshare -rn` namespace with only lo
@@ -284,8 +287,13 @@ No model `#ifdef`s in shared code: new differences become a board field, a `devi
   `hassTokens` into HA's origin.  Setting `display_kiosk`: display_screen.c `am start`s the app (`kiosk_tick`) and closes
   its own layer while the app is in front and it has nothing to show.  The wall panel is `frontend/wall.html`+`wall.js`
   (its own page on HA's websocket, not a dashboard: memory, the Show 5 under 512 MB for all of it); its layout per Echo
-  in `wall.py` (Store + websocket `echo_local/wall/get|set|subscribe`), set by the options flow's "wall" step or the
-  panel's edit mode (page dots held).  The start's status:
+  and app in `home.py` (docs/home-screens.md: Store `echo_local.wall` v2, a slot per (Echo node, app: "wall" or a
+  screen app's package), descriptors per app (built in: wall, Echo-Wall; others `echo_local/home/describe`),
+  websocket `echo_local/home/list|get|set|subscribe|describe|delete`, `kiosk/get|set`; the kiosk user only at its own
+  Echo's slots, via `connection.user`), set by the sidebar panel "Echo Local" (`frontend/panel.js`, panel_custom,
+  admin: form + wall.html previewed in an iframe `?preview=1`, import/export `.echohome.json`, copy, the screen's
+  options), the options flow's "wall" step or the wall panel's edit mode (page dots held); Echo-Wall syncs its own
+  (`layout_sync.dart`).  `tests/ha_real_home.py`.  The start's status:
   `hassmic -Y <file>` (`display_splash`, main.sh `stage`), then display_screen.c's status screen until HA's link
   (`display_link`).
 - **Sound packs** (`soundpack.c`, `soundpack.h`): sets of the Sounds card's sounds in `state/sound-packs/<id>/` (`name`,

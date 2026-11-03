@@ -23,8 +23,8 @@ from homeassistant.helpers.typing import ConfigType
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .api import DEFAULT_PORT, Echo, EchoAuthError, EchoError
-from . import kiosk, wall
-from .const import CARD_URL, CONF_KEY, DAY_KEYS, DOMAIN, SCAN_INTERVAL_S, WALL_URL
+from . import home, kiosk
+from .const import CARD_URL, CONF_KEY, DAY_KEYS, DOMAIN, PANEL_PATH, PANEL_URL, SCAN_INTERVAL_S, WALL_URL
 
 _LOGGER = logging.getLogger(__name__)
 PLATFORMS = [Platform.SWITCH]
@@ -76,12 +76,19 @@ class EchoLocalCoordinator(DataUpdateCoordinator[dict]):
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     # the dashboard card, served from here and loaded on every dashboard
-    await wall.async_setup(hass)          # the wall panel's layouts and their websocket commands
+    await home.async_setup(hass)          # the home screens' layouts (wall panel, screen apps) and their websocket commands
     fe = Path(__file__).parent / "frontend"
     # the wall panel: no login to fetch it (it is only a page), its data then over the websocket with the kiosk's token
     await hass.http.async_register_static_paths([StaticPathConfig(CARD_URL, str(fe / "echo-local-alarms-card.js"), False),
                                                  StaticPathConfig(WALL_URL, str(fe / "wall.html"), False),
-                                                 StaticPathConfig("/echo_local/wall.js", str(fe / "wall.js"), False)])
+                                                 StaticPathConfig("/echo_local/wall.js", str(fe / "wall.js"), False),
+                                                 StaticPathConfig(PANEL_URL, str(fe / "panel.js"), False)])
+    # the sidebar's "Echo Local": every Echo's screen and home screens, edited graphically (frontend/panel.js,
+    # docs/home-screens.md); administrators only, as the options it changes are
+    from homeassistant.components import panel_custom
+    await panel_custom.async_register_panel(hass, frontend_url_path=PANEL_PATH, webcomponent_name="echo-local-panel",
+                                            sidebar_title="Echo Local", sidebar_icon="mdi:tablet-dashboard",
+                                            module_url=PANEL_URL, require_admin=True, embed_iframe=False)
     from homeassistant.components.frontend import add_extra_js_url
     add_extra_js_url(hass, CARD_URL)
     add_extra_js_url(hass, CARD_URL, es5=True)      # the legacy build too (older browsers); defined once either way
