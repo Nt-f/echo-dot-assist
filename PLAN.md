@@ -2209,9 +2209,165 @@ Run in this order. Each step says what it proves.
       white) LEDs 11 40, 0 dark, 1 green, 2 dark, 3 blue, 4 404040; HA's green then one colour at 75 %.  Identify
       over a 50 % fill: the rainbow 0.12 s after the press, the fill back at 10.3 s.  No ledctrl errors.
       Open: the Dot 3 (its system partition's room; no system image of it here) and the Echo 2.
-- [ ] Other stock features without a Home Assistant counterpart yet (survey 2026-10-01): offline alarm clock and
-      reminders (HA has timers only).
+- [ ] Other stock features without a Home Assistant counterpart yet (survey 2026-10-01): reminders (HA has timers
+      only).  The offline alarm clock: done (2026-11-02, below).
+- [x] Alarms of the Echo's own and the Echo Show's clock (2026-11-02).  `alarms.c`: state/alarms (statefile), a clock
+      thread on local time (localtime/mktime: bionic's persist.sys.timezone; DST by mktime's tm_isdst -1: 2:30 on the
+      spring-forward day rings at 3:30, checked in tests/unit/alarms_test.c), `fired` kept so a restart never rings one
+      twice and one missed by up to 5 min still rings, a clock step > 120 s is a clock set (no burst of alarms);
+      none before alarms_clock_ok.  English request parser (`alarms_command`: set/delete/delete all/list/snooze;
+      digits, "seven thirty", "half past", "quarter to", "in an hour and a half", weekdays, "every monday and
+      friday"; an alarm system's words excluded) answered in main.c `alarm_request` from `core_transcript` (run
+      cancelled as a stop), the answer through `proto->say` = assist_satellite.announce on the Bluetooth
+      announcements' queue.  Ringing through the timers' ring (`ringing[].alarm`), own sound/ring time/snooze, a
+      volume ramp (a fifth of the timer gain up to it over alarm_ramp_s), snooze by volume key (`alarm_keys`), "snooze",
+      HA's button, a tap (display_screen.c reads goodix-ts beside Android: `board.touch`).  ESPHome: "Next alarm"
+      (text sensor, device_class timestamp; missing_state for none), "Alarms", "Alarm ringing", "Snooze alarm", event
+      "Alarm", actions set_alarm/delete_alarm (any client: no microphone involved).  tests/fake_ha_alarms.py moves
+      the Echo's clock through HASSMIC_FAKE_CLOCK_OFFSET (a file).
+      Display: `display_screen.c` (SCREEN in device.mk, display_none.c elsewhere), ringbar.dex's new "screen" mode
+      (argv "screen <band rows> [builder]": a layer over everything above the band, no overscan of its own; checked in
+      ringbar_run.py and against 8149's boot class path), frames drawn in C with stb_truetype 1.26 (public domain)
+      from /system/fonts (AmazonEmberDisplay_Lt for the clock, Amazon-Ember-Regular/-Bold; DejaVu on the PC), only on
+      change (a minute's turn, words, a ring).  Modes off/awake/always/always_dim; always*: screen_off_timeout
+      INT_MAX through ring_band.c's policy (`display_screen_timeout`), backlight by `settings put system
+      screen_brightness` (mode manual), night by the hours or under 3 lux.  tests/unit/display_test.c renders against
+      a stand-in renderer.  Not yet on a device: the second SurfaceFlinger layer beside the band's, the backlight
+      through the settings provider with Amazon's apps gone, goodix-ts events readable as group input.
+      Then (2026-11-02): escalation (`alarm_louder`, points/min past the ramp up to 100: `alarm_boost`, a volume like a
+      kind's, so `loudest()` lifts the mixer and `mix_gain` keeps the rest where they were; `stream_owns_volume` off
+      meanwhile; main.c `alarm_escalate` every 200 ms).  `media_request` (core_transcript): pause/resume/next/previous
+      (sendspin_voice: controller commands the server offers; a2dp_voice: AVRCP play, forward, backward) and the
+      volume, only for what this Echo plays (log 2026-11-02 05:06: "Pause." over Sendspin got "which device?" from HA).
+      Sendspin's sync nudges resampled over the chunk (`stretch`) instead of frames skipped/repeated in one place, and
+      the duck (a sixth) glided over 30 ms on Sendspin and A2DP (it was a step at a chunk's edge): user report of
+      "quiet hiss pops" while listening over music; the Show 5's output runs ~350 ppm off (nudged ~-170 frames / 10 s,
+      ~17 splices a second before).  Not measured on the Echo yet.
+      `custom_components/echo_local`: config flow (address or zeroconf on _esphomelib platform=hassmic; login by the
+      button like a browser, X25519/BLAKE2b as tests/webclient.py; reauth behind a Submit, so the Echo lights up only
+      when someone is there), coordinator polling /api/alarms every 30 s, a switch per alarm, services, the card
+      (frontend/, vanilla custom element, served and add_extra_js_url'd).  HA 2026.10 keeps devices per config entry
+      (no merge by MAC any more): the card finds "Alarm ringing" through the device with the same MAC.  `/api/hello`
+      has "mac".  tests/ha_real_alarms.py in a real HA 2026.10.1 (CI's HA job).
+      Open: reminders; alarm sentences in other languages; Pico TTS (libttspico.so, AOSP's, on checkers) for answers
+      without Home Assistant; the screen's touch beyond a ring (dismiss the words, a tap for the time).
       Not worth mapping: Matter (`ace_chip_service`), Sidewalk/BLE mesh, calling outside the house (`commsd`), stereo pairs.
+- [~] Echo Show: the start's status on the screen and Home Assistant on it (asked 2026-11-02: "full Home Assistant app
+      ... a custom card renderer ... like a Shelly Wall Display or Apple's Home display", all of it under 512 MB).
+      Boot: boot.log of the Show 5 (2026-11-02): firewall at boot+9, `== satellite start` at +26 (the boot animation
+      ends about then), hassmic's first frame at +46: 20 s of black, mostly lockdown/alexa-off stopping services.
+      Later boot (2026-11-02, factory copy of 3ebf9f2): boot_completed +18, `== satellite start` +20, alexa-off.sh
+      done +36.6, self test +40.1, HA linked +41.3.  The 16 s were alexa-off.sh with nothing to do: `pm list packages
+      -d` and `pm list packages` (~2 s each, a Java VM per call), four `settings get` (~1.5 s each) and the p2p
+      `wpa_cli` (7 s despite `timeout 5`, with no group up).  Now it reads packages.xml/package-restrictions.xml and
+      settings_<ns>.xml first and asks wpa_cli only when `p2p-p2p0-0` exists: 2.6 s (1 s of it the `sleep 1`); one
+      package shown enabled in the XML still goes through pm (checked on the Echo).  Rebooted with it (cbbf3dd+):
+      alexa-off.sh done +22.8, self test +26.5, HA linked +29.7 (was +41.3).  Left: Android's 18 s to
+      boot_completed and hassmic's ~3.5 s load.
+      `hassmic -Y <file>` (`display_splash`): fonts, ringbar's screen mode, main.sh's `stage` line from
+      /data/local/hassmic/boot-status (root's, 644), its pid in state/splash.pid; the real display ends it once its own
+      layer is up (`splash_end`), else 180 s.  Then the status screen in display_screen.c until `display_link(1)`
+      (core_link) and again while the link is down, whatever "display" says (off: shown, then off again): not set up
+      (`core_oobe`: the name to add in HA, the page's address), no IPv4 (getifaddrs), waiting for HA / HA went away;
+      redrawn each second (dots).  display_test: status first, gone with the link, shown with display off.
+      Kiosk: the stock WebView is Amazon's `com.amazon.webview.chromium` 118.0.5993 (V8 11.8; framework-res's
+      config_webview_packages names only it), sdk 24, needs nothing else; it was in STOCK_APPS_OUT, now kept (back on
+      the partition by sysinstall's stock_apps).  MemAvailable with hassmic running: 650 MB of 997 MB.  No IME on the
+      Echo (bluestone-proxy-ime gone, no LatinIME): no typing a login, hence the integration's own user + LLAT
+      (local_only, group system-users or admin by option, removed with the entry), POST /api/kiosk with the token
+      sealed as the Wi-Fi password is (`unseal`), state/kiosk 0600, GET /kiosk/config only from loopback.  The app
+      (`tools/kiosk`, Java built with the SDK by build.sh: the dexasm.py way does not reach a subclass of Activity, a
+      WebViewClient, lambdas; the APK is checked in as hassmic-home.apk is) injects `hassTokens` into HA's origin
+      through loadDataWithBaseURL, polls its config every 5 s (/front, /back on pause), the handle and switcher, back
+      to the default after `return` s untouched; hassmic `am start`s it (at most once a minute) while display_kiosk is
+      on and it is not in front, and closes its own layer while the app is in front and nothing of ours shows (a
+      ring, the words, the status take it back: ringbar's screen process ~1.2 s to come up).  Memory: the wall panel
+      (frontend/wall.html + wall.js, vanilla, subscribe_entities + list_for_display + call_service; laid out as Apple's
+      HomeView, asked 2026-11-02: square cells, as many as fit (Show 5: 6 x 3 of 139 px), 2x2 for thermostat and what
+      plays, pages Home + one per area swiped with scroll-snap, sizes in --u = a cell's hundredth (container units
+      resolve against the widget's ancestor, not itself), the ambient clock after 120 s) instead of an HA
+      dashboard (HA's frontend in Chromium: 150-250 MB); one page at a time; no WebView while off; freeMemory on
+      TRIM_MEMORY_RUNNING_LOW.  tests/ha_real_kiosk.py (real HA 2026.10 + demo, headless Chrome renders the wall,
+      a tap toggles, build/test-logs/wall.png).
+      On the user's Show 5 (2026-11-02, push + reboot): the splash from boot+21 to boot+41 (`display: the boot's splash
+      ended` as hassmic's display came up), AmazonWebView back and io.github.gamer92000.echodotassist.kiosk installed at the boot, hassmic
+      `am start`ed it and gave up its layer ("display: the kiosk's"), Amazon's WebView in our app (its
+      WebViewExtAmazon config lines: low-memory device, MSE buffers cut), HA's login page full screen above the band.
+      The kiosk process: 91 MB PSS (Graphics 37 MB, native 9 MB, Java 5 MB; one process: the renderer runs in it on
+      Android 7), MemAvailable 605 -> 484 MB.  Keyboard (asked the same day: "Needs osk"): no IME on the Echo, so
+      Kiosk.Keys: FOCUS_JS (focusin/focusout through shadow roots) -> bridge typing(on, kind) -> a keyboard below the
+      WebView (the page shrinks, the field scrolled into view), keys as KeyCharacterMap VIRTUAL_KEYBOARD events into
+      the WebView (insertText for what the map lacks); typed "Abc1" into HA's login (mwc fields in shadow DOM),
+      shift, ?123, ⌫.
+      The layout (asked the same day: options in the integration and editing on the panel, both): wall.py, a Store
+      `echo_local.wall` {echo node | default: layout}, websocket echo_local/wall/get|set|subscribe for any logged-in user
+      (the kiosk's is not an admin), checked by a schema (themes, ids <= 300, ambient 0..86400); the options flow's
+      second step "wall" writes it too.  The panel: dots held 0.7 s -> edit mode (wobble, ★ favourites, − hidden, drag
+      in a page: favourites' order on Home, `order[area]` in a room; the drag follows the window's pointer events, as
+      moving the node in the grid drops its pointer capture), a bar (wallpaper, Hidden, Reset, Done), saved 500 ms
+      after the last change; without the integration's commands, localStorage.  ha_real_kiosk drives it by CDP mouse
+      input as the kiosk's user.
+      The sidebar panel and home screens (asked the same day: "a sidebar, Import/Export home screens from apps, the
+      layout and settings graphically"; docs/home-screens.md): wall.py became home.py, one Store (`echo_local.wall`
+      v2, v1 migrated) with a slot per (Echo node, app id: "wall" or a screen app's package), apps described by
+      descriptors (built in: wall, Echo-Wall; others by echo_local/home/describe; fields checked, the rest kept, 64 KB
+      a slot), echo_local/home/list|get|set|subscribe|describe|delete and kiosk/get|set (admin) beside the old
+      wall/* names.  The kiosk user is mapped to its Echo by connection.user (entries' DATA_USER): its own slots only,
+      whatever it names; other users write "default" only.  panel_custom panel `echo-local` (panel.js, admin): Echos,
+      app chips, a form from the descriptor, wall.html in a same-origin iframe (?preview=1: the panel's token and
+      draft by parent.echoLocalPreview / postMessage; its edit mode edits the draft), a sketch for apps without a
+      preview page, draft + Save, a banner when the Echo saved meanwhile, Import (file, another app by the
+      descriptors' "common" names, another Echo), Export (.echohome.json), Copy to, Reset; the Screen tab = the
+      options flow's first step.  Echo-Wall: LayoutSync (ha.onConnected, Layout.onSaved/apply): subscribe at each
+      login, first event empty -> ours, else theirs unless ours changed unsent; saves sent unless what came in.
+      tests/ha_real_home.py (HA 2026.10.1, Chrome): migration, the panel registered, descriptors, size cap, the
+      kiosk user confined, kiosk/set reaching the Echo, live events, the panel drawn (51 widgets in the preview),
+      import from Echo-Wall, Save, the preview's edit mode into the draft, Export; Echo-Wall's
+      test/layout_sync_test.dart against a stand-in websocket.  Not yet on the device: Echo-Wall's sync on the Show 5.
+      Then (asked the same day: "everything should've been switched to the flutter ui"; the web wall panel to be deleted,
+      a real Flutter preview): wall.html/wall.js and the options' "wall" step removed; the kind "wall" = Home =
+      `hassmic:home` (kiosk.c already passes any hassmic:<name>, the Java kiosk skips them, Echo-Wall drops them from
+      its switcher); store 2.2 moves "wall" slots into Echo-Wall's (theme -> wallpaper, nowplaying -> now_playing),
+      drops "default"; other users read only.  The preview: Echo-Wall's WallView for the web (lib/preview.dart;
+      lib/io/io.dart = dart:io on the Echo, fetch/WebSocket stand-ins on the web, the five files that used dart:io),
+      tools/echowall-preview.sh -> frontend/echowall/ (16 MB: main.dart.js 2.5, CanvasKit 7 "full" only, fonts and
+      photos 5, NOTICES 1.3; no CDN, no service worker).  Cross-frame: isA<JSObject>() and dartify() are this frame's
+      Object only (the token was never read: "Connecting to Home Assistant…"), read through JSON.stringify.  The
+      panel redraws only the form on a draft change (an iframe rebuilt restarts Flutter, 2-3 s).  ha_real_home:
+      the preview's semantics nodes name HA's demo devices, light vs dusk wallpaper 168 vs 77 mean grey in the
+      iframe, the panel's switch -> Echo-Wall's edit mode, a CDP click on its − -> the draft (analog_clock), not HA.
+      Apps (asked the same day through the session that built apps.c; docs/screen-apps-launcher.md): apps.py,
+      echo_local/apps/list|net|uninstall|install (admin), POST /api/echo_local/apk/<echo> (admin; streamed to a
+      temporary file: 17 MB passed, past aiohttp's 16 MB body limit), sent on in 256 kB pieces with BLAKE2b-256
+      (api.py apk_send), action install_apk (allowlisted paths); the Echo's status says "ok" for removals too, so
+      the integration remembers which (send.op).  The user's new entry never pushed the screen (state/kiosk kept
+      the old entry's, a login of a removed user): a fresh entry has no kiosk options, so its setup sent nothing.
+      Now kiosk.adopt takes over GET /api/kiosk's screens (wall.html or hassmic:home -> Home, Music, a dashboard,
+      a page) when the entry never set one, and every push's outcome is kept (kiosk/get "push", kiosk/push).
+      Native Lovelace (asked 2026-11-03: "does this card work make sense vs lovelace?"; previews against a demo HA in
+      build/lovelace-previews/; then "build it, keep on-device edits in Echo-Wall's layout, keep the custom cards"):
+      Echo-Wall lib/lovelace/ (LovelaceSource: lovelace/config + lovelace_updated; LCard/LView: sections, stacks
+      flattened, grid_options -> four sizes), WallView groups home / ll:<view>/<section> / area:<id> / page:<id>, each
+      with place, sizes, exclude, cards of the Echo's; Kind.media and Kind.card; fallback -> onDashboard -> main.dart
+      _openPath.  Hold: _Hold (Listener + long press; the menu an OverlayEntry because a pushed route cancels the
+      pointer and the hold could not reach 1.3 s).  Thermostat: hvac_action colours, heat_cool range low orange/high
+      blue, both ends nudged.  Sensors in look().  Gallery: lib/home/gallery.dart, test/gallery_test.dart (found the
+      wide media card's buttons 38 px over and the wide dual thermostat's name squeezed), the panel's "Card sizes".
+      Echo-Wall tests 36 (lovelace_test.dart 5, gallery 1); ha_real_home: the dashboard's section drawn natively in the
+      preview after a touch swipe, the gallery.  Not yet on the device: all of the Echo-Wall changes (an APK build).
+      Not yet measured: HA's full UI logged in, the wall panel there (the user's HA has no
+      integration of this version yet), a tap on the kiosk while a ring shows (passes through?).  Open: kiosk entities in HA (screen select); the wall's choice of rooms/entities (now: every
+      area, registry-hidden ones left out); the screen waking on a touch while dark (the panel's touch controller).
+- [x] Echo-Wall split off (2026-11-03, asked: "keep HomeView as a fully separate application that can be installed on
+      top ... Echo Dot Assist extension ... that can be upstreamed"). Echo-Wall's layouts, the panel's Home screen tab,
+      its preview (frontend/echowall/, tools/echowall-preview.sh), home.py and docs/home-screens.md moved to the
+      Echo-Wall repository as the integration echo_wall (custom_components/echo_wall there: devices the app registers,
+      bound to the login that registered them; echo_wall/*; its own panel and preview; tools/ha_test.py, a real HA and
+      Chrome, all good). Echo Local keeps panel.py (echo_local/list, kiosk/get|set|push), apps.py and a panel of two tabs
+      (Screen, Apps); tests/ha_real_home.py became tests/ha_real_panel.py (29 checks, all good). No store migration: the
+      app sends the layout it kept in its file at its first login to echo_wall. The app logs in by itself without
+      hassmic (Home Assistant's login page in a WebView, refresh token kept): tried on an Android 16 emulator against a
+      test HA, registered, followed a save, logged in again after a restart without asking.
 - [x] Drop In between Echos (2026-10-08, asked by a user with ten Echos who used Alexa's as an intercom). `dropin.c`:
       calls signed on the arbitration network (new arb type `T_MSG`, `arb_tell`, broadcast like the rest, repeated:
       invite every 250 ms until answered), audio unicast UDP 28932 (`-i`), Opus 16 kHz 20 ms 24 kbit/s inband FEC (stock
@@ -2704,6 +2860,21 @@ Run in this order. Each step says what it proves.
       `run-satellite`, so `core_link_pause` marks it and no ring shows (`fake_ha.py`).  HA started with the switch on
       does not connect at all, which here reads as no link: the ring shows.
       Open: a sound as well; left out until someone asks.
+- [x] Even volume steps (2026-11-02, asked on an Echo Show 5: "why does the volume sound so non linear"; setting
+      `even_volume`, on by default, exported).  The Show's music stream index is Android's DEFAULT_MEDIA_VOLUME_CURVE
+      (dumpsys media.audio_policy: (1,-58 dB) (20,-40) (60,-17) (100,0), applied in AudioFlinger in float) over 31
+      indices: hassmic's (30 v + 50) / 100 put 3-4 points on one index (45, 46, 47 -> 14), and the measured curve
+      (board.c) has 46 dB under 50 and 20 above.  Now want_db(v) = -50 dB * (100 - v) / 99 (0 silent), the
+      stream at board_vol_at(): the lowest point of the measured curve at least that loud (the Show's points are
+      the indices played, so exact), our PCM gain for the rest (mix_gain; <= 8.8 dB on the Show, 10 on the Dot 2's
+      curve at the top).  No cost: the Show's primary output is AUDIO_FORMAT_PCM_16_BIT 48 kHz stereo
+      (audio_policy_configuration.xml mixPort "primary output"; dumpsys media.audio_flinger: HAL format pcm16,
+      processing pcmfloat), so attenuating 16-bit before it rounds at the same floor.  For the same reason 24-bit
+      Sendspin was not taken up: the output is 16-bit, MA's 24 -> 16 would only move to the Echo.  MainVolume is
+      then not the volume (as with separate volumes): state/volume.music keeps it, written at the first start
+      straight from MainVolume (an update keeps the number).  Echo Show 5 (2026-11-02, the update pushed): 45 kept,
+      index 14 -> 11; keys 0..100 gave indices 0, 5, 8, 8, 11, 12, 15, 20, 23, 26, 30 as the curve says.  Not
+      measured by ear or mic (no Dot beside it for tools/vol-curve.py).  The Dot 3's curve is still the Dot 2's.
 - [x] Volumes per kind of audio (GitHub issue #32: several Dot 3 and a Dot 2; one volume for media and one for the
       assistant, the wake sound on a slider of its own).  Built 2026-10-17, after two tries the owner rejected.
       First: categories linked to the main volume with offsets (replies in volume points, sounds in dB under it,

@@ -33,7 +33,7 @@
 
 static uint32_t inc[W * H], ref[W * H];
 static char sent[256][160]; static int nsent;
-static char launched[64][200]; static int nlaunched, backs, apps_asked, shots_asked, sleeps;
+static char launched[256][200]; static int nlaunched, backs, apps_asked, shots_asked, sleeps;
 static char asked[64][48]; static int asked_px[64], nasked;
 static const char *shots;
 static struct scene *S;
@@ -524,16 +524,22 @@ int main(int argc, char **argv)
       for (int i = 0; i < 10; i++) { snprintf(b, sizeof b, "pl- x%d", i); msg(b); }
       run(800); assert(S->m.spk.pos == 0); }
 
-    /* the drawer over our own screen: DND, the volume; no apps in it */
+    /* the drawer over our own screen: DND, the volume; of the apps only the owner's (the app switcher's row) */
     nsent = 0; pull_drawer();
     assert(shots_asked == 0);
-    struct ui_app *apps = calloc(2, sizeof *apps);
+    struct ui_app *apps = calloc(3, sizeof *apps);
     snprintf(apps[0].pkg, sizeof apps[0].pkg, "me.jxl.kiosk_satellite"); snprintf(apps[0].label, sizeof apps[0].label, "Kiosk Satellite");
     snprintf(apps[1].pkg, sizeof apps[1].pkg, "org.example.app01"); snprintf(apps[1].label, sizeof apps[1].label, "App 1"); apps[1].system = 1;
-    scene_apps(S, apps, 2);
+    snprintf(apps[2].pkg, sizeof apps[2].pkg, "org.example.mine"); snprintf(apps[2].label, sizeof apps[2].label, "Mine");
+    scene_apps(S, apps, 3);
     assert(sent_has("app me.jxl.kiosk_satellite\tKiosk Satellite\t0") && sent_has("app org.example.app01\tApp 1\t1") && sent_has("apps."));
     run(300); ppm("drawer", inc);
-    assert(!drawn_text("App 1"));                                 /* (the apps listed: none of them in it) */
+    assert(!drawn_text("App 1") && drawn_text("Mine"));           /* (Android's own not in it, the owner's are) */
+    { int x, y, nl0 = nlaunched; hit_mid(A_DR_APP, 2, &x, &y); tap(x, y); run(600);   /* tapped: the drawer goes, then it */
+      assert(!drawer_open(S) && nlaunched == nl0 + 1 && strstr(launched[nl0], "org.example.mine"));
+      scene_top(S, "org.example.mine", now); run(100); assert(!scene_visible(S));
+      scene_top(S, UI_HOME_PKG, now); go_home(S, V_FACE); run(300); }
+    pull_drawer(); run(300);
     tap(278, 60); run(100); assert(sent_has("dnd 1"));            /* Home, Music, Do not disturb, Screen off */
     /* a drag goes on whatever the hits become meanwhile: music starts under the volume slider's drag */
     msg("mx"); run(4000); nsent = 0;                              /* (the toasts gone) */
@@ -921,6 +927,27 @@ int main(int argc, char **argv)
     msg("ma connecting"); run(600); nsent = 0;
     msg("ma up Music Assistant"); run(1000);
     assert(sent_prefix("ml ") && strstr(sent[nsent - 1], "search 0 re") && !drawn_text("Searching"));
+
+    /* the home app's contract (hassmic's kiosk.c): a ring over an app that does not draw one itself brings the face
+     * (its Stop) and gives the screen back after; one that claims the ring keeps the screen */
+    FRESH(); msg("home org.example.wall"); run(100); scene_top(S, "org.example.wall", now); run(4000); assert(!scene_visible(S));
+    { int nl0 = nlaunched; msg("timers Tea"); run(100);
+      assert(scene_visible(S) && nlaunched == nl0 + 1 && !strncmp(launched[nl0], "HOME", 4));
+      scene_top(S, UI_HOME_PKG, now); run(3000); assert(nlaunched == nl0 + 1);       /* (no home app brought over the ring) */
+      msg("timers "); run(100);
+      assert(nlaunched == nl0 + 2 && !strcmp(launched[nl0 + 1], "org.example.wall/contract:")); }
+    scene_top(S, "org.example.wall", now); run(4000);
+    { int nl0 = nlaunched; msg("claim org.example.wall 3"); msg("timers Tea"); run(300);
+      assert(!scene_visible(S) && nlaunched == nl0); msg("timers "); run(300); assert(nlaunched == nl0); }
+    /* its screens in the drawer's row: one tapped, the app by the contract with that screen; Home with "home" */
+    msg("screens Wall\tMusic"); run(100); drag(W / 2, -1, W / 2, 300, 12, 16); run(600);   /* (over an app: the gate's pull) */
+    scene_top(S, UI_HOME_PKG, now); run(300); assert(drawer_open(S) && drawn_text("Wall"));
+    { int x, y, nl0 = nlaunched; hit_mid(A_DR_SCREEN, 1, &x, &y); tap(x, y); run(600);
+      assert(nlaunched == nl0 + 1 && !strcmp(launched[nl0], "org.example.wall/screen:Music")); }
+    scene_top(S, "org.example.wall", now); run(4000); drag(W / 2, -1, W / 2, 300, 12, 16); run(600);
+    scene_top(S, UI_HOME_PKG, now); run(300);
+    { int x, y, nl0 = nlaunched; hit_mid(A_DR_HOME, -1, &x, &y); tap(x, y); run(600);
+      assert(nlaunched == nl0 + 1 && !strcmp(launched[nl0], "org.example.wall/home:")); }
 
     printf("frames %d, dirty %.0f px a frame on average; drawing dirty-only %.3f ms a frame (worst %.3f), whole %.3f ms\n",
            frames, (double)drawn_px / frames, t_inc / frames * 1000, worst * 1000, t_full / frames * 1000);
