@@ -66,13 +66,21 @@ def main():
         check(req(WEB, "GET", "/api/apps")[0] == 401 and req(WEB, "POST", "/api/apps/apk/0", b"PK")[0] == 401, "unsigned: refused")
         st, _, body = b.call("GET", "/api/apps"); d = json.loads(body)
         check(st == 200 and [a["package"] for a in d["apps"]] == ["org.schabi.newpipe", "io.github.nt_f.echowall"]
-              and d["apps"][0] == {"package": "org.schabi.newpipe", "version": 1015, "net": False}, "the owner's apps, Amazon's left out")
+              and d["apps"][0] == {"package": "org.schabi.newpipe", "version": 1015, "net": False, "lan": False}, "the owner's apps, Amazon's left out")
         check(d["install"]["state"] == "idle", "nothing under way")
 
         # ---- internet per app
         st, _, _ = b.call("POST", "/api/apps", b"net org.schabi.newpipe 1")
         check(st == 200 and open(os.path.join(state, "apps")).read() == "net org.schabi.newpipe\n", "internet on: state/apps for root")
         check(b.call("POST", "/api/apps", b"net com.amazon.webview.chromium 1")[0] == 400, "never for Amazon's")
+        # reachable from the home network (issue #109): its own line for root's firewall (lockdown.sh hassmic_in)
+        st, _, _ = b.call("POST", "/api/apps", b"lan org.schabi.newpipe 1")
+        check(st == 200 and open(os.path.join(state, "apps")).read() == "net org.schabi.newpipe\nlan org.schabi.newpipe\n", "network on: a lan line for root")
+        check(b.call("POST", "/api/apps", b"lan com.amazon.webview.chromium 1")[0] == 400 and b.call("POST", "/api/apps", b"bad org.schabi.newpipe 1")[0] == 400,
+              "never for Amazon's; only net or lan")
+        st, _, body = b.call("GET", "/api/apps")
+        check(json.loads(body)["apps"][0].get("lan") is True, "the list says so")
+        b.call("POST", "/api/apps", b"lan org.schabi.newpipe 0")
 
         # ---- an APK in pieces
         apk = b"PK pkg org.example.tube\n" + bytes((i * 13) & 255 for i in range(700000))
