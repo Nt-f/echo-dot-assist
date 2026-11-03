@@ -283,7 +283,8 @@ No model `#ifdef`s in shared code: new differences become a board field, a `devi
   `state/screen_home`; Echo Local's `app` line sets it too, the last one counts; an old `state/kiosk` `app` becomes it
   where none was chosen) gets `GET /kiosk/config[/front[/draws/<words,ring>]|/back]` (HA address, a token Echo Local made,
   its screens and settings; `state/kiosk` 0600 from the signed `POST /api/kiosk`, token sealed) and `/kiosk/state[/<v>]`
-  (words, ring, next alarm; long poll), only from 127.0.0.1 and its uid (`kiosk_peer_ok`: /proc/net/tcp6).  Its claims
+  (words, ring, next alarm; long poll), `/kiosk/ring/snooze|stop` (its ring tapped or held: `core_ring_tap`), only from
+  127.0.0.1 and its uid (`kiosk_peer_ok`: /proc/net/tcp6).  Its claims
   go to the UI (`screen_claim` -> "claim <pkg> <mask>"); its screens' names too ("screens", the drawer's row).
   Echo Local: `custom_components/echo_local/kiosk.py` (user + token per Echo, options flow), `tests/ha_real_kiosk.py`.
 - **Sound packs** (`soundpack.c`, `soundpack.h`): sets of the Sounds card's sounds in `state/sound-packs/<id>/` (`name`,

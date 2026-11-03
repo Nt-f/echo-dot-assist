@@ -107,6 +107,11 @@ async def run(tmp):
             async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(local_addr=("127.0.0.2", 0))) as other:
                 async with other.get(f"{web}/kiosk/state") as r:
                     check(r.status == 404, f"the state feed from another address: not found ({r.status})")
+            async with session.get(f"{web}/kiosk/ring/snooze") as r:
+                check(r.status == 200, f"the home app's ring tapped: taken ({r.status})")
+            async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(local_addr=("127.0.0.2", 0))) as other:
+                async with other.get(f"{web}/kiosk/ring/stop") as r:
+                    check(r.status == 404, f"the ring's stop from another address: not found ({r.status})")
             check(tok and cfg.get("ha") == hr.HA, f"the Echo has the address and a token ({cfg.get('ha')}, {len(tok)} chars)")
             check([s["name"] for s in cfg.get("screens", [])] == ["Home", "Home Assistant"]
                   and cfg["screens"][0]["url"] == "hassmic:home" and cfg["screens"][1]["url"] == f"{hr.HA}/lovelace"

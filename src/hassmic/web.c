@@ -1246,6 +1246,12 @@ static void handle(int fd)
             respond_c(fd, 0, 200, "application/json", NULL, o, n < sizeof o ? n : sizeof o - 1);
         }
     }
+    else if (!strcmp(r.method, "GET") && (!strcmp(r.path, "/kiosk/ring/snooze") || !strcmp(r.path, "/kiosk/ring/stop"))) {
+        /* the home app draws the ring (its claim) and the finger is on it: a tap snoozes an alarm (stops a timer), a
+         * hold stops (core_ring_tap).  Its uid only, as the config */
+        if (!from_loopback(fd) || !kiosk_peer_ok(fd)) respond_c(fd, 0, 404, "application/json", NULL, "{}", 2);
+        else { core_ring_tap(!strcmp(r.path + 12, "stop")); respond_c(fd, 0, 200, "application/json", NULL, "{}", 2); }
+    }
     else if (!strcmp(r.method, "GET") && !strncmp(r.path, "/kiosk/config", 13)) {
         /* the token's way to the app: only from this Echo, and with no CORS headers: the pages the app shows run here
          * and must not read it */

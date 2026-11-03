@@ -109,7 +109,8 @@ What changed for people using the Echo, newest first. Details and measurements a
   gets Home Assistant's address and a login of its own, opens the screen picked in the drawer, and draws a request's
   words and a ringing timer or alarm itself. An Echo that had Echo-Wall as its screen app keeps it as its home app.
 - **A timer or an alarm ringing over an app shows.** The face with its Stop comes over the app until nothing rings,
-  then the app is back (not over an app that draws the ring itself, as Echo-Wall does).
+  then the app is back (not over an app that draws the ring itself, as Echo-Wall does: a tap on its ring snoozes,
+  a hold stops).
 - **An app on the Echo Show can be reached from your network** (issue #109): each app has a **Network** switch beside
   its Internet one (settings page, Echo Local's Apps tab). On, the firewall admits the ports that app listens on, from
   your own network only, and follows them when the app moves to another one: Kiosk Satellite's DLNA renderer (its port
