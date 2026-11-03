@@ -571,6 +571,15 @@ each, two tabs.
   this Home Assistant does not have are kept and marked.
 - *Screen*: Home Assistant on the screen, the screens in the switcher's order, the one to start on and go back to,
   the screen app and its settings (Echo-Wall's photos from Immich: `immich.url=`, `immich.key=`, `immich.album=`).
+  A line at the top says when Home Assistant last sent this to the Echo, or why it could not; **Send to the Echo
+  again** sends it now with a fresh login. An Echo Local entry added anew (after removing the old one) takes over the
+  screen the Echo shows by itself and sends it with a login of its own: the old login went with the old entry.
+- *Apps* (Echo Shows): the Android apps you installed beside the screen app (a YouTube client such as NewPipe), each
+  with an **Internet** switch (the Echo keeps every app off the internet until you allow it) and **Remove**. **Add an
+  app**: an APK from your computer, or a file Home Assistant can read (`/config/www/app.apk`); it must be built for
+  32-bit ARM (armeabi-v7a) and Android 7.1 on the Echo Show 5; Android's reason is shown when it refuses one. The
+  action `echo_local.install_apk` (device, path) does the same from an automation. New apps show on Echo-Wall's Home
+  and in its switcher by themselves.
 
 Echo-Wall keeps its Home in Home Assistant by itself: what you arrange on the Echo shows in the panel, and the panel's
 Save shows on the Echo at once. Layouts made for the old web wall panel were carried over into Echo-Wall's.

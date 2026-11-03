@@ -10,6 +10,13 @@ What changed for people using the Echo, newest first. Details and measurements a
   a file and import it again, take another app's Home, copy it to your other Echos. The screen's options (which
   screens, the screen app) are there too. Administrators only. See the guide's "Home Assistant on the screen".
   An Echo's own login may now change only that Echo's layout (before, any Home Assistant user could change any).
+- **Apps on the Echo Show from Home Assistant.** Echo Local's Apps tab lists the Android apps you installed (NewPipe,
+  say) with an internet switch each, removes them, and installs new ones from an APK on your computer or on Home
+  Assistant (also the action "Install app"). Apps stay off the internet until you switch them on.
+- **The screen's setup reaches the Echo after replacing the integration.** A new Echo Local entry takes over the
+  screen the Echo shows and sends it with a login of its own (before, the Echo kept the removed entry's login and
+  showed "Home Assistant refused the login"). The Screen tab says when it was last sent and has "Send to the Echo
+  again".
 - **The web wall panel is gone: Home is Echo-Wall's.** The Echo Show's Home is drawn by the Echo-Wall app; the
   integration's HTML wall panel and its options page are removed, and their layouts were carried over into
   Echo-Wall's. hassmic's own kiosk app now shows web pages only (dashboards, Music Assistant, your page).

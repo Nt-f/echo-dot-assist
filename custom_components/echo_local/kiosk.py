@@ -8,6 +8,7 @@ for the Echo on the way.  Removing the integration's entry removes that user."""
 from __future__ import annotations
 
 import logging
+import time
 from datetime import timedelta
 
 from homeassistant.auth.const import GROUP_ID_ADMIN, GROUP_ID_USER
@@ -119,23 +120,68 @@ async def login(hass: HomeAssistant, entry: ConfigEntry) -> str:
     return token
 
 
+def last_push(hass: HomeAssistant, entry: ConfigEntry) -> dict:
+    """what came of the last push to this Echo since Home Assistant started: {at, ok, error, screens} ({} none yet)"""
+    return dict(hass.data.get(DOMAIN_PUSH, {}).get(entry.entry_id) or {})
+
+
+DOMAIN_PUSH = "echo_local_kiosk_push"
+
+
 async def push(hass: HomeAssistant, entry: ConfigEntry, echo: Echo) -> None:
-    """the options onto the Echo: its setting, then the screens"""
+    """the options onto the Echo: its setting, then the screens; the outcome kept for the panel (a push that never
+    lands leaves the Echo with a login Home Assistant refuses, and the logs are the only other place that says so)"""
     o = entry.options
-    if not o.get(OPT_KIOSK):
-        await echo.set("display_kiosk=0\n")
-        return
-    scr, default = screens(hass, entry)
-    if not scr:
-        _LOGGER.warning("%s: the kiosk has no screen to show", entry.title)
-    token = await login(hass, entry)
+    done = hass.data.setdefault(DOMAIN_PUSH, {})
     try:
+        if not o.get(OPT_KIOSK):
+            await echo.set("display_kiosk=0\n")
+            done[entry.entry_id] = {"at": time.time(), "ok": True, "error": "", "screens": 0, "kiosk": False}
+            return
+        scr, default = screens(hass, entry)
+        if not scr:
+            _LOGGER.warning("%s: the kiosk has no screen to show", entry.title)
+        token = await login(hass, entry)
         await echo.put_kiosk(ha_url(hass, entry), scr, default, int(o.get(OPT_RETURN, 120)), token,
                              (o.get(OPT_APP) or "").strip(), app_settings(o.get(OPT_APP_SETTINGS, "")))
         await echo.set("display_kiosk=1\n")
+        _LOGGER.info("%s: the screen's setup sent (%d screens, app %s)", entry.title, len(scr), o.get(OPT_APP) or "hassmic's kiosk")
+        done[entry.entry_id] = {"at": time.time(), "ok": True, "error": "", "screens": len(scr), "kiosk": True}
     except EchoError as e:
         _LOGGER.warning("%s: the kiosk could not be set up: %s", entry.title, e)
+        done[entry.entry_id] = {"at": time.time(), "ok": False, "error": str(e)}
         raise
+
+
+def adopt(hass: HomeAssistant, echo_cfg: dict) -> dict | None:
+    """options from the screen the Echo shows now (GET /api/kiosk), for an entry that never set one: a replaced
+    entry (the Echo keeps the old one's screens, with a login the removed entry's user took along) takes them over and
+    sends them again with a login of its own.  None when the Echo shows nothing"""
+    if not echo_cfg.get("enabled") or not echo_cfg.get("screens"):
+        return None
+    kinds, o = [], {}
+    for s in echo_cfg["screens"]:
+        u, name = s.get("url", ""), s.get("name", "")
+        if u == "hassmic:home" or "/wall.html" in u:
+            k = "wall"
+        elif u == "hassmic:clock":
+            k = "clock"
+        elif "music_assistant" in u or name == "Music":
+            k = "music"; o[OPT_MUSIC] = u.split("/")[-1] if u.startswith(echo_cfg.get("ha", "") + "/") else u
+        elif u.startswith(echo_cfg.get("ha", "") + "/") and name == "Home Assistant":
+            k = "dashboard"; o[OPT_DASHBOARD] = u[len(echo_cfg["ha"]) + 1:] or "lovelace"
+        elif u.startswith(("http://", "https://")):
+            k = "custom"; o[OPT_CUSTOM_NAME] = name[:40]; o[OPT_CUSTOM_URL] = u
+        else:
+            continue
+        if k not in kinds:
+            kinds.append(k)
+    if not kinds:
+        return None
+    d = echo_cfg.get("default", 0)
+    o.update({OPT_KIOSK: True, OPT_SCREENS: kinds, OPT_DEFAULT: kinds[d] if 0 <= d < len(kinds) else kinds[0],
+              OPT_RETURN: int(echo_cfg.get("return", 120)), OPT_APP: echo_cfg.get("app", "")})
+    return o
 
 
 async def remove(hass: HomeAssistant, entry: ConfigEntry) -> None:

@@ -2334,6 +2334,14 @@ Run in this order. Each step says what it proves.
       panel redraws only the form on a draft change (an iframe rebuilt restarts Flutter, 2-3 s).  ha_real_home:
       the preview's semantics nodes name HA's demo devices, light vs dusk wallpaper 168 vs 77 mean grey in the
       iframe, the panel's switch -> Echo-Wall's edit mode, a CDP click on its − -> the draft (analog_clock), not HA.
+      Apps (asked the same day through the session that built apps.c; docs/screen-apps-launcher.md): apps.py,
+      echo_local/apps/list|net|uninstall|install (admin), POST /api/echo_local/apk/<echo> (admin; streamed to a
+      temporary file: 17 MB passed, past aiohttp's 16 MB body limit), sent on in 256 kB pieces with BLAKE2b-256
+      (api.py apk_send), action install_apk (allowlisted paths); the Echo's status says "ok" for removals too, so
+      the integration remembers which (send.op).  The user's new entry never pushed the screen (state/kiosk kept
+      the old entry's, a login of a removed user): a fresh entry has no kiosk options, so its setup sent nothing.
+      Now kiosk.adopt takes over GET /api/kiosk's screens (wall.html or hassmic:home -> Home, Music, a dashboard,
+      a page) when the entry never set one, and every push's outcome is kept (kiosk/get "push", kiosk/push).
       Not yet measured: HA's full UI logged in, the wall panel there (the user's HA has no
       integration of this version yet), a tap on the kiosk while a ring shows (passes through?).  Open: kiosk entities in HA (screen select); the wall's choice of rooms/entities (now: every
       area, registry-hidden ones left out); the screen waking on a touch while dark (the panel's touch controller).

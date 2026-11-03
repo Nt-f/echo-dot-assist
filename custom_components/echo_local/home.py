@@ -234,7 +234,7 @@ async def async_setup(hass: HomeAssistant) -> None:
     store = _Store(hass, STORE_VERSION, STORE_KEY, minor_version=STORE_MINOR)
     saved = await store.async_load() or {}
     hass.data[DOMAIN + "_home"] = {"store": store, "homes": saved.get("homes", {}), "descriptors": saved.get("descriptors", {})}
-    for c in (ws_list, ws_get, ws_set, ws_subscribe, ws_describe, ws_delete, ws_kiosk_get, ws_kiosk_set):
+    for c in (ws_list, ws_get, ws_set, ws_subscribe, ws_describe, ws_delete, ws_kiosk_get, ws_kiosk_set, ws_kiosk_push):
         websocket_api.async_register_command(hass, c)
 
 
@@ -399,7 +399,26 @@ def ws_kiosk_get(hass: HomeAssistant, connection, msg: dict) -> None:
         connection.send_error(msg["id"], "not_found", "no such Echo")
         return
     connection.send_result(msg["id"], {"options": dict(e.options), "kinds": k.SCREEN_KINDS, "music_panel": k.music_panel(hass),
-                                       "ha_url": k.ha_url(hass, e)})
+                                       "ha_url": k.ha_url(hass, e), "push": k.last_push(hass, e)})
+
+
+@websocket_api.require_admin
+@websocket_api.websocket_command({vol.Required("type"): "echo_local/kiosk/push", vol.Required("echo"): str})
+@websocket_api.async_response
+async def ws_kiosk_push(hass: HomeAssistant, connection, msg: dict) -> None:
+    """the screen's setup sent to the Echo again now (a fresh login with it, where the kiosk is on)"""
+    from . import kiosk as k
+    from .api import EchoError
+    e = _entry(hass, msg["echo"])
+    if e is None or not hasattr(e, "runtime_data"):
+        connection.send_error(msg["id"], "not_found", "no such Echo (or not loaded)")
+        return
+    try:
+        await k.push(hass, e, e.runtime_data.echo)
+    except EchoError as err:
+        connection.send_error(msg["id"], "echo", str(err))
+        return
+    connection.send_result(msg["id"], {"push": k.last_push(hass, e)})
 
 
 @websocket_api.require_admin

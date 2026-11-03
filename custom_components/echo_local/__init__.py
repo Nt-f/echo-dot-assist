@@ -23,7 +23,7 @@ from homeassistant.helpers.typing import ConfigType
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .api import DEFAULT_PORT, Echo, EchoAuthError, EchoError
-from . import home, kiosk
+from . import apps, home, kiosk
 from .const import CARD_URL, CONF_KEY, DAY_KEYS, DOMAIN, PANEL_PATH, PANEL_URL, PREVIEW_URL, SCAN_INTERVAL_S
 
 _LOGGER = logging.getLogger(__name__)
@@ -77,6 +77,7 @@ class EchoLocalCoordinator(DataUpdateCoordinator[dict]):
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     # the dashboard card, served from here and loaded on every dashboard
     await home.async_setup(hass)          # the home screens' layouts (Echo-Wall, other screen apps) and their websocket commands
+    await apps.async_setup(hass)          # the owner's Android apps on an Echo Show: list, internet, add, remove
     fe = Path(__file__).parent / "frontend"
     # the panel and Echo-Wall's preview: no login to fetch them (only code), their data then over the websocket with the
     # panel's login.  The preview is cached by the browser: it changes only with the integration's version
@@ -135,6 +136,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await coordinator.async_config_entry_first_refresh()
     entry.runtime_data = coordinator
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    if kiosk.OPT_KIOSK not in entry.options:
+        # never set up from this entry: an Echo that shows a screen already (a replaced entry's) keeps it, with this
+        # entry's own login (the old one went with the old entry's user)
+        try:
+            new = kiosk.adopt(hass, await echo.kiosk())
+        except EchoError:
+            new = None
+        if new:
+            _LOGGER.info("%s: taking over the screen the Echo shows (%s)", entry.title, ", ".join(new[kiosk.OPT_SCREENS]))
+            hass.config_entries.async_update_entry(entry, options={**entry.options, **new})
     if entry.options.get(kiosk.OPT_KIOSK) or entry.data.get(kiosk.DATA_USER):
         try:
             await kiosk.push(hass, entry, echo)

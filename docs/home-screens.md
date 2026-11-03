@@ -203,6 +203,11 @@ rebuilt or moved in the DOM loads again and Flutter would start over (2-3 s).
 while there is no unsaved draft; with one, a banner offers "Take the Echo's" or "Keep mine" (Keep mine: Save then
 overwrites). So someone arranging tiles on the Echo while the owner edits in Home Assistant loses nothing silently.
 
+**Apps tab** (Echo Shows; gone where the Echo answers `none`): the owner's Android apps (`apps.py`, the Echo's
+`/api/apps`), an internet switch and Remove each, Add from this computer (uploaded to `/api/echo_local/apk/<echo>`,
+then sent to the Echo in 256 kB pieces) or from a path Home Assistant may read; the status polled every second while
+something runs.
+
 **Screen tab**: the kiosk's options, as the options flow has them, with switches and a reorderable list of screens
 (Home first by default); the screen app from a list (Echo-Wall, Echo-Screen, hassmic's kiosk for web pages only, or a
 package typed in); its settings (`key=value` lines). Save goes through `echo_local/kiosk/set`. The options flow has
