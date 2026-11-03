@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- a key of the Echo's keyboard (Keyboard.java), in the screen apps' keyboards' look -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_pressed="true">
+        <inset android:insetLeft="3dp" android:insetRight="3dp" android:insetTop="3dp" android:insetBottom="3dp">
+            <shape><solid android:color="#6a6a70" /><corners android:radius="7dp" /></shape>
+        </inset>
+    </item>
+    <item>
+        <inset android:insetLeft="3dp" android:insetRight="3dp" android:insetTop="3dp" android:insetBottom="3dp">
+            <shape><solid android:color="#3a3a3c" /><corners android:radius="7dp" /></shape>
+        </inset>
+    </item>
+</selector>

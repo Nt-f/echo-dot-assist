@@ -1,11 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- hassmic's kiosk (Kiosk.java), the default screen app: started by hassmic (kiosk.c) once the kiosk is on, never a home screen
-     itself: Android 7 starts the home before user 0 is unlocked, and a WebView cannot run then (mkhome.py's codeless
-     home stays for that). -->
+<!-- hassmic's kiosk app: the default screen app (Kiosk.java: Home Assistant's pages in a WebView), started by hassmic
+     (kiosk.c) once the kiosk is on, never a home screen itself (Android 7 starts the home before user 0 is unlocked, and a
+     WebView cannot run then: mkhome.py's codeless home stays for that); and hassmic's shell, whatever app is the screen
+     app (Shell.java: the bar of places pulled down over every app; Keyboard.java: the Echo's keyboard). -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android" package="io.github.gamer92000.echodotassist.kiosk"
-    android:versionCode="1" android:versionName="1">
+    android:versionCode="3" android:versionName="3">
     <uses-sdk android:minSdkVersion="24" android:targetSdkVersion="25" />
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- the shell's strip and bar over the other apps; root's main.sh allows the app op on an Echo -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <application android:label="hassmic kiosk" android:allowBackup="false" android:largeHeap="false"
         android:usesCleartextTraffic="true" android:hardwareAccelerated="true">
         <activity android:name=".Kiosk" android:exported="true" android:launchMode="singleTask"
@@ -18,5 +21,21 @@
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
         </activity>
+        <!-- the shell and the keyboard: a light process of their own, apart from the kiosk's WebView -->
+        <service android:name=".Shell" android:process=":shell" android:exported="true" />
+        <service android:name=".Watcher" android:process=":shell" android:label="hassmic"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE" android:exported="true">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data android:name="android.accessibilityservice" android:resource="@xml/watcher" />
+        </service>
+        <service android:name=".Keyboard" android:process=":shell" android:label="Echo keyboard"
+            android:permission="android.permission.BIND_INPUT_METHOD" android:exported="true">
+            <intent-filter>
+                <action android:name="android.view.InputMethod" />
+            </intent-filter>
+            <meta-data android:name="android.view.im" android:resource="@xml/method" />
+        </service>
     </application>
 </manifest>

@@ -27,11 +27,14 @@ float core_lux(void) { return lux; }
 void core_touch(int held) { (void)held; }
 const char *core_name = "Echo Show 5 3fce9a";
 int core_oobe(void) { return 0; }
-static int last_brightness = -1, wakes, am_starts;
+static int last_brightness = -1, wakes, am_starts, shell_starts, monkeys;
+static char last_start[200];
 void core_run(char *const argv[], char *out, size_t n) { (void)argv; if (n) out[0] = 0; }
 void core_spawn(char *const argv[])
 {
-    if (!strcmp(argv[0], "/system/bin/am")) am_starts++;
+    if (!strcmp(argv[0], "/system/bin/am") && !strcmp(argv[1], "startservice")) shell_starts++;
+    else if (!strcmp(argv[0], "/system/bin/am")) { am_starts++; snprintf(last_start, sizeof last_start, "%s", argv[argv[1] && !strcmp(argv[1], "start") ? 6 : 1]); }
+    if (!strcmp(argv[0], "/system/bin/monkey")) { monkeys++; snprintf(last_start, sizeof last_start, "%s", argv[2]); }
     if (!strcmp(argv[0], "/system/bin/settings") && !strcmp(argv[3], "screen_brightness")) last_brightness = atoi(argv[4]);
     if (!strcmp(argv[0], "/system/bin/service") && !strcmp(argv[3], "9")) wakes++;
 }
@@ -210,7 +213,7 @@ int main(void)
     WAIT(nframes() > n0);
     check(nframes() > n0 && am_starts == 1, "the app paused: the clock, the app not started again within the minute");
     /* an app that draws the words and a ring itself (its poll says /front/draws): the screen stays its; the state feed */
-    kiosk_polled(1, 1); display_changed();
+    kiosk_polled(1, KIOSK_DRAWS_WORDS | KIOSK_DRAWS_RING); display_changed();
     ms(600); n0 = nframes();
     char js[4600]; display_state_json(js, sizeof js);
     unsigned v0 = (unsigned)atoi(strstr(js, "\"v\":") + 4);
@@ -243,6 +246,67 @@ int main(void)
     kiosk_polled(0, 0); display_changed();
     WAIT(nframes() > n0);
     check(nframes() > n0 && !kiosk_front(), "lent ends with a /back poll: the clock");
+    /* what an app takes over, as its poll says (docs/screen-apps.md "What an app takes over") */
+    check(kiosk_draws_parse("") == 0 && kiosk_draws_parse("/draws") == (KIOSK_DRAWS_WORDS | KIOSK_DRAWS_RING)
+          && kiosk_draws_parse("/draws/ring") == KIOSK_DRAWS_RING && kiosk_draws_parse("/draws/words+ring") == (KIOSK_DRAWS_WORDS | KIOSK_DRAWS_RING)
+          && kiosk_draws_parse("/draws/home,words,later") == KIOSK_DRAWS_WORDS && kiosk_draws_parse("/drawsx") == 0, "draws: the list in the poll's path");
+    kiosk_polled(1, KIOSK_DRAWS_RING); display_changed(); ms(600); n0 = nframes();
+    display_ringing("Alarm 7 AM"); ms(1500);
+    check(nframes() == n0, "an app that draws the ring only: the ring left to it");
+    display_ringing(NULL); display_heard("lights on"); WAIT(nframes() > n0);
+    check(nframes() > n0, "... the request's words drawn by us over it");
+    display_heard(NULL); ms(600);
+
+    /* on Android: what is in front, from /proc (a stand-in here): any of the owner's apps has the screen without
+     * polling; hassmic's home in front (nothing) for 5 s: the screen app started again; the shell started when gone */
+    char proc[300]; snprintf(proc, sizeof proc, "%s/proc", dir);
+    #define PROC(pid, cmd, adj) do { char f_[400]; snprintf(f_, sizeof f_, "%s/%d", proc, pid); mkdir(f_, 0755); \
+        snprintf(f_, sizeof f_, "%s/%d/cmdline", proc, pid); FILE *o_ = fopen(f_, "w"); fwrite(cmd, 1, strlen(cmd) + 1, o_); fclose(o_); \
+        snprintf(f_, sizeof f_, "%s/%d/oom_score_adj", proc, pid); o_ = fopen(f_, "w"); fprintf(o_, "%d\n", adj); fclose(o_); } while (0)
+    mkdir(proc, 0755);
+    PROC(100, "org.schabi.newpipe", 0); PROC(101, "io.github.gamer92000.echodotassist.kiosk", 700); PROC(102, "com.amazon.webview.chromium:sandboxed_process0", 0);
+    setenv("HASSMIC_PROC", proc, 1);
+    kiosk_polled(0, 0);                                 /* the screen app's poll says it is paused: Android's word counts */
+    ms(1200); display_changed(); ms(600); n0 = nframes(); ms(1500);
+    { char fg[160]; int f = kiosk_in_front(fg, sizeof fg);
+      check(f == 1 && !strcmp(fg, "org.schabi.newpipe") && kiosk_front(), "Android: the app in front by /proc (the screen app's polls no matter)"); }
+    check(nframes() == n0, "Android: our layer off over it");
+    WAIT(shell_starts > 0);
+    check(shell_starts == 1, "Android: the shell started (its process not there)");
+    PROC(103, "io.github.gamer92000.echodotassist.kiosk:shell", 200);
+    display_ringing("Timer"); WAIT(nframes() > n0);
+    check(nframes() > n0, "Android: a ring over another app (it draws none, whatever the screen app said)");
+    display_ringing(NULL);
+    int am0 = am_starts;
+    PROC(100, "org.schabi.newpipe", 700); PROC(104, "org.hassmic.home", 0);
+    ms(1200);
+    check(kiosk_in_front(NULL, 0) == 0 && !kiosk_front(), "Android: hassmic's home in front: no app");
+    for (int i = 0; i < 90 && am_starts == am0; i++) { display_changed(); ms(100); }
+    check(am_starts == am0 + 1 && !strcmp(last_start, "io.github.gamer92000.echodotassist.kiosk"), "Android: nothing in front for 5 s: the screen app started again");
+    PROC(104, "org.hassmic.home", 700); PROC(101, "io.github.gamer92000.echodotassist.kiosk", 0);
+    ms(1200);
+    { char sj[600]; size_t sn; char *j = kiosk_shell_json(1, &sn); snprintf(sj, sizeof sj, "%s", j ? j : ""); free(j);
+      check(strstr(sj, "\"app\":\"io.github.gamer92000.echodotassist.kiosk\"") && strstr(sj, "\"screens\":[\"Home\",\"Music\"]")
+            && strstr(sj, "\"front\":\"io.github.gamer92000.echodotassist.kiosk\""), "the shell's config: the screen app, the screens, what is in front"); }
+    /* /proc hiding the others' processes (hidepid=2 without the readproc group): no app seen at all is not known,
+     * not "nothing in front" (which would start the screen app every 15 s) */
+    { char c2[600]; snprintf(c2, sizeof c2, "chmod 000 '%s'/*/oom_score_adj", proc); if (system(c2)) {} }
+    ms(1200);
+    check(kiosk_in_front(NULL, 0) == -1, "Android: the apps seen, their oom_score_adj not readable (Fire OS 7): not known");
+    { char c2[600]; snprintf(c2, sizeof c2, "chmod -R u+rwx '%s'; rm -rf '%s'/*", proc, proc); if (system(c2)) {} }
+    ms(1200);
+    check(kiosk_in_front(NULL, 0) == -1, "Android: no app's process visible (hidepid): not known, the polls decide");
+    unsetenv("HASSMIC_PROC"); ms(1200);
+    /* the shell's watcher (an accessibility service) says what is in front where /proc cannot (Fire OS 7) */
+    check(kiosk_shell_front("a;b") == -1, "watcher: a package name only");
+    kiosk_shell_front("org.schabi.newpipe");
+    { char fg[160]; int f = kiosk_in_front(fg, sizeof fg);
+      check(f == 1 && !strcmp(fg, "org.schabi.newpipe") && kiosk_front(), "watcher: its word is what is in front"); }
+    display_ringing("Timer"); n0 = nframes(); WAIT(nframes() > n0);
+    check(nframes() > n0, "watcher: a ring over the app it reported (it draws none)");
+    display_ringing(NULL);
+    kiosk_shell_front("org.hassmic.home"); ms(50);
+    check(kiosk_in_front(NULL, 0) == 0, "watcher: hassmic's home reported: no app in front");
     kiosk_polled(1, 0);
     display_setting(DS_KIOSK, 0);
 

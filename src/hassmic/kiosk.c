@@ -23,6 +23,8 @@
 #include "core.h"
 #include "statefile.h"
 #include <arpa/inet.h>
+#include <dirent.h>
+#include <unistd.h>
 #include <netinet/in.h>
 #include <pthread.h>
 #include <sys/socket.h>
@@ -61,6 +63,14 @@ static int draws;                       /* the app in front draws the request's 
  * screen app polls /front or /back, or is started again (gone for ALIVE_MS): a screen app killed for memory while a
  * video plays must not let hassmic's clock come up over the video */
 static char lent[APP_MAX + 1];
+/* the screen app's way in: by the contract's SCREEN intent (an app made for hassmic) or, where that started nothing, as
+ * Android's launcher would (any app: a browser, Home Assistant's own app); `answered`: it polled since it was picked */
+static int answered, via_launcher, launcher_works;
+static long long shell_started;
+#define SHELL_PKG APP_DEFAULT              /* the shell is hassmic's own kiosk app's service, whichever app is the screen app */
+#define HOME_PKG  "org.hassmic.home"       /* hassmic's codeless black home (tools/mkhome.py): in front = no app */
+#define GONE_MS   5000                     /* nothing in front this long (an app closed, crashed): the screen app again */
+#define LAUNCH_MS 15000                    /* and started again at most this often */
 
 static long long mono_ms(void) { struct timespec t; clock_gettime(CLOCK_MONOTONIC, &t); return t.tv_sec * 1000LL + t.tv_nsec / 1000000; }
 static void path(char *out, size_t cap)
@@ -85,6 +95,126 @@ static int is_own(const char *u)
     if (strncmp(u, "hassmic:", 8) || !u[8] || strlen(u) > 40) return 0;
     for (const char *c = u + 8; *c; c++) if (!((*c >= 'a' && *c <= 'z') || *c == '-')) return 0;
     return 1;
+}
+
+/* ---------------------------------------------------------------- what is in front
+
+ * Android gives the process of the activity in front oom_score_adj 0 (FOREGROUND_APP_ADJ); every other app's is higher
+ * (measured on the Show 5, Fire OS 7: Echo-Wall 0 in front, 700 behind NewPipe, its overlay service 200; NewPipe 0 in
+ * front).  So hassmic sees which app has the screen without the app's help and without running anything: a scan of
+ * /proc (about 120 processes on the Show), as system, at most once a second.  Apps' uids from 10000; isolated
+ * processes (the WebView's sandboxes, 99000 on) and an app's other processes ("pkg:service") are not the app.  Fire OS
+ * keeps no usage statistics (dumpsys usagestats lists no app's events), so Android's own API for this is no help. */
+static int is_pkg(const char *s);
+
+static const char *proc_root(void)
+{
+    const char *e = getenv("HASSMIC_PROC");                 /* tests: a folder standing for /proc */
+    if (e) return e;
+    return access("/system/bin/am", X_OK) ? NULL : "/proc";  /* not on Android (the PC): not known */
+}
+
+static int read_small(const char *p, char *out, size_t cap)
+{
+    FILE *f = fopen(p, "r"); if (!f) return -1;
+    size_t n = fread(out, 1, cap - 1, f); fclose(f); out[n] = 0; return (int)n;
+}
+
+/* the app in front (1, its package in out), none of the owner's (0), not known (-1); `shell`: whether the shell runs */
+static int scan_front(char *out, size_t cap, int *shell)
+{
+    const char *root = proc_root();
+    out[0] = 0; if (shell) *shell = 0;
+    if (!root) return -1;
+    int fake = getenv("HASSMIC_PROC") != NULL;              /* tests: their files are the test's uid's */
+    DIR *d = opendir(root); if (!d) return -1;
+    struct dirent *e; char p[300], b[200];
+    int found = 0, apps = 0, adjs = 0;
+    while ((e = readdir(d))) {
+        if (e->d_name[0] < '0' || e->d_name[0] > '9') continue;
+        struct stat st;
+        snprintf(p, sizeof p, "%s/%s", root, e->d_name);
+        if (stat(p, &st) || (!fake && (st.st_uid < 10000 || st.st_uid >= 90000))) continue;
+        snprintf(p, sizeof p, "%s/%s/cmdline", root, e->d_name);
+        if (read_small(p, b, sizeof b) <= 0) continue;
+        apps++;
+        if (shell && !strcmp(b, SHELL_PKG ":shell")) *shell = 1;
+        if (found || strchr(b, ':') || !is_pkg(b)) continue;
+        snprintf(p, sizeof p, "%s/%s/oom_score_adj", root, e->d_name);
+        char a[16];
+        if (read_small(p, a, sizeof a) <= 0) continue;
+        adjs++;
+        if (a[0] != '0' || atoi(a) != 0) continue;
+        if (!strcmp(b, HOME_PKG)) continue;                 /* hassmic's black home: nothing of the owner's */
+        snprintf(out, cap, "%.150s", b); found = 1;
+    }
+    closedir(d);
+    /* no app's process seen at all: not that none runs (the Echo always has some: the WebView's, Amazon's providers)
+     * but that /proc hides them from us (Android 7 mounts it hidepid=2: only group readproc sees others' processes,
+     * device.conf DAEMON_GROUPS).  Not known, then: the screen app's polls decide, as before */
+    if (!apps) return -1;
+    /* the apps seen, their oom_score_adj not (Fire OS 7: 0400, the app's own; Android 9: 0644): not known by /proc */
+    if (!adjs) return -1;
+    return found;
+}
+
+/* what the shell's watcher (tools/kiosk Watcher.java: an accessibility service, told of every activity that comes
+ * forward) last reported, and when: where /proc cannot say (Fire OS 7: an app's oom_score_adj is its own, 0400), its
+ * word counts for a minute (it says it again every 20 s) */
+#define REPORT_MS 60000
+static long long reported_at; static char reported[APP_MAX + 1];
+int kiosk_shell_front(const char *pkg)
+{
+    if (!is_pkg(pkg)) return -1;
+    pthread_mutex_lock(&lock);
+    if (strcmp(reported, pkg)) fprintf(stderr, "kiosk: in front: %s\n", pkg);
+    snprintf(reported, sizeof reported, "%s", pkg); reported_at = mono_ms();
+    pthread_mutex_unlock(&lock);
+    return 0;
+}
+
+static long long scanned_at; static int scanned = -1, shell_runs; static char scanned_pkg[APP_MAX + 1];
+int kiosk_in_front(char *out, size_t cap)
+{
+    long long now = mono_ms();
+    pthread_mutex_lock(&lock);
+    if (reported_at && now - reported_at < REPORT_MS) {
+        int r = strcmp(reported, HOME_PKG) != 0;           /* hassmic's black home in front: no app */
+        if (out && cap) snprintf(out, cap, "%s", r ? reported : "");
+        if (!scanned_at || now - scanned_at >= 1000) {      /* /proc still for the shell's own process */
+            pthread_mutex_unlock(&lock);
+            char pk[APP_MAX + 1]; int sh = 0; scan_front(pk, sizeof pk, &sh);
+            pthread_mutex_lock(&lock); shell_runs = sh; scanned_at = now;
+        }
+        pthread_mutex_unlock(&lock);
+        return r;
+    }
+    if (!scanned_at || now - scanned_at >= 1000) {
+        int sh = 0; char pk[APP_MAX + 1];
+        pthread_mutex_unlock(&lock);
+        int r = scan_front(pk, sizeof pk, &sh);
+        pthread_mutex_lock(&lock);
+        scanned = r; shell_runs = sh; scanned_at = now; snprintf(scanned_pkg, sizeof scanned_pkg, "%s", pk);
+    }
+    int r = scanned;
+    if (out && cap) snprintf(out, cap, "%s", scanned_pkg);
+    pthread_mutex_unlock(&lock);
+    return r;
+}
+
+int kiosk_draws_parse(const char *t)
+{
+    if (strncmp(t, "/draws", 6)) return 0;
+    if (!t[6]) return KIOSK_DRAWS_WORDS | KIOSK_DRAWS_RING;   /* /front/draws: both, the contract of before */
+    if (t[6] != '/') return 0;
+    int m = 0; const char *w = t + 7;
+    while (*w) {
+        size_t n = strcspn(w, ",+");
+        if (n == 5 && !strncmp(w, "words", 5)) m |= KIOSK_DRAWS_WORDS;
+        else if (n == 4 && !strncmp(w, "ring", 4)) m |= KIOSK_DRAWS_RING;
+        w += n; if (*w) w++;                                /* a word not known here (a later contract's): left out */
+    }
+    return m;
 }
 
 /* parses text into the given places; 0 ok */
@@ -188,7 +318,7 @@ int kiosk_store(const char *text, char *err, size_t cap)
     memcpy(sets, st, sizeof sets); nsets = nst;
     memcpy(screens, sc, sizeof sc); nscreens = ns; def = d; ret_s = r; snprintf(ha, sizeof ha, "%s", h); snprintf(token, sizeof token, "%s", t);
     snprintf(app, sizeof app, "%s", ap);
-    if (other) { front_at = seen_at = started_at = 0; lent[0] = 0; }        /* another app: started at once, the old one's polls refused */
+    if (other) { front_at = seen_at = started_at = 0; lent[0] = 0; answered = via_launcher = launcher_works = 0; }   /* another app: started at once, the old one's polls refused */
     pthread_mutex_unlock(&lock);
     fprintf(stderr, "kiosk: %d screen%s from Home Assistant%s, screen app %s\n", ns, ns == 1 ? "" : "s", t[0] ? ", with a login" : "", ap);
     if (other) {
@@ -224,7 +354,7 @@ void kiosk_polled(int front, int draws_)
 {
     pthread_mutex_lock(&lock);
     if (front) draws = draws_;
-    seen_at = mono_ms();
+    seen_at = mono_ms(); answered = 1; via_launcher = 0;
     if (front) front_at = seen_at;
     else front_at = 0;                  /* paused: the screen went off (or something else is in front) */
     if (lent[0]) fprintf(stderr, "kiosk: the screen back from %s\n", lent);
@@ -246,6 +376,8 @@ int kiosk_lent(const char *pkg)
 
 int kiosk_front(void)
 {
+    int f = kiosk_in_front(NULL, 0);
+    if (f >= 0) return f;                                   /* Android says which app has the screen */
     pthread_mutex_lock(&lock);
     long long now = mono_ms();
     int r = (front_at && now - front_at < FRONT_MS) || (lent[0] && now - seen_at < ALIVE_MS);
@@ -255,26 +387,72 @@ int kiosk_front(void)
 
 int kiosk_configured(void) { pthread_mutex_lock(&lock); int r = nscreens > 0; pthread_mutex_unlock(&lock); return r; }
 
+/* the shell (tools/kiosk Shell.java: the bar of apps pulled down over any app, the keyboard): hassmic's own kiosk app's
+ * service, running whichever app is the screen app; started when its process is not there, at most once a minute */
+static long long shell_seen_at;          /* the bar's service polled /kiosk/shell (every 15 s while it runs) */
+static void shell_tick(long long now)
+{
+    pthread_mutex_lock(&lock);
+    /* by its polls, not by its process: the watcher (an accessibility service, started by Android) lives in the same
+     * ":shell" process, which runs without the bar's service after an update of the app */
+    int go = proc_root() && (!shell_seen_at || now - shell_seen_at >= START_MS) && (!shell_started || now - shell_started >= START_MS);
+    if (go) shell_started = now;
+    pthread_mutex_unlock(&lock);
+    if (!go) return;
+    char *argv[] = { "/system/bin/am", "startservice", "-n", SHELL_PKG "/.Shell", NULL };
+    fprintf(stderr, "kiosk: starting the shell (the bar of apps)\n");
+    core_spawn(argv);
+}
+
+/* the screen app started: by the contract's intent, which an app made for hassmic declares (docs/screen-apps.md); one
+ * that never answered to it (any other app: a browser, Home Assistant's own app) as Android's launcher starts it */
+static void start_app(void)
+{
+    char pkg[APP_MAX + 1];
+    pthread_mutex_lock(&lock);
+    snprintf(pkg, sizeof pkg, "%s", app);
+    int launcher = answered ? 0 : launcher_works ? 1 : via_launcher;
+    if (!answered && !launcher_works) via_launcher = !via_launcher;   /* nothing came of this way: the other one next time */
+    pthread_mutex_unlock(&lock);
+    fprintf(stderr, "kiosk: starting the screen app %s%s\n", pkg, launcher ? " (as the launcher does)" : "");
+    if (launcher) {
+        char *argv[] = { "/system/bin/monkey", "-p", pkg, "-c", "android.intent.category.LAUNCHER", "1", NULL };
+        core_spawn(argv);
+    } else {
+        char *argv[] = { "/system/bin/am", "start", "-a", "io.github.gamer92000.echodotassist.action.SCREEN", "-c", "android.intent.category.DEFAULT", pkg, NULL };
+        core_spawn(argv);
+    }
+}
+
+static long long nothing_since;
 int kiosk_tick(int enabled)
 {
     if (!enabled || !kiosk_configured()) return 0;
-    if (kiosk_front()) return 1;
     long long now = mono_ms();
+    char fg[APP_MAX + 1];
+    int f = kiosk_in_front(fg, sizeof fg);
+    shell_tick(now);                                        /* on Android: the bar's service, whatever is known */
+    if (f >= 0) {
+        /* Android says what is in front: any app of the owner's has the screen; none (an app closed or crashed, hassmic's
+         * home) for GONE_MS: the screen app again */
+        pthread_mutex_lock(&lock);
+        if (f && !strcmp(fg, app) && !answered && !via_launcher) launcher_works = 1;   /* the launcher's way brought it (toggled after) */
+        if (f) nothing_since = 0; else if (!nothing_since) nothing_since = now;
+        int go = !f && now - nothing_since >= GONE_MS && (!started_at || now - started_at >= LAUNCH_MS);
+        if (go) { started_at = now; lent[0] = 0; }
+        pthread_mutex_unlock(&lock);
+        if (go) start_app();
+        return f;
+    }
+    if (kiosk_front()) return 1;
     pthread_mutex_lock(&lock);
-    /* started only when gone (not since the boot, or it crashed): a paused app (the screen dark) still polls, and an
-     * am start a minute all night long would be an app_process launch a minute on the Show's CPU */
+    /* the PC (no /proc of Android's): by the app's polls.  Started only when gone (not since the boot, or it crashed): a
+     * paused app (the screen dark) still polls, and an am start a minute all night long would be an app_process launch
+     * a minute on the Show's CPU */
     int go = (!seen_at || now - seen_at >= ALIVE_MS) && (!started_at || now - started_at >= START_MS);
     if (go) { started_at = now; lent[0] = 0; }      /* gone: it comes back in front, over the app it lent the screen to */
     pthread_mutex_unlock(&lock);
-    if (go) {
-        /* not running (not started since the boot, or it crashed): by the contract's intent, which the screen app's
-         * activity declares (docs/screen-apps.md); the package alone names it */
-        char pkg[APP_MAX + 1];
-        pthread_mutex_lock(&lock); snprintf(pkg, sizeof pkg, "%s", app); pthread_mutex_unlock(&lock);
-        char *argv[] = { "/system/bin/am", "start", "-a", "io.github.gamer92000.echodotassist.action.SCREEN", "-c", "android.intent.category.DEFAULT", pkg, NULL };
-        fprintf(stderr, "kiosk: starting the screen app %s\n", pkg);
-        core_spawn(argv);
-    }
+    if (go) start_app();
     return 0;
 }
 
@@ -320,4 +498,43 @@ int kiosk_peer_ok(int fd)
     return 1;
 }
 
-int kiosk_draws(void) { pthread_mutex_lock(&lock); int r = draws; pthread_mutex_unlock(&lock); return r; }
+int kiosk_draws(void)
+{
+    /* only the screen app says what it draws: another app in front (one it started, or the owner's) draws neither */
+    char fg[APP_MAX + 1];
+    int f = kiosk_in_front(fg, sizeof fg);
+    pthread_mutex_lock(&lock);
+    int r = f > 0 && strcmp(fg, app) ? 0 : draws;
+    pthread_mutex_unlock(&lock);
+    return r;
+}
+
+int kiosk_shell_peer_ok(int fd)
+{
+    char p[300]; struct stat st;
+    const char *root = getenv("HASSMIC_APP_DATA");
+    snprintf(p, sizeof p, "%s/%s", root ? root : "/data/data", SHELL_PKG);
+    if (stat(p, &st)) return 0;
+    long uid = peer_uid(fd);
+    return uid >= 0 && (long)st.st_uid == uid;
+}
+
+/* the shell's config: no token (it logs in nowhere), the screen app (the bar's Home) and the screens' names (the
+ * screen app opens one by its SCREEN intent's extra "screen") */
+char *kiosk_shell_json(int enabled, size_t *len)
+{
+    pthread_mutex_lock(&lock); shell_seen_at = mono_ms(); pthread_mutex_unlock(&lock);
+    size_t cap = 4096, n = 0; char *o = malloc(cap);
+    if (!o) return NULL;
+    char fg[APP_MAX + 1]; int f = kiosk_in_front(fg, sizeof fg);
+    pthread_mutex_lock(&lock);
+    n += (size_t)snprintf(o + n, cap - n, "{\"enabled\":%s,\"app\":\"%s\",\"front\":\"%s\",\"contract\":%s,\"screens\":[",
+                          enabled ? "true" : "false", app, f > 0 ? fg : "", answered && !via_launcher ? "true" : "false");
+    for (int i = 0; i < nscreens; i++)
+        if (strncmp(screens[i].url, "hassmic:", 8))         /* the app's own Home and clock: the bar's Home */
+            n += (size_t)snprintf(o + n, cap - n, "%s\"%s\"", n && o[n - 1] != '[' ? "," : "", screens[i].name);
+    n += (size_t)snprintf(o + n, cap - n, "]}");
+    pthread_mutex_unlock(&lock);
+    if (len) *len = n;
+    return o;
+}

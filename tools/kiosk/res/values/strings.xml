@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="watcher">Tells hassmic which app is in front, so that its clock and band keep out of that app\'s way. Nothing of what an app shows is read.</string>
+</resources>

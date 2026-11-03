@@ -289,7 +289,12 @@ No model `#ifdef`s in shared code: new differences become a board field, a `devi
   options' kind "wall"): the screen app's own (Echo-Wall, Flutter, Nt-f/Echo-Wall: its layout lives in Echo-Wall's own
   integration, `custom_components/echo_wall` there; nothing of it here since 2026-11-03).  The sidebar panel "Echo
   Local" (`frontend/panel.js`, panel_custom, admin; `panel.py`: `echo_local/list`, `kiosk/get|set|push`) has the
-  screen's options (the options flow's too) and the Apps tab.  The Shows' own apps from the panel's Apps tab (`apps.py`: the Echo's `/api/apps` over the
+  screen's options (the options flow's too) and the Apps tab.  Any installed app may be the screen app (started by the
+  SCREEN intent, else as the launcher does: `monkey`, kiosk.c `start_app`); hassmic's shell runs beside it in the kiosk
+  APK's `:shell` process (tools/kiosk `Shell.java`: the bar pulled down over any app, `GET /kiosk/shell`; `Watcher.java`:
+  an accessibility service reporting the app in front to `/kiosk/shell/front/<pkg>`, which kiosk.c believes for a
+  minute, since Fire OS 7 hides `oom_score_adj`; `Keyboard.java`: the Echo's input method; main.sh `screen_grants`
+  switches them on).  What a screen app draws itself: `/kiosk/config/front/draws/<words,ring>` (`kiosk_draws_parse`).  The Shows' own apps from the panel's Apps tab (`apps.py`: the Echo's `/api/apps` over the
   signed API, APKs uploaded to `/api/echo_local/apk/<echo>` and sent on in 256 kB pieces, action `install_apk`); a
   new entry adopts the screen the Echo shows (`kiosk.adopt`), each push's outcome kept for the Screen tab
   (`kiosk.last_push`, `kiosk/push`).  `tests/ha_real_panel.py`.  The start's status:

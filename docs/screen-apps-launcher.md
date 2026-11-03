@@ -1,6 +1,9 @@
 # Proposal: other Android apps beside the screen app (a launcher)
 
-Status: **proposed, nothing built** (2026-11-02). Goal: install ordinary Android apps (a YouTube client, a music app)
+Status: **built, then moved into hassmic** (2026-11-03). What follows is the proposal of 2026-11-02, kept for its
+measurements. Built since: the Apps card and per-app internet (`apps.c`, `apps.sh`, `lockdown.sh`), per-app reachability
+from the home network (issue #109), and in place of each screen app's own bar and keyboard, hassmic's shell (its kiosk
+app's bar, keyboard and watcher; docs/screen-apps.md "The shell"), so that any app can be the screen app. Goal: install ordinary Android apps (a YouTube client, a music app)
 on an Echo Show next to the screen app, have them appear in the template's switcher (Echo-Screen) and as cards on
 Echo-Wall's Home automatically, open them with a tap and come back to the screen app afterwards.
 

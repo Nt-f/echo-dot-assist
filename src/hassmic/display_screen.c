@@ -574,8 +574,10 @@ static void *display_thread(void *arg)
         int show = l.status && mode == DISPLAY_OFF ? DISPLAY_AWAKE : mode;
         /* the kiosk app has the screen while nothing of ours is to show: a ring, a request's words, the status */
         int kiosk = kiosk_on && lk && !l.oobe && mode != DISPLAY_OFF;     /* off: black, the app blank too (web.c) */
-        /* a screen app that draws the request's words and a ring itself (docs/screen-apps.md) keeps the screen for them */
-        int to_kiosk = kiosk && kiosk_tick(1) && (kiosk_draws() || (!l.ringing[0] && !l.words));
+        /* an app has the screen while nothing of ours is to show; a screen app that draws the request's words or a ring
+         * itself (docs/screen-apps.md "What an app takes over") keeps it for those */
+        int dr = kiosk_draws();
+        int to_kiosk = kiosk && kiosk_tick(1) && (!l.ringing[0] || (dr & KIOSK_DRAWS_RING)) && (!l.words || (dr & KIOSK_DRAWS_WORDS));
         int rows = ring_band_rows(-1); if (rows < 0) rows = 0;
         if (show == DISPLAY_OFF || to_kiosk || rows != have_rows) {
             if (fd >= 0) { close(fd); fd = -1; fprintf(stderr, "display: %s\n", to_kiosk ? "the kiosk's" : "off"); }

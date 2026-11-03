@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<android.inputmethodservice.KeyboardView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/keyboard"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="#1c1c1e"
+    android:paddingTop="4dp"
+    android:paddingBottom="4dp"
+    android:keyBackground="@drawable/kb_key"
+    android:keyTextColor="#ffffff"
+    android:keyTextSize="22sp"
+    android:labelTextSize="16sp"
+    android:shadowRadius="0" />

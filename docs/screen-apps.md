@@ -1,10 +1,15 @@
 # Screen apps: what the Echo Show's screen shows
 
 hassmic owns the Echo Show's screen only for its own pictures: the start's status, the words of a request, a ringing
-alarm, the clock. Everything else is a **screen app's**: an ordinary Android app that hassmic starts and gives the
-screen to. hassmic ships one, the Java kiosk (`tools/kiosk`, `io.github.gamer92000.echodotassist.kiosk`: web pages in a WebView, a switcher,
-a keyboard). Anyone can write another and install it with `adb install`; the Echo Local integration in Home Assistant
-names which one the Echo uses (Echo Local in the sidebar › Screen › "App", or Configure › "Screen app": its package).
+alarm, the clock. Everything else is a **screen app's**: an Android app that hassmic starts and gives the screen to.
+Any installed app can be it (a browser, Home Assistant's own app); an app made for hassmic speaks the contract below
+and gets Home Assistant's address and a login from it. hassmic ships one, the Java kiosk (`tools/kiosk`,
+`io.github.gamer92000.echodotassist.kiosk`: web pages in a WebView). Echo Local in Home Assistant names which app the
+Echo uses (Echo Local in the sidebar › Screen › "App", or Configure › "Screen app": its package).
+
+Whatever the screen app is, hassmic's **shell** runs beside it ("The shell" below): the bar of places pulled down from
+the top edge over any app (Home, the screen app's screens, the apps you installed), the Echo's keyboard, and the watcher
+that tells hassmic which app is in front.
 The Echo Show's Home is [Nt-f/Echo-Wall](https://github.com/Nt-f/Echo-Wall)'s (Flutter); a template that does what the
 Java kiosk does lives at [Nt-f/Echo-Screen](https://github.com/Nt-f/Echo-Screen).
 
@@ -22,10 +27,16 @@ The app's main activity declares
 ```
 
 and hassmic starts it with `am start -a io.github.gamer92000.echodotassist.action.SCREEN -c android.intent.category.DEFAULT <package>` once
-"Home Assistant on the screen" is on and the Echo is linked to Home Assistant, and again whenever the app has not
-asked for its config (below) for 90 seconds (it crashed, or was never started since the boot), at most once a minute.
-It is not a home screen: Android 7 starts the home before the user is unlocked, when no WebView may run.
-`singleTask` keeps one copy.
+"Home Assistant on the screen" is on and the Echo is linked to Home Assistant, and again whenever no app has been in
+front for 5 seconds (an app closed or crashed: the shell's watcher says so), at most every 15 s. An app without the
+intent (any other app) is started as Android's launcher starts it (`monkey -p <package> -c
+android.intent.category.LAUNCHER 1`): hassmic tries the intent first and remembers which way brought the app. Where
+hassmic cannot tell what is in front (no watcher), it goes by the app's polls as before: started when it has not asked
+for its config for 90 seconds, at most once a minute. It is not a home screen: Android 7 starts the home before the
+user is unlocked, when no WebView may run. `singleTask` keeps one copy.
+
+The shell starts it with the same intent and an extra: `screen` (a screen's name, from the bar) or `home` (true: the
+bar's Home). An app that has several screens shows that one; others ignore the extras.
 
 ## The config, and telling hassmic it is in front
 
@@ -72,10 +83,12 @@ While the app polls `/front`, hassmic takes its own layer off the screen wheneve
 it back over the app for a request's words, a ringing alarm (a tap snoozes it: the app sees that tap too) or the
 status after Home Assistant went away. The app needs to do nothing for that.
 
-## Drawing the clock, the words and the alarms itself
+## What an app takes over: the words, the alarms
 
-An app that would rather draw these in its own look polls `/kiosk/config/front/draws` instead of `/front`: hassmic
-then leaves the screen to it for a request's words and a ringing alarm as well (the start's status and Home
+An app that would rather draw these in its own look says so in the path it polls: `/kiosk/config/front/draws/<list>`,
+the list comma- or plus-separated of `words` (what was heard and the reply) and `ring` (a ringing alarm or timer);
+`/kiosk/config/front/draws` alone means both (the contract of before). Words not known yet are ignored, so an app may
+name more. hassmic then leaves the screen to it for what it named (the start's status and Home
 Assistant going away stay hassmic's: the app has nothing to show then). What to draw comes from
 
 ```
@@ -112,6 +125,30 @@ Screens whose `url` is `hassmic:<name>` are the app's to draw: `hassmic:home`, t
 "Home" screen; Echo-Wall's WallView), and `hassmic:clock`, the clock as idle screen (the integration's "Clock"
 screen). An app that cannot draw one leaves it out (hassmic's own kiosk does: it shows web pages only).
 
+Being the **Home** is not a declaration: the screen app is the Home (the bar's first place, what comes back when no
+app is in front). The idle **clock** is hassmic's only while no app has the screen at all (the screen app off, or
+"Home Assistant on the screen" off); an app with a clock of its own (Echo-Wall's lock screen) just draws it.
+
+## The shell
+
+hassmic's kiosk app (`io.github.gamer92000.echodotassist.kiosk`) runs, beside whatever app is the screen app, in a
+process of its own (`:shell`):
+
+- **The bar** (`Shell.java`): an invisible strip over the middle of the top edge; a swipe down there opens the bar over
+  any app: Home (the screen app), the screen app's web screens, then the apps the owner installed. A touch elsewhere,
+  a swipe up or 8 s close it. hassmic starts it (`am startservice`) when it has not polled `GET /kiosk/shell` for a
+  minute; that answer (`{enabled, app, front, contract, screens: [names]}`) goes to this app's uid only.
+- **The watcher** (`Watcher.java`): an accessibility service that tells hassmic, `GET /kiosk/shell/front/<package>`,
+  which app's activity comes to the front (and again every 20 s). hassmic believes it for a minute; it lets hassmic's
+  clock and band keep out of any app's way and brings the screen app back when an app closes. Android 7 tells hassmic
+  no other way (its `/proc` hides the others' processes: `hidepid=2`; with the group `readproc`, which hassmic has, it
+  sees them, but which is in front is in `oom_score_adj`, 0400 on Fire OS 7; Fire OS keeps no usage statistics).
+- **The keyboard** (`Keyboard.java`): an input method for every app (the Echo has none). The kiosk's own WebView keeps
+  its keyboard of key events.
+
+Root's `main.sh` (`screen_grants`) lets the app draw over others, switches the watcher and the keyboard on, and makes
+the keyboard the one in use. A screen app needs none of this any more: no bar of its own, no keyboard, no permission.
+
 ## A Home of the app's own
 
 The layout an app draws on its Home (tiles, a wallpaper, an order of rooms) is the app's own business: hassmic and Echo
@@ -123,9 +160,9 @@ same with its own integration, or keep its layout to itself.
 
 ## What the Echo lacks
 
-- **No keyboard.** Fire OS's input method went with Amazon's apps; the Echo has none. A screen app that offers text
-  fields brings its own on-screen keyboard (the Java kiosk types into its WebView with key events).
-- **No navigation bar, no system UI.** The app is all there is: give a way between screens.
+- **No keyboard of Fire OS's.** Its input method went with Amazon's apps; the shell's keyboard stands in for every app.
+- **No navigation bar, no system UI.** The shell's bar is the way between apps; an app with several screens of its own
+  can offer them in the bar (its config's `screens`) or give a way between them itself.
 - **Memory.** The Echo Show 5 has 1 GB for Android, hassmic and the app; the Java kiosk with Home Assistant's
   login page takes 91 MB, a Flutter UI 62 MB (measured, 2026-11-02). One heavy page at a time.
 - **GPU.** Mali-T720, OpenGL ES 3.1, no Vulkan: Flutter runs on Skia (GLES) at 60 fps; a full-screen live blur

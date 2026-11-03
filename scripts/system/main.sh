@@ -244,28 +244,41 @@ psk_only() {
     echo "netwatch: network$fixed cut back to WPA-PSK, associating again"
 }
 
-# The screen app (state/kiosk's "app": hassmic's Java kiosk, or the owner's) on an Echo with Android: it may draw over
-# the apps it starts (its app bar, pulled down from the top edge: docs/screen-apps.md "Other apps"), and its input
-# method, if it brings one, is switched on (the Echo has none: an app it starts could not take a word typed otherwise).
-# Done again whenever that app is (re)installed (its line in packages.xml changes: the update time).  appops and ime
-# are app_process programs (a second of CPU each), so only then.
+# hassmic's shell (its kiosk app, io.github.gamer92000.echodotassist.kiosk: Shell.java, the bar of places pulled down
+# over every app; Keyboard.java, the Echo's keyboard; Watcher.java, which app is in front) on an Echo with Android: it
+# may draw over other apps, its watcher is switched on, and its keyboard is switched on and made the one in use (the Echo has none of its own: an app could not take a word typed
+# otherwise).  The screen app (state/kiosk's "app") may draw over others too, as screen apps of before brought a bar of
+# their own.  Done again whenever either is (re)installed (its line in packages.xml changes: the update time).  appops
+# and ime are app_process programs (a second of CPU each), so only then.
 screen_done=
 screen_grants() {
     [ "$ANDROID" = 1 ] && [ -f /data/system/packages.xml ] || return 0
+    shell=io.github.gamer92000.echodotassist.kiosk
     k=/data/local/hassmic/state/kiosk; p=
     [ -f $k ] && [ ! -L $k ] && p=$(sed -n 's/^app //p' $k | head -1)
-    [ -n "$p" ] || p=io.github.gamer92000.echodotassist.kiosk
-    case "$p" in .*|*.|*..*|*[!A-Za-z0-9_.]*) return 0;; esac
-    l=$(grep -m1 -F "<package name=\"$p\" " /data/system/packages.xml) || return 0
+    case "$p" in .*|*.|*..*|*[!A-Za-z0-9_.]*) p=;; esac
+    l=$(grep -F "<package name=\"$shell\" " /data/system/packages.xml) || return 0
+    [ -z "$p" ] || l="$l$(grep -F "<package name=\"$p\" " /data/system/packages.xml)"
     [ "$l" = "$screen_done" ] && return 0
     screen_done=$l
-    appops set $p SYSTEM_ALERT_WINDOW allow && echo "screen app $p: may draw over other apps"
-    for i in $(ime list -a -s 2>/dev/null); do
-        case "$i" in "$p"/*) ;; *) continue;; esac
-        ime enable $i > /dev/null
-        cur=$(settings get secure default_input_method)
-        case "$cur" in ''|null) ime set $i > /dev/null; echo "screen app $p: its keyboard $i in use";; esac
+    for a in $shell $p; do
+        appops set $a SYSTEM_ALERT_WINDOW allow && echo "$a: may draw over other apps"
     done
+    # its watcher (Watcher.java, an accessibility service: which app is in front, for hassmic's screen; Fire OS 7 tells
+    # hassmic no other way), added to whatever accessibility services are on
+    w=$shell/.Watcher
+    cur=$(settings get secure enabled_accessibility_services); [ "$cur" = null ] && cur=
+    case ":$cur:" in *":$w:"*) ;; *)
+        settings put secure enabled_accessibility_services "${cur:+$cur:}$w"
+        settings put secure accessibility_enabled 1
+        echo "$shell: told which app is in front (its accessibility service on)";;
+    esac
+    kb=$shell/.Keyboard
+    if ime list -a -s 2>/dev/null | grep -qx "$kb"; then
+        ime enable $kb > /dev/null
+        cur=$(settings get secure default_input_method)
+        [ "$cur" = "$kb" ] || { ime set $kb > /dev/null; echo "the Echo's keyboard ($kb) in use (was ${cur:-none})"; }
+    fi
 }
 
 # While the settings page switches networks (wifi.sh holds its lock), the link is that script's business: no wifisvc.

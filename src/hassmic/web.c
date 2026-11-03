@@ -1178,13 +1178,27 @@ static void handle(int fd)
             respond_c(fd, 0, 200, "application/json", NULL, o, n < sizeof o ? n : sizeof o - 1);
         }
     }
+    else if (!strcmp(r.method, "GET") && !strncmp(r.path, "/kiosk/shell/front/", 19)) {
+        /* the shell's watcher (Watcher.java): the package in front now */
+        if (!from_loopback(fd) || !kiosk_shell_peer_ok(fd) || kiosk_shell_front(r.path + 19)) respond_c(fd, 0, 404, "application/json", NULL, "{}", 2);
+        else respond_c(fd, 0, 200, "application/json", NULL, "{}", 2);
+    }
+    else if (!strcmp(r.method, "GET") && !strcmp(r.path, "/kiosk/shell")) {
+        /* the shell's (hassmic's kiosk app's service: the bar of apps over every app): the screen app, the screens'
+         * names, what is in front; no login in it.  Only to that app's uid, from this Echo */
+        if (!from_loopback(fd) || !kiosk_shell_peer_ok(fd)) respond_c(fd, 0, 404, "application/json", NULL, "{}", 2);
+        else {
+            size_t n; char *j = kiosk_shell_json(display_setting(DS_KIOSK, -1) > 0 && display_setting(DS_MODE, -1) != DISPLAY_OFF, &n);
+            if (j) { respond_c(fd, 0, 200, "application/json", NULL, j, n); free(j); } else respond_c(fd, 0, 503, "application/json", NULL, "{}", 2);
+        }
+    }
     else if (!strcmp(r.method, "GET") && !strncmp(r.path, "/kiosk/config", 13)) {
         /* the token's way to the app: only from this Echo, and with no CORS headers: the pages the kiosk shows run here
          * too (127.0.0.1), and a page's script must not read it.  The app's HttpURLConnection does not ask for CORS */
         if (!from_loopback(fd) || !kiosk_peer_ok(fd)) respond_c(fd, 0, 404, "application/json", NULL, "{}", 2);
         else {
             const char *t = r.path + 13;
-            if (!strncmp(t, "/front", 6)) kiosk_polled(1, !strcmp(t + 6, "/draws")); else if (!strncmp(t, "/back", 5)) kiosk_polled(0, 0);
+            if (!strncmp(t, "/front", 6)) kiosk_polled(1, kiosk_draws_parse(t + 6)); else if (!strncmp(t, "/back", 5)) kiosk_polled(0, 0);
             else if (!strncmp(t, "/lent/", 6)) kiosk_lent(t + 6);          /* not a package name: the config all the same */
             size_t n; char *j = kiosk_json(1, display_setting(DS_KIOSK, -1) > 0 && display_setting(DS_MODE, -1) != DISPLAY_OFF, &n);
             if (j) { respond_c(fd, 0, 200, "application/json", NULL, j, n); free(j); } else respond_c(fd, 0, 503, "application/json", NULL, "{}", 2);

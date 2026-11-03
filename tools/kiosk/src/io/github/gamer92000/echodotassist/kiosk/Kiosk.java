@@ -15,8 +15,9 @@
  * (switching screens navigates, so the last screen's page is freed), no WebView at all while the kiosk is off, the
  * renderer's caches dropped when Android says memory runs low.
  *
- * Switching: a small handle at the top edge; a tap shows the screens.  Untouched for "return" seconds on another
- * screen, back to the default one.
+ * Switching: hassmic's shell (Shell.java, this app's own service: the bar of places pulled down over every app) has
+ * the screens and starts this activity with the screen's name (extra "screen", or "home": the default one).  Untouched
+ * for "return" seconds on another screen, back to the default one.
  *
  * Typing: the Echo has no input method at all (Amazon's bluestone IME goes with its apps, there was never a LatinIME),
  * so the app has a keyboard of its own (Keys below): a script put into every page tells it through the bridge when a
@@ -26,6 +27,7 @@ package io.github.gamer92000.echodotassist.kiosk;
 
 import android.app.Activity;
 import android.content.ComponentCallbacks2;
+import android.content.Intent;
 import android.graphics.Color;
 import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
@@ -69,7 +71,7 @@ public class Kiosk extends Activity {
     final Handler ui = new Handler(Looper.getMainLooper());
     FrameLayout root;
     WebView web;
-    LinearLayout bar, column;
+    LinearLayout column;
     Keys keys;
     TextView note;
     volatile boolean resumed;
@@ -198,7 +200,7 @@ public class Kiosk extends Activity {
                 if (newLogin) injectedFor = "";
                 if (!enabled || n == 0) { stop(); return; }
                 start();
-                buildBar();
+                pick(getIntent()); getIntent().removeExtra("screen"); getIntent().removeExtra("home");
                 if (!same || newLogin || current < 0 || current >= n) show(def);
             } catch (Exception e) {
                 note.setText("hassmic sent a config this app cannot read");
@@ -257,8 +259,6 @@ public class Kiosk extends Activity {
 
     void stop() {
         current = -1;
-        if (bar != null) { root.removeView(bar); bar = null; }
-        View h = root.findViewWithTag("handle"); if (h != null) root.removeView(h);
         if (web == null) return;
         root.removeView(column); column = null; keys = null;
         web.stopLoading(); web.loadUrl("about:blank"); web.destroy();
@@ -277,7 +277,6 @@ public class Kiosk extends Activity {
         current = i;
         touched = SystemClock.uptimeMillis();
         String url = urls[i], o = origin(url), hao = origin(ha);
-        hideBar();
         if (!token.isEmpty() && !hao.isEmpty() && o.equals(hao) && !injectedFor.equals(hao)) {
             injectedFor = hao;
             String tokens;
@@ -300,50 +299,21 @@ public class Kiosk extends Activity {
 
     int dp(float v) { return (int) (v * getResources().getDisplayMetrics().density + 0.5f); }
 
-    void buildBar() {
-        if (bar != null) root.removeView(bar);
-        View old = root.findViewWithTag("handle"); if (old != null) root.removeView(old);
-        // the handle: a pill at the top edge, its touch area larger than it looks
-        FrameLayout handle = new FrameLayout(this);
-        handle.setTag("handle");
-        View pill = new View(this);
-        GradientDrawable g = new GradientDrawable(); g.setColor(0x99a0a0a0); g.setStroke(1, 0x55000000); g.setCornerRadius(dp(3));   // seen on white pages and dark ones
-        pill.setBackground(g);
-        handle.addView(pill, new FrameLayout.LayoutParams(dp(56), dp(5), Gravity.CENTER));
-        handle.setOnClickListener(v -> { if (bar.getVisibility() == View.VISIBLE) hideBar(); else showBar(); });
-        root.addView(handle, new FrameLayout.LayoutParams(dp(120), dp(24), Gravity.TOP | Gravity.CENTER_HORIZONTAL));
-
-        bar = new LinearLayout(this);
-        bar.setOrientation(LinearLayout.HORIZONTAL);
-        bar.setPadding(dp(8), dp(8), dp(8), dp(8));
-        GradientDrawable bg = new GradientDrawable(); bg.setColor(0xe6202124); bg.setCornerRadius(dp(18));
-        bar.setBackground(bg);
-        for (int i = 0; i < names.length; i++) {
-            final int k = i;
-            Button b = new Button(this);
-            b.setText(names[i]); b.setAllCaps(false); b.setTextColor(Color.WHITE); b.setTextSize(16);
-            GradientDrawable bb = new GradientDrawable(); bb.setColor(0x33ffffff); bb.setCornerRadius(dp(14));
-            b.setBackground(bb);
-            b.setPadding(dp(18), 0, dp(18), 0);
-            b.setOnClickListener(v -> show(k));
-            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(44));
-            lp.setMargins(dp(4), 0, dp(4), 0);
-            bar.addView(b, lp);
-        }
-        Button reload = new Button(this);
-        reload.setText("↻"); reload.setTextColor(Color.WHITE); reload.setTextSize(18);
-        GradientDrawable rb = new GradientDrawable(); rb.setColor(0x22ffffff); rb.setCornerRadius(dp(14));
-        reload.setBackground(rb);
-        reload.setOnClickListener(v -> { hideBar(); if (web != null) web.reload(); });
-        bar.addView(reload, new LinearLayout.LayoutParams(dp(48), dp(44)));
-        bar.setVisibility(View.GONE);
-        root.addView(bar, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
-                Gravity.TOP | Gravity.CENTER_HORIZONTAL) {{ topMargin = dp(28); }});
+    /* the shell's pick (Shell.java): a screen by its name, or Home (the default screen) */
+    @Override
+    protected void onNewIntent(Intent i) {
+        super.onNewIntent(i);
+        setIntent(i);
+        pick(i);
     }
 
-    final Runnable autoHide = this::hideBar;
-    void showBar() { if (bar == null) return; bar.setVisibility(View.VISIBLE); bar.bringToFront(); ui.removeCallbacks(autoHide); ui.postDelayed(autoHide, 8000); }
-    void hideBar() { if (bar != null) bar.setVisibility(View.GONE); ui.removeCallbacks(autoHide); }
+    void pick(Intent i) {
+        if (i == null || names.length == 0) return;
+        String s = i.getStringExtra("screen");
+        if (s != null) { for (int k = 0; k < names.length; k++) if (names[k].equals(s)) { show(k); return; } }
+        else if (i.getBooleanExtra("home", false)) show(def);
+    }
+
 
     /* ---------------------------------------------------------------- for the pages: the screens and switching
      * (the wall panel's "Home Assistant" and "Music" buttons).  Nothing secret: no token through here. */
