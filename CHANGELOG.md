@@ -10,6 +10,11 @@ What changed for people using the Echo, newest first. Details and measurements a
   like) were missing from the panel's preview, which knew nothing of them; Echo-Wall now sends their names and icons
   to Home Assistant, so the preview draws them and the Apps tab shows them by name with their icons. Needs this
   Echo-Wall on the Echo.
+- **Pages from Echo Local's panel.** "Pages after Home" in the form lists every page (your own, the rooms, a
+  dashboard's sections): add a page, rename or delete your own, move any up or down, take a room or a dashboard
+  section off and show it again. On the Echo, edit mode's "Remove page" takes a room's page off too.
+- **Saves from the panel reach the Echo after Home Assistant restarts.** Echo-Wall logged in again before Echo Local
+  had loaded, was refused, and stopped following the layout until the app restarted; it now asks again.
 
 ## 2026-11-02
 

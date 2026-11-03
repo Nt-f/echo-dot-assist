@@ -298,6 +298,7 @@ and the app already treats them as optional.
 | `layout()` | the draft to start with | |
 | `info()` | `{h24, screens, settings, editing, gallery, apps}`: Home Assistant's clock format, the other screens' names (their tiles on Home), the edit switch, the card sizes switch, the Echo's Android apps (`echo_local/home/apps/get`) | |
 | message `echo-local-apps` | those apps, when the panel has them after the preview started | |
+| posts `echo-local-pages` | the pages after Home as the WallView made them, taken off ones too: `[{group, title, kind: own\|room\|dashboard, hidden}]` | the form's "Pages after Home": order (`page_order`), add, rename and delete one's own (`custom_pages`, its `cards`/`place`/`sizes` with it), take a room or dashboard section off and show it again (`hidden_pages`) |
 | message `echo-local-layout` | a new draft (the form changed) | applied without being sent back |
 | message `echo-local-editmode` | the switch | |
 | posts `echo-local-edit` | the layout after an edit in the preview (Echo-Wall's own save, 500 ms after the last change) | the panel's draft |

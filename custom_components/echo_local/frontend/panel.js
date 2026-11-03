@@ -127,6 +127,10 @@ textarea { width: 100%; min-height: 90px; font-family: var(--code-font-family, m
 .item.over { box-shadow: inset 0 2px 0 var(--accent); }
 .item .grip { cursor: grab; color: var(--muted); user-select: none; padding: 0 4px; }
 .item .nm { flex: 1; min-width: 0; }
+.item.page.off .nm { opacity: .55; }
+.pagename { font: inherit; border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; background: transparent; color: inherit; width: 100%; box-sizing: border-box; }
+.addpage { display: flex; gap: 8px; margin-top: 8px; }
+.addpage .pagename { flex: 1; }
 .appicon { width: 36px; height: 36px; border-radius: 9px; flex: none; }
 .appicon.none { background: var(--secondary-background-color, #e6e6e6); }
 .item .nm div { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -204,8 +208,17 @@ class EchoLocalPanel extends HTMLElement {
       layout: () => (this.cur() || {}).draft,
       info: () => this.previewInfo(),
     };
+    this.pages = null;                // the pages after Home, as Echo-Wall's preview last made them (echo-local-pages)
     this.onMessage = (ev) => {
-      if (ev.origin !== location.origin || !ev.data || ev.data.type !== 'echo-local-edit') return;
+      if (ev.origin !== location.origin || !ev.data) return;
+      if (ev.data.type === 'echo-local-pages') {
+        if (JSON.stringify(ev.data.pages) === JSON.stringify(this.pages)) return;
+        this.pages = ev.data.pages;
+        const r = this.shadowRoot.querySelector('.pagesrow'); const c = this.cur();
+        if (r && c) r.replaceWith(this.pagesRow(c));
+        return;
+      }
+      if (ev.data.type !== 'echo-local-edit') return;
       const c = this.cur(); if (!c) return;
       c.draft = clone(ev.data.layout); this.refresh();      // not sent back: the preview has it
     };
@@ -273,6 +286,7 @@ class EchoLocalPanel extends HTMLElement {
     const info = this.echoInfo(node);
     this.size = SIZES[Object.keys(SIZES).find((k) => info && info.title.startsWith(k)) || 'Echo Show 5'];
     this.kiosk = null;
+    this.pages = null;                      // the new preview tells its own
     await this.open(node, this.app);
     if (info && this.tab === 'screen') this.loadKiosk();
     this.apps = null;
@@ -619,9 +633,60 @@ class EchoLocalPanel extends HTMLElement {
       return card;
     }
     card.append(h('h2', null, d.name), d.about && h('div', { class: 'about' }, d.about));
-    for (const f of d.fields) card.append(this.field(c, f));
+    for (const f of d.fields) {
+      card.append(this.field(c, f));
+      if (this.app === ECHOWALL && f.key === 'dashboard') card.append(this.pagesRow(c));
+    }
     card.append(h('details', { class: 'room', style: 'margin-top:12px' }, h('summary', null, h('span', { class: 'n' }, 'All of it, as JSON')), h('div', { style: 'padding:0 12px 12px' }, this.jsonRow(c))));
     return card;
+  }
+
+  // Echo-Wall's pages after Home (the preview tells which there are: rooms, a dashboard's sections, the owner's own):
+  // in their order, moved up and down (page_order), the owner's renamed or deleted (custom_pages), the others taken
+  // off and shown again (hidden_pages), a new one added.  All of it in the draft: Save sends it to the Echo
+  pagesRow(c) {
+    const lay = c.draft;
+    const row = h('div', { class: 'row pagesrow' }, h('div', { class: 'head' }, h('span', { class: 'name' }, 'Pages after Home')));
+    const pages = this.pages;
+    if (!pages) { row.append(h('div', { class: 'help' }, 'The preview lists them once it has started.')); return row; }
+    const done = () => this.changed(true);
+    const order = () => pages.map((p) => p.group);
+    const own = (g) => (lay.custom_pages || []).find((p) => 'page:' + p.id === g);
+    const list = h('div', { class: 'list' });
+    if (!pages.length) list.append(h('div', { class: 'empty' }, 'None: Home only.'));
+    pages.forEach((p, i) => {
+      const move = (d) => { const o = order(); [o[i], o[i + d]] = [o[i + d], o[i]]; lay.page_order = o; this.pages = o.map((g) => pages.find((x) => x.group === g)); done(); };
+      const name = p.kind === 'own'
+        ? h('input', { class: 'pagename', value: p.title, 'aria-label': 'Page name', onchange: (e) => { const cp = own(p.group); if (cp && e.target.value.trim()) { cp.name = e.target.value.trim(); done(); } } })
+        : h('div', null, p.title);
+      list.append(h('div', { class: 'item page' + (p.hidden ? ' off' : '') },
+        h('div', { class: 'nm' }, name, h('div', { class: 'id' }, (p.kind === 'own' ? 'Your page' : p.kind === 'dashboard' ? 'Dashboard section' : 'Room') + (p.hidden ? ' · taken off' : ''))),
+        h('button', { class: 'btn small', disabled: i === 0, title: 'Earlier', 'aria-label': 'Move up', onclick: () => move(-1) }, '↑'),
+        h('button', { class: 'btn small', disabled: i === pages.length - 1, title: 'Later', 'aria-label': 'Move down', onclick: () => move(1) }, '↓'),
+        p.kind === 'own'
+          ? h('button', { class: 'btn small danger', onclick: () => {
+              if (!confirm(`Delete the page “${p.title}”? Its cards go with it.`)) return;
+              lay.custom_pages = (lay.custom_pages || []).filter((x) => 'page:' + x.id !== p.group);
+              for (const k of ['cards', 'place', 'sizes', 'exclude']) if (lay[k]) delete lay[k][p.group];
+              lay.page_order = (lay.page_order || []).filter((g) => g !== p.group);
+              this.pages = pages.filter((x) => x.group !== p.group); done(); } }, 'Delete')
+          : h('button', { class: 'btn small' + (p.hidden ? '' : ' danger'), onclick: () => {
+              const hp = new Set(lay.hidden_pages || []); p.hidden ? hp.delete(p.group) : hp.add(p.group);
+              lay.hidden_pages = [...hp]; p.hidden = !p.hidden; done(); } }, p.hidden ? 'Show' : 'Remove')));
+    });
+    const nm = h('input', { class: 'pagename', placeholder: 'New page’s name' });
+    const add = () => {
+      const n = nm.value.trim() || `Page ${(lay.custom_pages || []).length + 1}`;
+      const id = Date.now().toString(36);
+      lay.custom_pages = [...(lay.custom_pages || []), { id, name: n }];
+      lay.page_order = [...order(), 'page:' + id];
+      this.pages = [...pages, { group: 'page:' + id, title: n, kind: 'own', hidden: false }];
+      done();
+    };
+    nm.addEventListener('keydown', (e) => { if (e.key === 'Enter') add(); });
+    row.append(list, h('div', { class: 'addpage' }, nm, h('button', { class: 'btn small', onclick: add }, '+ Add page')),
+      h('div', { class: 'help' }, 'A page of your own starts empty: add cards to it in the preview’s edit mode (+ Add) or on the Echo. A room or a dashboard section taken off stays off until shown again.'));
+    return row;
   }
 
   jsonRow(c) {

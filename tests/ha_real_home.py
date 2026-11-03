@@ -152,6 +152,26 @@ async def browser(session, token, png):
             out["seen"] += out["dash_labels"]
             if any("Living Room" in l for l in out["dash_labels"]): break
         await shot("-dashboard")
+        # the form's Pages after Home (the preview lists them): a page added, a room taken off and shown, the page deleted
+        out["pages"] = await js(f"""(async () => {{ const p = {find}; const r = p.shadowRoot; const wait = (ms) => new Promise(x => setTimeout(x, ms));
+            const rows = () => [...r.querySelectorAll('.pagesrow .item.page')].map(e => e.textContent);
+            const until = async (f) => {{ for (let i = 0; i < 40 && !f(); i++) await wait(250); return f(); }};
+            await until(() => rows().length > 0); const at = {{ first: rows() }};
+            const nm = r.querySelector('.addpage .pagename'); nm.value = 'Test page'; r.querySelector('.addpage button').click();
+            await until(() => (p.pages || []).some(x => x.title === 'Test page' && x.kind === 'own'));
+            at.added = {{ pages: p.pages.map(x => x.title), draft: (p.cur().draft.custom_pages || []).map(x => x.name) }};
+            const room = p.pages.find(x => x.kind !== 'own'); at.room = room && room.title;
+            if (room) {{ [...r.querySelectorAll('.pagesrow .item.page')].find(e => e.textContent.startsWith(room.title)).querySelector('.danger').click();
+              await until(() => (p.pages.find(x => x.group === room.group) || {{}}).hidden);
+              at.hidden = [...(p.cur().draft.hidden_pages || [])];
+              [...r.querySelectorAll('.pagesrow .item.page')].find(e => e.textContent.startsWith(room.title)).querySelector('button:last-child').click();
+              await until(() => !(p.pages.find(x => x.group === room.group) || {{}}).hidden); at.shown = [...(p.cur().draft.hidden_pages || [])]; }}
+            window.confirm = () => true;
+            [...r.querySelectorAll('.pagesrow .item.page')].find(e => e.querySelector('input') && e.querySelector('input').value === 'Test page').querySelector('.danger').click();
+            await until(() => !(p.pages || []).some(x => x.title === 'Test page'));
+            at.deleted = {{ pages: p.pages.map(x => x.title), draft: (p.cur().draft.custom_pages || []).map(x => x.name) }};
+            return at; }})()""")
+        await shot("-pages")
         # another app's Home into Echo-Wall's, by what both share (its descriptor: tint = theme, favs = favorites)
         out["import"] = await js(f"""(async () => {{ const p = {find};
             p.take('org.example.screen', {{ tint: 'light', favs: ['light.kitchen_lights', 'light.ceiling_lights'] }}, null, 'a test');
@@ -495,6 +515,11 @@ async def run(tmp):
                 scr = out.get("screen") or {}
                 check("Show Home Assistant on the screen" in scr.get("rows", []) and "Sent to the Echo" in scr.get("push", ""),
                       f"the Screen tab: the kiosk's options, the last push ({scr.get('rows', [])[:2]}, {scr.get('push')!r})")
+                pg = out.get("pages") or {}
+                check(pg.get("first") and "Test page" in (pg.get("added") or {}).get("pages", []) and (pg.get("added") or {}).get("draft") == ["Test page"]
+                      and pg.get("room") and len(pg.get("hidden") or []) == 1 and pg.get("shown") == []
+                      and "Test page" not in (pg.get("deleted") or {}).get("pages", ["Test page"]) and (pg.get("deleted") or {}).get("draft") == [],
+                      f"Pages after Home in the form: added (the preview has it), a room taken off and shown, deleted ({pg})")
                 ap = out.get("appstab") or {}
                 check("Apps" in ap.get("tabs", []) and "NewPipe" in ap.get("apps", []) and ap.get("icons", 0) >= 1 and ap.get("screenApp") == [True]
                       and ap.get("status", "").startswith("Removed org.example.app"),
