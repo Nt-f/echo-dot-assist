@@ -56,6 +56,11 @@ static struct set sets[SETS];
 static int nsets;
 static long long front_at, seen_at, started_at;
 static int draws;                       /* the app in front draws the request's words and a ring itself */
+/* the screen app started another app (a video client, docs/screen-apps.md "Other apps") and polls /lent/<package>
+ * meanwhile: the screen is that app's, so hassmic's layer stays off as while the screen app is in front.  Kept until the
+ * screen app polls /front or /back, or is started again (gone for ALIVE_MS): a screen app killed for memory while a
+ * video plays must not let hassmic's clock come up over the video */
+static char lent[APP_MAX + 1];
 
 static long long mono_ms(void) { struct timespec t; clock_gettime(CLOCK_MONOTONIC, &t); return t.tv_sec * 1000LL + t.tv_nsec / 1000000; }
 static void path(char *out, size_t cap)
@@ -183,7 +188,7 @@ int kiosk_store(const char *text, char *err, size_t cap)
     memcpy(sets, st, sizeof sets); nsets = nst;
     memcpy(screens, sc, sizeof sc); nscreens = ns; def = d; ret_s = r; snprintf(ha, sizeof ha, "%s", h); snprintf(token, sizeof token, "%s", t);
     snprintf(app, sizeof app, "%s", ap);
-    if (other) { front_at = seen_at = started_at = 0; }        /* another app: started at once, the old one's polls refused */
+    if (other) { front_at = seen_at = started_at = 0; lent[0] = 0; }        /* another app: started at once, the old one's polls refused */
     pthread_mutex_unlock(&lock);
     fprintf(stderr, "kiosk: %d screen%s from Home Assistant%s, screen app %s\n", ns, ns == 1 ? "" : "s", t[0] ? ", with a login" : "", ap);
     if (other) {
@@ -222,13 +227,28 @@ void kiosk_polled(int front, int draws_)
     seen_at = mono_ms();
     if (front) front_at = seen_at;
     else front_at = 0;                  /* paused: the screen went off (or something else is in front) */
+    if (lent[0]) fprintf(stderr, "kiosk: the screen back from %s\n", lent);
+    lent[0] = 0;
     pthread_mutex_unlock(&lock);
+}
+
+int kiosk_lent(const char *pkg)
+{
+    if (!is_pkg(pkg)) return -1;
+    pthread_mutex_lock(&lock);
+    seen_at = mono_ms(); front_at = 0;
+    draws = 0;                          /* the other app draws no ring and no words: hassmic does, over it */
+    if (strcmp(lent, pkg)) fprintf(stderr, "kiosk: the screen lent to %s\n", pkg);
+    snprintf(lent, sizeof lent, "%s", pkg);
+    pthread_mutex_unlock(&lock);
+    return 0;
 }
 
 int kiosk_front(void)
 {
     pthread_mutex_lock(&lock);
-    int r = front_at && mono_ms() - front_at < FRONT_MS;
+    long long now = mono_ms();
+    int r = (front_at && now - front_at < FRONT_MS) || (lent[0] && now - seen_at < ALIVE_MS);
     pthread_mutex_unlock(&lock);
     return r;
 }
@@ -244,7 +264,7 @@ int kiosk_tick(int enabled)
     /* started only when gone (not since the boot, or it crashed): a paused app (the screen dark) still polls, and an
      * am start a minute all night long would be an app_process launch a minute on the Show's CPU */
     int go = (!seen_at || now - seen_at >= ALIVE_MS) && (!started_at || now - started_at >= START_MS);
-    if (go) started_at = now;
+    if (go) { started_at = now; lent[0] = 0; }      /* gone: it comes back in front, over the app it lent the screen to */
     pthread_mutex_unlock(&lock);
     if (go) {
         /* not running (not started since the boot, or it crashed): by the contract's intent, which the screen app's

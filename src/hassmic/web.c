@@ -46,6 +46,7 @@
 #include "alarms.h"
 #include "display.h"
 #include "kiosk.h"
+#include "apps.h"
 #include "adbwifi.h"
 #include "arb.h"
 #include "dropin.h"
@@ -381,6 +382,7 @@ static int read_request(int fd, struct req *r)
      * everything else is a few lines */
     long max = !strncmp(r->path, "/api/artifact/chunk/", 20) ? ART_CHUNK_MAX : !strncmp(r->path, "/api/mww/add/", 13) ? MWW_MODEL_MAX + 16384
              : !strncmp(r->path, "/api/ring/design/", 17) ? RD_TEXT_MAX
+             : !strncmp(r->path, "/api/apps/apk/", 14) ? APPS_CHUNK
              : !strcmp(r->path, "/api/timer-sound") || !strncmp(r->path, "/api/sound/", 11) || !strncmp(r->path, "/api/sound-pack/", 16) ? SOUND_CUSTOM_MAX : MAX_BODY;
     if (cl < 0 || (cl > MAX_BODY && (cl > max || !approved_key(r->pub)))) return -2;
     if (!(r->body = malloc((size_t)cl + 1))) return -1;
@@ -640,8 +642,9 @@ static void sound_api(int fd, struct req *r)
 /* The kiosk (kiosk.h): Home Assistant's integration sets it up, the Echo Show's app reads it.
  * /api/kiosk         GET   the config without the token (signed)
  *                    POST  "key value" lines (kiosk.c), "token <sealed hex>" sealed with K as a Wi-Fi password is
- * /kiosk/config[/front|/back]  GET  for the screen app alone: from 127.0.0.1 and its uid, the token in it; front/back: its
- *                    activity is resumed or paused (whether the display gives it the screen) */
+ * /kiosk/config[/front|/back|/lent/<package>]  GET  for the screen app alone: from 127.0.0.1 and its uid, the token in
+ *                    it; front/back: its activity is resumed or paused (whether the display gives it the screen); lent:
+ *                    paused because it started that app, which has the screen now (hassmic's layer stays off) */
 static int from_loopback(int fd)
 {
     struct sockaddr_storage a; socklen_t n = sizeof a;
@@ -702,6 +705,61 @@ static void kiosk_api(int fd, struct req *r)
     if (bad) { jesc(ej, sizeof ej, err); snprintf(o, sizeof o, "{\"error\":\"%s\"}", ej); respond_sjson(fd, r, 400, o); return; }
     display_changed();
     respond_sjson(fd, r, 200, "{\"ok\":true}");
+}
+
+/* The owner's apps (apps.h): GET /api/apps the installed ones, which may reach the internet and how the last install
+ * or removal went; POST "net <package> 0|1".  POST /api/apps/apk/<offset> a piece of an APK (APPS_CHUNK at most, in
+ * order), /api/apps/apk/install "<size> <BLAKE2b-256 hex>", /api/apps/uninstall "<package>": root's apps.sh does them,
+ * GET /api/apps says when (install.state).  An approved client only (this page, the Echo Local integration): an app
+ * runs code on the Echo, and the internet switch opens the firewall for it */
+static void apps_api(int fd, struct req *r)
+{
+    int write = !strcmp(r->method, "POST");
+    if (!signed_ok(r, write)) { respond_json(fd, 401, "{\"error\":\"not logged in\"}"); return; }
+    const char *sub = r->path + 9;
+    if (write && !strncmp(sub, "/apk/", 5)) {
+        int e;
+        if (!strcmp(sub + 5, "install")) {
+            long size = 0; char hex[80] = "";
+            if (!r->body || sscanf(r->body, "%ld %79s", &size, hex) != 2) { respond_sjson(fd, r, 400, "{\"error\":\"<size> <blake2b hex>\"}"); return; }
+            e = apps_install(size, hex);
+            if (e == -1) { respond_sjson(fd, r, 400, "{\"error\":\"not the APK that was sent: size or digest differ\"}"); return; }
+        } else {
+            char *end; long off = strtol(sub + 5, &end, 10);
+            if (*end || end == sub + 5) { respond_sjson(fd, r, 404, "{\"error\":\"not found\"}"); return; }
+            e = apps_chunk(off, r->body ? r->body : "", r->blen);
+            if (e == -1) { respond_sjson(fd, r, 409, "{\"error\":\"not where the APK ends\"}"); return; }
+            if (e == -2) { respond_sjson(fd, r, 413, "{\"error\":\"an APK of 200 MB at most\"}"); return; }
+        }
+        if (e == -2) respond_sjson(fd, r, 409, "{\"error\":\"an install or removal is under way\"}");
+        else if (e) respond_sjson(fd, r, 500, "{\"error\":\"cannot write the APK\"}");
+        else respond_sjson(fd, r, 200, "{\"ok\":true}");
+        return;
+    }
+    if (write && !strcmp(sub, "/uninstall")) {
+        char pkg[160] = "";
+        if (r->body) sscanf(r->body, "%159s", pkg);
+        int e = apps_uninstall(pkg);
+        if (e == -1) respond_sjson(fd, r, 400, "{\"error\":\"not an app installed on this Echo\"}");
+        else if (e == -2) respond_sjson(fd, r, 409, "{\"error\":\"an install or removal is under way\"}");
+        else if (e) respond_sjson(fd, r, 500, "{\"error\":\"cannot write the request\"}");
+        else respond_sjson(fd, r, 200, "{\"ok\":true}");
+        return;
+    }
+    if (*sub) { respond_sjson(fd, r, 404, "{\"error\":\"not found\"}"); return; }
+    if (!write) {
+        size_t n; char *j = apps_json(&n);
+        if (!j) { respond_sjson(fd, r, 200, "{\"apps\":[],\"none\":true}"); return; }    /* no Android here */
+        respond_s(fd, r, 200, "application/json", NULL, j, n); free(j); return;
+    }
+    char pkg[160]; int on = -1;
+    if (!r->body || sscanf(r->body, "net %159s %d", pkg, &on) != 2 || (on != 0 && on != 1)) {
+        respond_sjson(fd, r, 400, "{\"error\":\"net <package> 0|1\"}"); return;
+    }
+    int e = apps_set_net(pkg, on);
+    if (e == -1) respond_sjson(fd, r, 400, "{\"error\":\"not an app installed on this Echo\"}");
+    else if (e) respond_sjson(fd, r, 500, "{\"error\":\"cannot write state/apps\"}");
+    else respond_sjson(fd, r, 200, "{\"ok\":true}");
 }
 
 /* The Echo's own alarms (alarms.h): GET /api/alarms the list; POST /api/alarms/put "id hour min days enabled label" (id 0
@@ -1126,6 +1184,7 @@ static void handle(int fd)
         else {
             const char *t = r.path + 13;
             if (!strncmp(t, "/front", 6)) kiosk_polled(1, !strcmp(t + 6, "/draws")); else if (!strncmp(t, "/back", 5)) kiosk_polled(0, 0);
+            else if (!strncmp(t, "/lent/", 6)) kiosk_lent(t + 6);          /* not a package name: the config all the same */
             size_t n; char *j = kiosk_json(1, display_setting(DS_KIOSK, -1) > 0 && display_setting(DS_MODE, -1) != DISPLAY_OFF, &n);
             if (j) { respond_c(fd, 0, 200, "application/json", NULL, j, n); free(j); } else respond_c(fd, 0, 503, "application/json", NULL, "{}", 2);
         }
@@ -1227,6 +1286,7 @@ static void handle(int fd)
     else if (!strncmp(r.path, "/api/sound-pack", 15)) sound_pack_api(fd, &r);
     else if (!strncmp(r.path, "/api/alarms", 11)) alarms_api(fd, &r);
     else if (!strcmp(r.path, "/api/kiosk")) kiosk_api(fd, &r);
+    else if (!strcmp(r.path, "/api/apps") || !strncmp(r.path, "/api/apps/", 10)) apps_api(fd, &r);
     else if (!strcmp(r.method, "GET") && !strncmp(r.path, "/api/log/", 9)) log_api(fd, &r);
     else respond_json(fd, 404, "{\"error\":\"not found\"}");
     free(r.body);

@@ -60,6 +60,32 @@ update_uid() {
     for p in $UPDATE_PACKAGES; do sed -n "s/^$p \([0-9][0-9]*\) .*/\1/p" /data/system/packages.list 2>/dev/null; done | head -1
 }
 
+# Apps of the owner's that may reach the internet (the settings page: hassmic's src/hassmic/apps.c writes "net
+# <package>" lines into state/apps), as their uids, sorted: an app the screen app starts (a video client) fetches nothing
+# from behind the lock otherwise.  hassmic's file is only a wish: each name is checked here against PackageManager's own
+# record as apps.c does, and only an app installed into /data/app, no update of a system app (publicFlags bit 1), with
+# a uid of its own from 10000 to 19999 (not sharedUserId: system's 1000 is hassmic's and the daemons') is let out.
+# Amazon's apps live in /system, so the lock on them stands.  Read on every look (DNS's way): a reinstall changes a uid.
+APPS_FILE=/data/local/hassmic/state/apps
+app_uids() {
+    [ -f $APPS_FILE ] && [ ! -L $APPS_FILE ] && [ -f /data/system/packages.xml ] || return 0
+    n=0
+    while read -r k p; do
+        [ "$k" = net ] || continue
+        n=$((n + 1)); [ $n -le 32 ] || break
+        case "$p" in ''|.*|*.|*..*|*[!A-Za-z0-9_.]*) continue;; esac
+        [ ${#p} -le 150 ] || continue
+        l=$(grep -m1 -F "<package name=\"$p\" " /data/system/packages.xml) || continue
+        case "$l" in *' codePath="/data/app/'*) ;; *) continue;; esac
+        case "$l" in *' sharedUserId='*) continue;; esac
+        f=${l#*' publicFlags="'}; f=${f%%'"'*}
+        case "$f" in ''|*[!0-9-]*) continue;; esac
+        [ $((f & 1)) = 0 ] || continue
+        u=${l#*' userId="'}; u=${u%%'"'*}
+        case "$u" in 1[0-9][0-9][0-9][0-9]) echo $u;; esac
+    done < $APPS_FILE | sort -un
+}
+
 # The chain as it has to be, for $1 = iptables or ip6tables: one rule per line, worded as "iptables -S" prints it (a
 # length on every address, "-m udp" after "-p udp", the updaters' user as a number), because the check compares that
 # text.  The chain is loaded from this list and checked against it.
@@ -73,6 +99,7 @@ rules() {
         for p in udp tcp; do echo "-A hassmic_out -d $d -p $p -m $p --dport 53 -j RETURN"; done
     done
     echo "-A hassmic_out -m owner --gid-owner $NET_GID -j RETURN"
+    for u in $APPS; do echo "-A hassmic_out -m owner --uid-owner $u -j RETURN"; done
     echo "-A hassmic_out -j DROP"
 }
 
@@ -216,7 +243,7 @@ load_each() {
 }
 load() { load_once $1 2>/dev/null || load_once $1 || { echo "!! $1-restore failed twice: loading rule by rule"; load_each $1; }; }
 apply() {
-    DNS=$(resolvers); kiosk_state
+    DNS=$(resolvers); APPS=$(app_uids); kiosk_state
     load iptables
     if [ -n "$HAVE6" ]; then load ip6tables; else v6off; fi
     # adbd last, and a second later in the background: its restart ends every adb shell, the one running this script
@@ -251,7 +278,7 @@ wrong() {
 ota_off() { for s in $UPDATE_SERVICES $UPDATE_ONDEMAND; do stop $s 2>/dev/null; done; }
 
 OTA_ONLY=; [ "$1" = ota-only ] && { OTA_ONLY=1; shift; }
-[ "$1" = check ] && { DNS=$(resolvers); adb_state; wrong; exit; }
+[ "$1" = check ] && { DNS=$(resolvers); APPS=$(app_uids); adb_state; wrong; exit; }
 # A request left from before a reboot is not one: the window would open at boot with nobody asking.
 [ "$1" = watch ] && rm -f $ADB_REQ
 
@@ -281,6 +308,7 @@ echo "egress limited to local addresses$([ -n "$HAVE6" ] || echo ", IPv6 off (no
     [ -n "$HAVE6" ] || v6off                        # an interface that comes up later starts with IPv6 on
     if adb_gate; then apply                         # says so itself
     elif [ "$(resolvers)" != "$DNS" ]; then apply; echo "lockdown re-applied, resolvers:" $DNS
+    elif [ "$(app_uids)" != "$APPS" ]; then apply; echo "lockdown re-applied, apps let out (uids):" ${APPS:-none}
     elif ! w=$(wrong); then apply; echo "lockdown re-applied ($w)"; fi
 done
 exit 0

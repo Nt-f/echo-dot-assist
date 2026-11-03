@@ -244,6 +244,30 @@ psk_only() {
     echo "netwatch: network$fixed cut back to WPA-PSK, associating again"
 }
 
+# The screen app (state/kiosk's "app": hassmic's Java kiosk, or the owner's) on an Echo with Android: it may draw over
+# the apps it starts (its app bar, pulled down from the top edge: docs/screen-apps.md "Other apps"), and its input
+# method, if it brings one, is switched on (the Echo has none: an app it starts could not take a word typed otherwise).
+# Done again whenever that app is (re)installed (its line in packages.xml changes: the update time).  appops and ime
+# are app_process programs (a second of CPU each), so only then.
+screen_done=
+screen_grants() {
+    [ "$ANDROID" = 1 ] && [ -f /data/system/packages.xml ] || return 0
+    k=/data/local/hassmic/state/kiosk; p=
+    [ -f $k ] && [ ! -L $k ] && p=$(sed -n 's/^app //p' $k | head -1)
+    [ -n "$p" ] || p=io.github.gamer92000.echodotassist.kiosk
+    case "$p" in .*|*.|*..*|*[!A-Za-z0-9_.]*) return 0;; esac
+    l=$(grep -m1 -F "<package name=\"$p\" " /data/system/packages.xml) || return 0
+    [ "$l" = "$screen_done" ] && return 0
+    screen_done=$l
+    appops set $p SYSTEM_ALERT_WINDOW allow && echo "screen app $p: may draw over other apps"
+    for i in $(ime list -a -s 2>/dev/null); do
+        case "$i" in "$p"/*) ;; *) continue;; esac
+        ime enable $i > /dev/null
+        cur=$(settings get secure default_input_method)
+        case "$cur" in ''|null) ime set $i > /dev/null; echo "screen app $p: its keyboard $i in use";; esac
+    done
+}
+
 # While the settings page switches networks (wifi.sh holds its lock), the link is that script's business: no wifisvc.
 # Whenever the address changes, wifi.sh writes down which network the Echo is on, for the page: wpa_supplicant can also
 # move to another saved network by itself when the one it is on goes away.
@@ -254,6 +278,7 @@ netwatch() {
         clock_set
         tz_set
         fwcheck
+        screen_grants
         if [ -f /data/local/hassmic/state/mdns ] && [ ! -L /data/local/hassmic/state/mdns ]; then
             why=$(dd if=/data/local/hassmic/state/mdns bs=60 count=1 2>/dev/null | tr -cd 'a-zA-Z0-9 ')
             rm -f /data/local/hassmic/state/mdns
@@ -341,6 +366,12 @@ ota_watch() {
             say "== light ring designs: $LEDS${LEDWHY:+ ($LEDWHY)}"
         fi
         rm -f $LEDNEW.req
+        # Apps from the settings page or Home Assistant (src/hassmic/apps.c): an APK installed or an app removed by pm, 5 to
+        # 30 s, so in the background, one at a time (apps.sh's lock)
+        if [ -f /data/local/hassmic/state/apps-request ] && [ ! -d /data/local/hassmic/apps/lock ] && [ -f $D/apps.sh ]; then
+            READ_AS="$D/runas $DAEMON_USER $DAEMON_GROUPS" sh $D/apps.sh take 2>&1 | stamped &
+            sleep 1                                     # its lock taken before the next look
+        fi
         # Wi-Fi from the settings page (src/hassmic/wifi.c): a scan, or a switch to another network, which takes up to two
         # minutes; so in the background, one at a time (wifi.sh's lock), and a request waits while one runs
         if [ -f /data/local/hassmic/state/wifi-request ] && [ ! -d $WIFI/lock ] && [ -f $D/wifi.sh ]; then

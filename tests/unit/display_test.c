@@ -229,6 +229,20 @@ int main(void)
     { struct timespec t; clock_gettime(CLOCK_MONOTONIC, &t); long long t1 = t.tv_sec * 1000LL + t.tv_nsec / 1000000; unsigned v4 = display_wait(v3, 400);
       clock_gettime(CLOCK_MONOTONIC, &t); long long t2 = t.tv_sec * 1000LL + t.tv_nsec / 1000000;
       check(v4 == v3 && t2 - t1 >= 350 && t1 - t0 < 1000, "the long poll: nothing new, it waits its time"); }
+    /* the screen lent to another app (a video client the screen app started): our layer stays off as while the app is
+     * in front, but a ring comes over the other app (it draws none), and /front ends it */
+    display_heard(NULL);
+    check(kiosk_lent("org.schabi.newpipe") == 0 && kiosk_lent("a;b") == -1, "lent: a package name only");
+    display_changed(); ms(600); n0 = nframes(); ms(1500);
+    check(nframes() == n0 && kiosk_front(), "lent: our layer stays off over the other app");
+    display_ringing("Alarm 7 AM");
+    WAIT(nframes() > n0);
+    check(nframes() > n0, "lent: a ring over the other app (it draws none)");
+    display_ringing(NULL); ms(600); n0 = nframes(); ms(1500);
+    check(nframes() == n0, "lent: the ring over, the other app's again");
+    kiosk_polled(0, 0); display_changed();
+    WAIT(nframes() > n0);
+    check(nframes() > n0 && !kiosk_front(), "lent ends with a /back poll: the clock");
     kiosk_polled(1, 0);
     display_setting(DS_KIOSK, 0);
 

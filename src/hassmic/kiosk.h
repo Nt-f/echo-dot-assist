@@ -21,7 +21,11 @@ char *kiosk_json(int with_token, int enabled, size_t *len);
  * (its poll's path says so, docs/screen-apps.md) */
 void  kiosk_polled(int front, int draws);
 int   kiosk_draws(void);
-int   kiosk_front(void);                        /* 1: the app is in front (a poll within the last 20 s) */
+/* the app started another one and lent it the screen (/kiosk/config/lent/<package>): hassmic's layer stays off for it
+ * until the screen app polls /front or /back again; -1: not a package name */
+int   kiosk_lent(const char *pkg);
+/* 1: the app is in front (a poll within the last 20 s), or lent the screen (and polled within the last 90 s) */
+int   kiosk_front(void);
 int   kiosk_configured(void);                   /* 1: at least one screen */
 /* the display thread's, with the kiosk switched on: the app started when it is gone (no poll for 90 s; at most once a
  * minute); 1 when it is in front */
