@@ -560,9 +560,13 @@ Echo-Wall shows a page per room.
 
 **Making Home yours, on the Echo.** Hold any card: a menu shows its controls, its sizes (small, wide, large, extra
 large, as the card has them), Move to another page, and Remove from this page. Keep holding, or hold an empty place or
-the page dots, and the cards wobble: drag one to another place, ★ puts it on Home, − takes it off the page, ⤡ cycles its
-size, + Add brings something onto this page, + Page makes a page of your own (Rename, Delete page on it). What you
-change on the Echo stays on the Echo; your dashboard is never changed. Done ends it.
+the page dots, and the cards wobble: drag one to another place (a card in the way moves to where yours was, or to
+the nearest free place on its page); hold it at the screen's edge and the pages turn, to another room's or to Home (a
+device dropped on Home becomes one of Home's tiles; a dashboard's card stays in its section). ★ puts it on Home, −
+takes it off the page (the next page's cards move up into the room it left), ⤡ cycles its size (it keeps its place;
+the cards it grows over move aside), + Add brings something onto this page, + Page makes a page of your own (Rename,
+Delete page on it), Remove page takes a room's page off (Echo Local's panel shows it again). What you change on the
+Echo stays on the Echo; your dashboard is never changed. Done ends it.
 
 Thermostats show what they are doing: orange while heating, blue while cooling ("Heating to 21°"); one in heat/cool
 shows its range, the low end orange and the high end blue. Room

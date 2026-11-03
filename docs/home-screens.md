@@ -256,7 +256,19 @@ route would cancel the finger still on the card): Controls, its sizes, Move to�
 Remove from this page. Held on to 1.3 s without moving: the edit mode. An empty place held, or the page dots: the edit
 mode too. In the edit mode each card has − (off this page), ★ (on Home) and ⤡ (its next size) as 48 px targets, and a
 tap shows its menu. The bar has + Add (to this page: devices, Echo-Wall's own cards, a dashboard card taken off
-before), + Page, and on an own page Rename and Delete page.
+before), + Page, and on an own page Rename and Delete page, on a room's or a section's Remove page (`hidden_pages`).
+
+**Moving and resizing** (`wall_view.dart` `pack`, `_grid`, `_drop`, `_resize`): a drop keeps every card of the page
+group where it is (`place`); a card pushed aside goes to the dragged one's old place, else the free place nearest its
+own on its own page, then the pages after, never back to a gap on the group's first page. Held 0.6 s at the screen's
+edge the pages turn, across groups: over another group's page the card is drawn where it would land (that group packed
+with it), and the drop moves it there as "Move to…" does (`_removeFrom`, `_addTo`, its size with it); a dashboard's
+card stays in its section, a screen's tile on Home. Only the card's own group gets an empty page at its end while
+dragging, and the page looked at is followed by group and index (`_viewing`), so pages coming and going before it do
+not move the view. A resize keeps the card's top-left (moved in only as far as the page's edge makes it) and saves the
+group's places (`_commit`). A card taken off pulls the next page's first cards into the room it left (`_pullBack`, one
+page ahead); Clear page saves the group's places first and pulls nothing. + Add places the card on the page it was
+opened on.
 
 **Thermostats** show what they do: orange heating, blue cooling (the card glows from below in that colour, its line
 "Heating to 21°" white over it), "Idle", "Off" dimmed; a heat/cool (dual) one shows its range with the low end orange
