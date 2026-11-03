@@ -915,6 +915,11 @@ static void fetch_run(const char *key, const char *locale)
         pthread_mutex_lock(&lk);
         state = D_ON;
         if (code == 404) say_err("Amazon has no %s", what);
+        /* a 403 is also Amazon's answer to a model it keeps an artifact from: checkers asking for whisper got
+         * "Request not allowlisted for device Type A4ZP7ZC4PI6TO ... whisper-static" (2026-10-13, 2026-11-03)
+         * with a registration that downloads everything else; logging in again changes nothing there */
+        else if (code == 403 && strstr(ans, "allowlisted"))
+            say_err("Amazon does not hand out %s to this model of Echo (an Echo that has it can bring it with Copy models)", what);
         else if (code == 401 || code == 403) say_err("the registration is not taken any more: log in again");
         else say_err("Amazon answered HTTP %ld to the %s request", code, what);
         pthread_mutex_unlock(&lk);
