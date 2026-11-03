@@ -167,6 +167,8 @@ All on Home Assistant's own websocket (`/api/websocket`). `echo` may be left out
 | `echo_local/home/subscribe` | `echo?`, `app?` | result, then an event `{layout, echo}` now and at every change of that slot |
 | `echo_local/home/describe` | `app`, `descriptor` | `{builtin: false}` stored (for the kiosk user's Echo, or every Echo from an administrator), `{builtin: true}` ignored |
 | `echo_local/home/delete` | `echo`, `app` | admin. The slot gone: the app goes back to its own defaults |
+| `echo_local/home/apps/set` | `echo?`, `apps: [{package, label, icon}]` | The Echo's Android apps as its screen app lists them (Echo-Wall's `Launchable.kt`; `icon` a base64 PNG, 64 dp; 40 at most), kept per Echo in the store. Echo-Wall sends them at each login and when they change (`layout_sync.dart` `publishApps`). Same rights as `set`: the kiosk user only its own Echo |
+| `echo_local/home/apps/get` | `echo?` | `{apps, updated}`, `[]` until the app sent them. The panel's preview draws their tiles, its Apps tab shows their names and icons (hassmic's `/api/apps` knows packages and versions only) |
 | `echo_local/kiosk/get` | `echo` | admin. `{options, kinds, music_panel, ha_url}` |
 | `echo_local/kiosk/set` | `echo`, `options` | admin. Checked (`kiosk.py`'s keys and kinds), saved into the entry's options, the entry reloaded: its setup sends them on to the Echo as the options flow's Submit does |
 
@@ -294,7 +296,8 @@ and the app already treats them as optional.
 |---|---|---|
 | `token()` | the panel's own access token (refreshed by `hass.auth` when expired) | asked again when Home Assistant refuses it |
 | `layout()` | the draft to start with | |
-| `info()` | `{h24, screens, settings, editing}`: Home Assistant's clock format, the other screens' names (their tiles on Home), the edit switch | |
+| `info()` | `{h24, screens, settings, editing, gallery, apps}`: Home Assistant's clock format, the other screens' names (their tiles on Home), the edit switch, the card sizes switch, the Echo's Android apps (`echo_local/home/apps/get`) | |
+| message `echo-local-apps` | those apps, when the panel has them after the preview started | |
 | message `echo-local-layout` | a new draft (the form changed) | applied without being sent back |
 | message `echo-local-editmode` | the switch | |
 | posts `echo-local-edit` | the layout after an edit in the preview (Echo-Wall's own save, 500 ms after the last change) | the panel's draft |

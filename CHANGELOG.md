@@ -2,6 +2,15 @@
 
 What changed for people using the Echo, newest first. Details and measurements are in [PLAN.md](PLAN.md).
 
+## 2026-11-03
+
+- **Echo-Wall's app switcher** has no bar at the top any more: swipe down from the top edge to open it, swipe it back
+  up or touch anywhere else to close it. The same over the other apps.
+- **Your Echo Show's apps in Echo Local's preview.** The tiles of the apps you installed on the Echo (NewPipe and the
+  like) were missing from the panel's preview, which knew nothing of them; Echo-Wall now sends their names and icons
+  to Home Assistant, so the preview draws them and the Apps tab shows them by name with their icons. Needs this
+  Echo-Wall on the Echo.
+
 ## 2026-11-02
 
 - **Echo Local in Home Assistant's sidebar.** Every Echo Show's screen in one place: Echo-Wall's Home as a form beside

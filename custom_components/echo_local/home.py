@@ -20,6 +20,9 @@ Websocket (Home Assistant's own, the token the kiosk already holds; the Echo's s
     echo_local/home/subscribe  {echo?, app}               the layout now and at every change
     echo_local/home/describe   {app, descriptor}          an app's own descriptor, for its Echo (not the built-in ones')
     echo_local/home/delete     {echo, app}                admin: the slot gone (the app starts from its own defaults)
+    echo_local/home/apps/set   {echo?, apps}              the Echo's Android apps as its screen app lists them (package,
+                                                          label, icon: base64 PNG), for the panel's preview and Apps tab
+    echo_local/home/apps/get   {echo?}                    {apps, updated} ([] until the app sent them)
     echo_local/kiosk/get       {echo}                     admin: the screen's options (kiosk.py), for the panel
     echo_local/kiosk/set       {echo, options}            admin: the same, saved; the entry reloads and sends them on
 
@@ -230,14 +233,16 @@ async def delete(hass: HomeAssistant, echo: str, app: str) -> None:
 
 async def _save(hass: HomeAssistant) -> None:
     d = _data(hass)
-    await d["store"].async_save({"homes": d["homes"], "descriptors": d["descriptors"]})
+    await d["store"].async_save({"homes": d["homes"], "descriptors": d["descriptors"], "launchers": d["launchers"]})
 
 
 async def async_setup(hass: HomeAssistant) -> None:
     store = _Store(hass, STORE_VERSION, STORE_KEY, minor_version=STORE_MINOR)
     saved = await store.async_load() or {}
-    hass.data[DOMAIN + "_home"] = {"store": store, "homes": saved.get("homes", {}), "descriptors": saved.get("descriptors", {})}
-    for c in (ws_list, ws_get, ws_set, ws_subscribe, ws_describe, ws_delete, ws_kiosk_get, ws_kiosk_set, ws_kiosk_push):
+    hass.data[DOMAIN + "_home"] = {"store": store, "homes": saved.get("homes", {}), "descriptors": saved.get("descriptors", {}),
+                                    "launchers": saved.get("launchers", {})}
+    for c in (ws_list, ws_get, ws_set, ws_subscribe, ws_describe, ws_delete, ws_kiosk_get, ws_kiosk_set, ws_kiosk_push,
+              ws_apps_set, ws_apps_get):
         websocket_api.async_register_command(hass, c)
 
 
@@ -358,6 +363,44 @@ async def ws_describe(hass: HomeAssistant, connection, msg: dict) -> None:
         descs[msg["app"]] = d
         await _save(hass)
     connection.send_result(msg["id"], {"builtin": False})
+
+
+# ---------------------------------------------------------------- the Echo's own Android apps, as its screen app sees them
+
+# Echo-Wall draws a tile per app the owner installed (its Launchable.kt: label and icon from Android's package manager),
+# which neither Home Assistant nor hassmic's /api/apps knows: the app sends its list here (at each login and when it
+# changes), so that the panel's preview draws those tiles too and the Apps tab shows the icons.  Kept per Echo in the
+# store: the preview has them while the Echo is off.  An icon is a 64 dp PNG, a few kB.
+MAX_LAUNCH = 40
+LAUNCHER = vol.All([vol.Schema({
+    vol.Required("package"): APP,
+    vol.Required("label"): vol.All(str, vol.Length(max=80)),
+    vol.Optional("icon", default=""): vol.All(str, vol.Length(max=64 * 1024), vol.Match(r"^[A-Za-z0-9+/=]*$")),
+}, extra=vol.REMOVE_EXTRA)], vol.Length(max=MAX_LAUNCH))
+
+
+@websocket_api.websocket_command({vol.Required("type"): "echo_local/home/apps/set", vol.Optional("echo", default=""): str,
+                                  vol.Required("apps"): list})
+@websocket_api.async_response
+async def ws_apps_set(hass: HomeAssistant, connection, msg: dict) -> None:
+    echo = _slot(hass, connection, msg["echo"], True)
+    try:
+        apps = LAUNCHER(msg["apps"])
+    except vol.Invalid as e:
+        connection.send_error(msg["id"], "invalid_format", str(e))
+        return
+    d = _data(hass)["launchers"]
+    if (d.get(echo) or {}).get("apps") != apps:
+        d[echo] = {"apps": apps, "updated": time.time()}
+        await _save(hass)
+    connection.send_result(msg["id"])
+
+
+@websocket_api.websocket_command({vol.Required("type"): "echo_local/home/apps/get", vol.Optional("echo", default=""): str})
+@callback
+def ws_apps_get(hass: HomeAssistant, connection, msg: dict) -> None:
+    l = _data(hass)["launchers"].get(_slot(hass, connection, msg["echo"], False)) or {}
+    connection.send_result(msg["id"], {"apps": l.get("apps", []), "updated": l.get("updated", 0)})
 
 
 @websocket_api.require_admin

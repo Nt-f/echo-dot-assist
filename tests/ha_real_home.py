@@ -26,6 +26,7 @@ from ha_real_dropin import check
 
 NODE = "echo-show-5-a1b2c3"
 EW = "io.github.nt_f.echowall"
+ICON = "iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAIAAAAmkwkpAAAAEElEQVR4nGN4YGAARwzEcQATUhQB4NTEHgAAAABJRU5ErkJggg=="                    # a 4x4 PNG, as an app's icon
 
 
 def write_config(conf):
@@ -144,9 +145,11 @@ async def browser(session, token, png):
                 await asyncio.sleep(.03); await cdp("Input.dispatchTouchEvent", type="touchMove", touchPoints=[{"x": x, "y": y}])
             await cdp("Input.dispatchTouchEvent", type="touchEnd", touchPoints=[])
             await asyncio.sleep(1.5)
+        out["seen"] = list(out["labels"])            # every page swiped past (Home's later pages: the Echo's apps' tiles)
         for _ in range(3):
             await swipe()
             out["dash_labels"] = await js(labels) or []
+            out["seen"] += out["dash_labels"]
             if any("Living Room" in l for l in out["dash_labels"]): break
         await shot("-dashboard")
         # another app's Home into Echo-Wall's, by what both share (its descriptor: tint = theme, favs = favorites)
@@ -191,7 +194,7 @@ async def browser(session, token, png):
         await asyncio.sleep(0.5); await shot("-screen")
         out["appstab"] = await js(f"""(async () => {{ const p = {find}; p.tab = 'apps'; p.render(); await p.loadApps();
             await new Promise(r => setTimeout(r, 500)); const r = p.shadowRoot;
-            return {{ tabs: [...r.querySelectorAll('.tab')].map(e => e.textContent), apps: [...r.querySelectorAll('.item.app .nm div:first-child')].map(e => e.textContent),
+            return {{ tabs: [...r.querySelectorAll('.tab')].map(e => e.textContent), apps: [...r.querySelectorAll('.item.app .nm div:first-child')].map(e => e.textContent), icons: r.querySelectorAll('.item.app img.appicon').length,
                      screenApp: [...r.querySelectorAll('.item.app')].filter(e => e.textContent.includes('the screen app')).map(e => e.querySelector('.danger').disabled),
                      status: (r.querySelector('.inst') || {{}}).textContent || '' }}; }})()""")
         await asyncio.sleep(0.3); await shot("-apps")
@@ -410,6 +413,16 @@ async def run(tmp):
                 if m.get("id") == 900 and m.get("type") == "event": ev = m["event"]; break
             check(ev and ev["layout"] == {"wallpaper": "dusk", "favorites": None, "place": ew["place"]} and ev["echo"] == NODE, f"a subscriber gets the save at once ({ev})")
             await k.sock.close()
+            # the Echo's Android apps as Echo-Wall lists them (layout_sync.dart publishApps): for the preview's tiles
+            k = await as_user(session, cfg.get("token", ""))
+            await k.ws(type="echo_local/home/apps/set", echo="another-echo", apps=[{"package": "org.schabi.newpipe", "label": "NewPipe", "icon": ICON}])
+            la = await c.ws(type="echo_local/home/apps/get", echo=NODE)
+            check([a["label"] for a in la.get("apps", [])] == ["NewPipe"] and la["apps"][0]["icon"] == ICON
+                  and (await c.ws(type="echo_local/home/apps/get", echo="another-echo"))["apps"] == [],
+                  f"the kiosk's user sends its Echo's apps, for its own Echo only ({[a['label'] for a in la.get('apps', [])]})")
+            e = await fails(k.ws(type="echo_local/home/apps/set", apps=[{"package": "not a package", "label": "x"}]))
+            check("invalid" in e.lower() or "match" in e.lower(), f"... checked ({e[:80]})")
+            await k.sock.close()
 
             # ---- the Echo Show's apps (where the Echo side, apps.c and root's apps.sh, is in this tree)
             if not os.path.exists(f"{hr.ROOT}/scripts/device/apps.sh"):
@@ -449,6 +462,7 @@ async def run(tmp):
                 check(out.get("echos") == ["Echo Show 5 a1b2c3"] and any("Echo-Wall" in a and "on the screen" in a for a in out.get("apps", [])),
                       f"the panel: the Echo, Echo-Wall on its screen ({out.get('echos')}, {out.get('apps')})")
                 check(out.get("flutter") and out.get("fields", 0) >= 9, f"Echo-Wall's own preview started, the form from its descriptor ({out.get('fields')} rows)")
+                check("NewPipe" in " ".join(out.get("seen", [])), f"the preview draws the Echo's Android apps as Echo-Wall sent them ({[l for l in out.get('seen', []) if len(l) < 40][:24]})")
                 check(any(n in " ".join(out.get("labels", [])) for n in ("Kitchen", "Living Room", "Ceiling Lights")),
                       f"the preview logged in with the panel's token: this Home Assistant's rooms and devices drawn ({out.get('labels', [])[:12]})")
                 check(out.get("bright", {}).get("light", 0) > out.get("bright", {}).get("dusk", 255) + 30,
@@ -482,9 +496,9 @@ async def run(tmp):
                 check("Show Home Assistant on the screen" in scr.get("rows", []) and "Sent to the Echo" in scr.get("push", ""),
                       f"the Screen tab: the kiosk's options, the last push ({scr.get('rows', [])[:2]}, {scr.get('push')!r})")
                 ap = out.get("appstab") or {}
-                check("Apps" in ap.get("tabs", []) and "org.schabi.newpipe" in ap.get("apps", []) and ap.get("screenApp") == [True]
+                check("Apps" in ap.get("tabs", []) and "NewPipe" in ap.get("apps", []) and ap.get("icons", 0) >= 1 and ap.get("screenApp") == [True]
                       and ap.get("status", "").startswith("Removed org.example.app"),
-                      f"the Apps tab: the apps, Remove off for the screen app ({ap})")
+                      f"the Apps tab: the apps by the names and icons Echo-Wall sent, Remove off for the screen app ({ap})")
     finally:
         echo.stop()
         hass.send_signal(signal.SIGTERM)

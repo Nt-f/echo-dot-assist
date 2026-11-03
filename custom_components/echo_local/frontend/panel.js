@@ -127,6 +127,8 @@ textarea { width: 100%; min-height: 90px; font-family: var(--code-font-family, m
 .item.over { box-shadow: inset 0 2px 0 var(--accent); }
 .item .grip { cursor: grab; color: var(--muted); user-select: none; padding: 0 4px; }
 .item .nm { flex: 1; min-width: 0; }
+.appicon { width: 36px; height: 36px; border-radius: 9px; flex: none; }
+.appicon.none { background: var(--secondary-background-color, #e6e6e6); }
 .item .nm div { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .item .id { font-size: 12px; color: var(--muted); }
 .item.unknown .nm div:first-child { color: var(--warning-color, #ff9800); }
@@ -195,6 +197,7 @@ class EchoLocalPanel extends HTMLElement {
     this.kiosk = null;                // { saved, draft } of the selected Echo
     this.size = null;
     this.editOnScreen = false;
+    this.launcher = {};               // echo -> its Android apps as Echo-Wall lists them (echo_local/home/apps/get)
     // the preview (Echo-Wall's lib/preview.dart) asks the login, the draft and what the Echo's app would know from here
     window.echoLocalPreview = {
       token: async () => { const a = this._hass.auth; if (a.expired) await a.refreshAccessToken(); return a.accessToken; },
@@ -215,7 +218,7 @@ class EchoLocalPanel extends HTMLElement {
       : new Intl.DateTimeFormat(loc.language || undefined, { hour: 'numeric' }).resolvedOptions().hour12 === false;
     const info = this.echoInfo() || {};
     const screens = (info.screens || []).filter((k) => KIND_NAME[k]).map((k) => KIND_NAME[k]);
-    return { h24, screens, settings: {}, editing: this.editOnScreen, gallery: this.gallery };
+    return { h24, screens, settings: {}, editing: this.editOnScreen, gallery: this.gallery, apps: this.launcher[this.echo] || [] };
   }
 
   set hass(h) { const first = !this._hass; this._hass = h; if (first) this.load(); }
@@ -274,6 +277,7 @@ class EchoLocalPanel extends HTMLElement {
     if (info && this.tab === 'screen') this.loadKiosk();
     this.apps = null;
     if (info) this.loadApps();              // whether it has apps at all (an Echo Dot has none): the tab follows
+    this.loadLauncher(node);
     this.render();
   }
 
@@ -312,6 +316,19 @@ class EchoLocalPanel extends HTMLElement {
     grid.firstChild.replaceWith(this.form(c, this.desc()));
     this.shadowRoot.querySelector('.incoming').replaceWith(this.banner(c));
     this.renderBar();
+  }
+
+  // the Echo's Android apps with their labels and icons, as Echo-Wall on it sent them: its Home's tiles in the preview,
+  // the icons in the Apps tab (hassmic's /api/apps knows packages and versions only)
+  async loadLauncher(echo) {
+    try {
+      const r = await this.ws({ type: 'echo_local/home/apps/get', echo });
+      this.launcher[echo] = r.apps || [];
+    } catch (e) { return; }                 // an older integration: none
+    if (echo !== this.echo) return;
+    const f = this.shadowRoot.querySelector('iframe');
+    if (f && f.contentWindow) f.contentWindow.postMessage({ type: 'echo-local-apps', apps: this.launcher[echo] }, location.origin);
+    if (this.tab === 'apps') { const t = this.shadowRoot.querySelector('.appstab'); if (t) t.replaceWith(this.appsTab()); }
   }
 
   pushPreview() {
@@ -887,8 +904,11 @@ class EchoLocalPanel extends HTMLElement {
     if (!a.apps.length) list.append(h('div', { class: 'empty' }, 'None yet: add one below.'));
     for (const app of a.apps.slice().sort((x, y) => x.package.localeCompare(y.package))) {
       const isScreen = app.package === screenApp;
+      const l = (this.launcher[this.echo] || []).find((x) => x.package === app.package);
       list.append(h('div', { class: 'item app' },
-        h('div', { class: 'nm' }, h('div', null, app.package), h('div', { class: 'id' }, `version ${app.version}` + (isScreen ? ' · the screen app' : ''))),
+        l && l.icon ? h('img', { class: 'appicon', src: 'data:image/png;base64,' + l.icon, alt: '' }) : h('div', { class: 'appicon none' }),
+        h('div', { class: 'nm' }, h('div', null, l ? l.label : app.package),
+          h('div', { class: 'id' }, (l ? app.package + ' · ' : '') + `version ${app.version}` + (isScreen ? ' · the screen app' : ''))),
         h('span', { class: 'note' }, 'Internet'),
         this.switch(!!app.net, async (on) => {
           try { await this.ws({ type: 'echo_local/apps/net', echo: this.echo, package: app.package, on }); app.net = on; this.toast(`${app.package}: ${on ? 'may reach the internet' : 'kept off the internet'}`); }
