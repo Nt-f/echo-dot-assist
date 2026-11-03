@@ -551,16 +551,29 @@ status show over the screen app and go again (Echo-Wall draws them on its glass 
 addresses only, so Home Assistant's address for it is its local one (the Screen tab shows which; Home Assistant
 Cloud's is not reachable from the Echo).
 
-**Making Home yours, on the Echo.** Hold the page dots at the bottom for a moment. The widgets wobble; drag one to
-another place, tap ★ to put a room's tile on Home (a thermostat shows big there, a camera its picture), tap − to take
-one off, + Add to bring something back. The bar picks the wallpaper, lists what is hidden, and Done ends it. Room
+**Your dashboard on the Echo.** Pick one of your Home Assistant dashboards in Echo Local (Home screen › "Dashboard
+after Home"): its sections become pages after Home, drawn by Echo-Wall in its own glass, not as a web page, so it stays
+quick on the Echo Show 5. Tiles, thermostats, media players and cameras look as Echo-Wall's own; entities, glance and
+weather cards have glass versions; cards it cannot draw (HACS cards, graphs) show as a tile that opens that view in
+Home Assistant's own interface. Change the dashboard in Home Assistant and the Echo follows at once. Without one,
+Echo-Wall shows a page per room.
+
+**Making Home yours, on the Echo.** Hold any card: a menu shows its controls, its sizes (small, wide, large, extra
+large, as the card has them), Move to another page, and Remove from this page. Keep holding, or hold an empty place or
+the page dots, and the cards wobble: drag one to another place, ★ puts it on Home, − takes it off the page, ⤡ cycles its
+size, + Add brings something onto this page, + Page makes a page of your own (Rename, Delete page on it). What you
+change on the Echo stays on the Echo; your dashboard is never changed. Done ends it.
+
+Thermostats show what they are doing: orange while heating, blue while cooling ("Heating to 21°"); one in heat/cool
+shows its range, the low end orange and the high end blue. Room
 names, areas and which entities exist stay Home Assistant's: hide an entity there and it is gone from the screen too.
 
 **Making Home yours, in Home Assistant: Echo Local in the sidebar** (administrators). Every Echo on the left; for
 each, two tabs.
 
 - *Home screen*: the settings of Echo-Wall's Home as a form (wallpaper, Home's tiles in order: drag them or use ↑ ↓,
-  the clocks, the date, what plays, the lock screen's time, what is hidden, each room's order), and next to it
+  the clocks, the date, what plays, the lock screen's time, what is hidden, each room's order, the dashboard after
+  Home), and next to it
   **Echo-Wall itself**, running in the page with your devices, at the Echo's size. Switch on "Edit on the screen" and
   arrange it exactly as on the Echo: drag tiles to other places, ★, −, + Add, the wallpaper; the form follows. Nothing
   reaches the Echo until **Save**; Revert throws the changes away. If someone rearranges the Echo meanwhile, a bar
@@ -568,7 +581,8 @@ each, two tabs.
   **Export** saves the Home to a file (`….echohome.json`); **Import** takes one back, or another app's Home on this
   Echo (what both have: the wallpaper, Home's tiles, hidden ones, rooms' order, the lock screen), or another Echo's.
   **Copy to** puts it on other Echos as it is. **Reset** forgets it: Echo-Wall picks again. Entities a file names that
-  this Home Assistant does not have are kept and marked.
+  this Home Assistant does not have are kept and marked. **Card sizes** under the preview shows every card at every
+  size with your own devices.
 - *Screen*: Home Assistant on the screen, the screens in the switcher's order, the one to start on and go back to,
   the screen app and its settings (Echo-Wall's photos from Immich: `immich.url=`, `immich.key=`, `immich.album=`).
   A line at the top says when Home Assistant last sent this to the Echo, or why it could not; **Send to the Echo

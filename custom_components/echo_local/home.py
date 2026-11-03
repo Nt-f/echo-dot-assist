@@ -53,7 +53,7 @@ MAX_LAYOUT = 64 * 1024                  # bytes of JSON a slot may hold (a kiosk
 MAX_APPS = 8                            # slots per Echo
 MAX_IDS = 300                           # entity ids in one list
 MAX_FIELDS = 40
-FIELD_TYPES = ("select", "number", "bool", "text", "entities", "entity", "area_order", "strings")
+FIELD_TYPES = ("select", "number", "bool", "text", "entities", "entity", "area_order", "strings", "dashboard")
 # what apps share, so that a Home moves from one app to another (export of one, import into the other)
 COMMON = ("theme", "favorites", "hidden", "order", "ambient", "nowplaying")
 
@@ -63,6 +63,9 @@ BUILTIN: dict[str, dict] = {
         "name": "Echo-Wall", "about": "The Echo Show's Home (Nt-f/Echo-Wall). It sends its layout here as it changes and follows what is saved here.",
         "preview": "/echo_local/echowall/index.html",
         "fields": [
+            {"key": "dashboard", "type": "dashboard", "label": "Dashboard after Home",
+             "help": "Its sections as pages after Home, drawn in Echo-Wall's glass. None: a page per room. Hold a card on the Echo to resize "
+                     "it or take it off a page: that stays on the Echo, the dashboard is not changed."},
             {"key": "wallpaper", "type": "select", "label": "Wallpaper",
              "options": [["photo", "Photo (Immich)"], *_opts], "default": "photo", "common": "theme"},
             {"key": "favorites", "type": "entities", "label": "Home's tiles", "ordered": True, "nullable": True,
@@ -164,7 +167,7 @@ def check(hass: HomeAssistant, app: str, layout: Any, echo: str | None = None) -
         elif t == "bool":
             if not isinstance(v, bool):
                 raise vol.Invalid(f"{k}: true or false")
-        elif t in ("text", "entity"):
+        elif t in ("text", "entity", "dashboard"):
             out[k] = _id(v) if v is not None else None
         elif t in ("entities", "strings"):
             if v is None and f.get("nullable"):

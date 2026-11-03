@@ -215,7 +215,7 @@ class EchoLocalPanel extends HTMLElement {
       : new Intl.DateTimeFormat(loc.language || undefined, { hour: 'numeric' }).resolvedOptions().hour12 === false;
     const info = this.echoInfo() || {};
     const screens = (info.screens || []).filter((k) => KIND_NAME[k]).map((k) => KIND_NAME[k]);
-    return { h24, screens, settings: {}, editing: this.editOnScreen };
+    return { h24, screens, settings: {}, editing: this.editOnScreen, gallery: this.gallery };
   }
 
   set hass(h) { const first = !this._hass; this._hass = h; if (first) this.load(); }
@@ -643,6 +643,17 @@ class EchoLocalPanel extends HTMLElement {
       head.append(i, f.unit ? h('span', { class: 'note' }, f.unit) : null);
     } else if (f.type === 'bool') {
       head.append(this.switch(!!val, (on) => set(on)));
+    } else if (f.type === 'dashboard') {
+      // the Home Assistant dashboards (lovelace/dashboards/list) and Overview; the field's value is the url path
+      const s = h('select', { onchange: () => set(s.value || undefined) }, h('option', { value: '' }, 'None: a page per room'));
+      const add = (v, l) => s.append(h('option', { value: v, selected: v === (val || '') }, l));
+      add('lovelace', 'Overview');
+      this.ws({ type: 'lovelace/dashboards/list' }).then((ds) => {
+        for (const d of ds) add(d.url_path, d.title || d.url_path);
+        if (val && ![...s.options].some((o) => o.value === val)) add(val, val + ' (not found)');
+        s.value = val || '';
+      }).catch(() => { if (val && val !== 'lovelace') add(val, val); s.value = val || ''; });
+      head.append(s);
     } else if (f.type === 'text') {
       const i = h('input', { type: 'text' }); i.value = val || '';
       i.addEventListener('input', () => set(i.value));
@@ -809,7 +820,10 @@ class EchoLocalPanel extends HTMLElement {
       bar.append(h('label', { class: 'note', style: 'display:flex;gap:6px;align-items:center' },
         this.switch(this.editOnScreen, (on) => { this.editOnScreen = on; const f = vp.querySelector('iframe'); if (f) f.contentWindow.postMessage({ type: 'echo-local-editmode', on }, location.origin); }),
         'Edit on the screen: drag tiles, ★ for Home, − to hide'));
-      bar.append(h('span', { class: 'note' }, 'The app itself, live with this Home Assistant’s states. Swipe sideways for the rooms.'));
+      bar.append(h('label', { class: 'note', style: 'display:flex;gap:6px;align-items:center' },
+        this.switch(!!this.gallery, (on) => { this.gallery = on; const f = vp.querySelector('iframe'); if (f) f.contentWindow.postMessage({ type: 'echo-local-gallery', on }, location.origin); }),
+        'Card sizes: every card at every size, with your devices'));
+      bar.append(h('span', { class: 'note' }, 'The app itself, live with this Home Assistant’s states. Swipe sideways for the pages; hold a card for its menu.'));
     } else {
       bar.append(h('span', { class: 'note' }, 'A sketch of Home’s tiles: the app draws them its own way.'));
     }

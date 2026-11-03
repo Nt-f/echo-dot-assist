@@ -10,6 +10,14 @@ What changed for people using the Echo, newest first. Details and measurements a
   a file and import it again, take another app's Home, copy it to your other Echos. The screen's options (which
   screens, the screen app) are there too. Administrators only. See the guide's "Home Assistant on the screen".
   An Echo's own login may now change only that Echo's layout (before, any Home Assistant user could change any).
+- **Your Home Assistant dashboard on the Echo Show, drawn by Echo-Wall.** Pick a dashboard in Echo Local; its sections
+  become pages after Home in Echo-Wall's own glass, quick on the Echo Show 5 (no web page). Cards Echo-Wall cannot draw
+  open that view in Home Assistant. Changes in Home Assistant show on the Echo at once.
+- **Hold a card for its menu, keep holding to edit.** As on an iPhone: controls, sizes, move to another page, remove.
+  Every card comes in the sizes that suit it (small, wide, large, extra large). Changes made on the Echo stay on it.
+- **Thermostats in colour:** orange heating, blue cooling, and a heat/cool thermostat's range in both.
+- **A paused song leaves the lock screen after 20 seconds.**
+- **Echo-Wall's switcher is the app bar** used over other apps: icons, Home first, pulled down from the top.
 - **Apps on the Echo Show from Home Assistant.** Echo Local's Apps tab lists the Android apps you installed (NewPipe,
   say) with an internet switch each, removes them, and installs new ones from an APK on your computer or on Home
   Assistant (also the action "Install app"). Apps stay off the internet until you switch them on.

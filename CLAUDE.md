@@ -294,8 +294,10 @@ No model `#ifdef`s in shared code: new differences become a board field, a `devi
   Local" (`frontend/panel.js`, panel_custom, admin: a form beside Echo-Wall itself built for the web,
   `frontend/echowall/` from `tools/echowall-preview.sh` (Echo-Wall's `lib/preview.dart`, `lib/io/` for dart:io on the
   web; rebuild and commit after WallView changes), its edit mode editing the draft; import/export `.echohome.json`,
-  copy, the screen's options) or Echo-Wall's own edit mode (page dots held); Echo-Wall syncs its own
-  (`layout_sync.dart`).  The Shows' own apps from the panel's Apps tab (`apps.py`: the Echo's `/api/apps` over the
+  copy, the screen's options) or Echo-Wall's own edit mode (a card or the page dots held); Echo-Wall syncs its own
+  (`layout_sync.dart`).  Layout field `dashboard`: Echo-Wall draws that Lovelace dashboard natively after Home
+  (`lib/lovelace/`: sections as pages, its own glass cards, unknown cards open the view), the Echo's changes per page
+  in its layout, never in the dashboard; every card at every size: Echo-Wall `test/gallery_test.dart`.  The Shows' own apps from the panel's Apps tab (`apps.py`: the Echo's `/api/apps` over the
   signed API, APKs uploaded to `/api/echo_local/apk/<echo>` and sent on in 256 kB pieces, action `install_apk`); a
   new entry adopts the screen the Echo shows (`kiosk.adopt`), each push's outcome kept for the Screen tab
   (`kiosk.last_push`, `kiosk/push`).  `tests/ha_real_home.py`.  The start's status:

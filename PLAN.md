@@ -2342,6 +2342,17 @@ Run in this order. Each step says what it proves.
       the old entry's, a login of a removed user): a fresh entry has no kiosk options, so its setup sent nothing.
       Now kiosk.adopt takes over GET /api/kiosk's screens (wall.html or hassmic:home -> Home, Music, a dashboard,
       a page) when the entry never set one, and every push's outcome is kept (kiosk/get "push", kiosk/push).
+      Native Lovelace (asked 2026-11-03: "does this card work make sense vs lovelace?"; previews against a demo HA in
+      build/lovelace-previews/; then "build it, keep on-device edits in Echo-Wall's layout, keep the custom cards"):
+      Echo-Wall lib/lovelace/ (LovelaceSource: lovelace/config + lovelace_updated; LCard/LView: sections, stacks
+      flattened, grid_options -> four sizes), WallView groups home / ll:<view>/<section> / area:<id> / page:<id>, each
+      with place, sizes, exclude, cards of the Echo's; Kind.media and Kind.card; fallback -> onDashboard -> main.dart
+      _openPath.  Hold: _Hold (Listener + long press; the menu an OverlayEntry because a pushed route cancels the
+      pointer and the hold could not reach 1.3 s).  Thermostat: hvac_action colours, heat_cool range low orange/high
+      blue, both ends nudged.  Sensors in look().  Gallery: lib/home/gallery.dart, test/gallery_test.dart (found the
+      wide media card's buttons 38 px over and the wide dual thermostat's name squeezed), the panel's "Card sizes".
+      Echo-Wall tests 36 (lovelace_test.dart 5, gallery 1); ha_real_home: the dashboard's section drawn natively in the
+      preview after a touch swipe, the gallery.  Not yet on the device: all of the Echo-Wall changes (an APK build).
       Not yet measured: HA's full UI logged in, the wall panel there (the user's HA has no
       integration of this version yet), a tap on the kiosk while a ring shows (passes through?).  Open: kiosk entities in HA (screen select); the wall's choice of rooms/entities (now: every
       area, registry-hidden ones left out); the screen waking on a touch while dark (the panel's touch controller).

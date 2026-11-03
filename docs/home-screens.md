@@ -125,9 +125,11 @@ it, and import between apps maps by it. Echo-Wall's is built in (`home.py` `BUIL
 | `entities` | list of ids; `null` if `nullable` ("the app picks") | a list: drag or ↑↓ to order (`ordered`), × to remove, a picker to add; with `nullable` a switch "The app picks" | ≤ 300 ids |
 | `strings` | list of strings | chips | ≤ 300 |
 | `area_order` | `{area id: [ids]}` | a fold-out per Home Assistant area with its tiles, drag to order, Reset per room | ≤ 200 areas |
+| `dashboard` | a dashboard's url path, "" none | a list of Home Assistant's dashboards (and Overview) | ≤ 255 characters |
 
 - **Keys a descriptor does not name are kept** as they come: Echo-Wall's `place` (where each tile was dragged on its
-  grid, `{page group: {widget: [page, column, row]}}`), `home_order`, `player`. They are edited in the preview (dragging
+  grid, `{page group: {widget: [page, column, row]}}`), `home_order`, `player`, `sizes`, `cards`, `exclude`,
+  `custom_pages`, `page_order` (below, "Your dashboard"). They are edited in the preview (dragging
   there writes `place`) or in the form's JSON box. The only limit on them is the slot's size, **64 KB** of JSON: the
   Echo's kiosk user writes slots and is not an administrator.
 - **`common`** names what apps share: `theme`, `favorites`, `hidden`, `order`, `ambient`, `nowplaying`. It is how a Home
@@ -212,6 +214,56 @@ something runs.
 (Home first by default); the screen app from a list (Echo-Wall, Echo-Screen, hassmic's kiosk for web pages only, or a
 package typed in); its settings (`key=value` lines). Save goes through `echo_local/kiosk/set`. The options flow has
 the same first page and no second one any more.
+
+## Your dashboard, drawn natively (Echo-Wall's `lib/lovelace/`)
+
+Asked 2026-11-03 after comparing it with Home Assistant's own UI on the Show (previews:
+`build/lovelace-previews/`, made by its `shoot.py` against a demo Home Assistant): Echo-Wall draws a Home Assistant
+dashboard itself, in its own glass, instead of Lovelace in a WebView. The layout field **`dashboard`** (the form's
+"Dashboard after Home", a list of `lovelace/dashboards/list` plus Overview) names it by url path; empty is a page per
+room, as before.
+
+- **Pages.** Home stays Echo-Wall's own (the clocks, date and weather, the favourites, what plays, the screens and apps).
+  After it, every section of every view of the dashboard is a page, its heading the page's name (the view's title
+  beside it when the dashboard has several views); a section whose heading is an area's name gets that room's chips.
+  Then the owner's own pages (edit mode's "+ Page"). `page_order` moves any of them.
+- **Reading it.** `LovelaceSource` asks `lovelace/config {url_path}` over Echo-Wall's own websocket (the Echo's kiosk
+  user reads any dashboard not limited to administrators) and again on the event `lovelace_updated` for that
+  dashboard: a save in Home Assistant's editor shows on the Echo at once. A strategy dashboard (Overview never edited:
+  Home Assistant makes it up as it draws) has no views to read: Echo-Wall then shows its room pages.
+- **Cards.** tile, button, light, sensor, entity: Echo-Wall's tile. thermostat: its thermostat. media-control: its media
+  card on that player (`Kind.media`). picture-entity / picture-glance of a camera: its camera card, live. entities,
+  glance, weather-forecast: `NativeCard` (a glass list, a row of readings, the weather). Anything else (HACS cards,
+  markdown, graphs) is a tile naming the card that opens that view in Home Assistant's own UI on the Echo
+  (`WallView.onDashboard` → `main.dart` `_openPath`); drawing them would take a browser per card, which the Show 5
+  cannot afford. Stacks are flattened: their cards become cards of the section.
+- **Sizes.** Lovelace's `grid_options` (columns of 12, rows of 56 px) map to Echo-Wall's four sizes (`LCard.cardSize`:
+  a half-width one-row tile small, a full-width one wide, three rows or more large, a whole section's worth extra
+  large), never Lovelace's half-height strips. Each card then takes the nearest of its own sizes that fits the grid
+  (`fitted`). The big cards are placed first, so a thermostat after four tiles still finds its two rows on the page.
+- **The Echo's own changes, kept in Echo-Wall's layout, never written into the dashboard** (saving a dashboard needs an
+  administrator, the Echo's login is not one, and the owner's dashboard stays as made): per page group
+  (`ll:<view path or index>/<section heading or index>`), `place` (where each card was dragged), `sizes`, `exclude`
+  (a card taken off this page here), `cards` (one added here: an entity, Echo-Wall's own clock, date, media, an app).
+- **Performance.** The same widgets and glass as Echo-Wall's own pages (the wallpaper blurred once, each card copying
+  its piece); the config a few kilobytes, read once and on each save; pages built as they are swiped to. No WebView:
+  that is what the Show 5 cannot carry (Home Assistant's UI 150–250 MB against Echo-Wall's 62 MB).
+
+**Holding a card** (`_Hold`, an iPhone's way): half a second shows its menu beside it (an overlay, not a route: a
+route would cancel the finger still on the card): Controls, its sizes, Move to… (another page), Edit Home Screen,
+Remove from this page. Held on to 1.3 s without moving: the edit mode. An empty place held, or the page dots: the edit
+mode too. In the edit mode each card has − (off this page), ★ (on Home) and ⤡ (its next size) as 48 px targets, and a
+tap shows its menu. The bar has + Add (to this page: devices, Echo-Wall's own cards, a dashboard card taken off
+before), + Page, and on an own page Rename and Delete page.
+
+**Thermostats** show what they do: orange heating, blue cooling (the card glows from below in that colour, its line
+"Heating to 21°" white over it), "Idle", "Off" dimmed; a heat/cool (dual) one shows its range with the low end orange
+and the high blue, "Cooling to 24°" naming the end it works towards, and its arrows move both ends.
+
+**Every card at every size** (`lib/home/gallery.dart`): `test/gallery_test.dart` draws all of them at the Show 5's
+cell and fails on any overflow (it found two: the wide media card's buttons, the wide dual thermostat's name);
+`test/goldens/cards.png` is the picture, rewritten each run. The panel's preview shows the same gallery with the
+Home Assistant's own devices ("Card sizes" under the preview).
 
 ## Echo-Wall's preview (`frontend/echowall/`, Echo-Wall's `lib/preview.dart`)
 

@@ -130,6 +130,25 @@ async def browser(session, token, png):
                 out["bright"][wp] = round(ImageStat.Stat(Image.open(_io.BytesIO(png_)).convert("L")).mean[0])
             except Exception as e:
                 out["bright"][wp] = str(e)
+        # a dashboard after Home (the form's "Dashboard after Home"): its section a page of its own, drawn natively; a
+        # swipe (touch: Flutter pages by touch, not by a mouse's drag) to it
+        out["dash_field"] = await js(f"""(async () => {{ const p = {find}; await new Promise(r => setTimeout(r, 300));
+            const s = [...p.shadowRoot.querySelectorAll('.card select')].find(x => [...x.options].some(o => o.value === 'dash-test'));
+            if (!s) return null; s.value = 'dash-test'; s.dispatchEvent(new Event('change')); return [...s.options].map(o => o.value); }})()""")
+        await asyncio.sleep(3)
+        async def swipe():
+            y = rect["y"] + rect["height"] * .55
+            pts = [rect["x"] + rect["width"] * f for f in (.85, .7, .55, .4, .25, .15)]
+            await cdp("Input.dispatchTouchEvent", type="touchStart", touchPoints=[{"x": pts[0], "y": y}])
+            for x in pts[1:]:
+                await asyncio.sleep(.03); await cdp("Input.dispatchTouchEvent", type="touchMove", touchPoints=[{"x": x, "y": y}])
+            await cdp("Input.dispatchTouchEvent", type="touchEnd", touchPoints=[])
+            await asyncio.sleep(1.5)
+        for _ in range(3):
+            await swipe()
+            out["dash_labels"] = await js(labels) or []
+            if any("Living Room" in l for l in out["dash_labels"]): break
+        await shot("-dashboard")
         # another app's Home into Echo-Wall's, by what both share (its descriptor: tint = theme, favs = favorites)
         out["import"] = await js(f"""(async () => {{ const p = {find};
             p.take('org.example.screen', {{ tint: 'light', favs: ['light.kitchen_lights', 'light.ceiling_lights'] }}, null, 'a test');
@@ -155,6 +174,12 @@ async def browser(session, token, png):
                 const changed = Object.keys(Object.assign({{}}, c.draft, c.saved)).filter(k => JSON.stringify(c.draft[k]) !== JSON.stringify(c.saved[k]));
                 return {{ dirty: p.dirty(), changed, hidden: changed }}; }})()""") or {})
         await shot("-edit")
+        # every card at every size, with this Home Assistant's devices (the preview's gallery)
+        out["gallery"] = await js(f"""(async () => {{ const p = {find}; const i = [...p.shadowRoot.querySelectorAll('.pbar .switch input')][1];
+            if (!i) return null; i.click(); await new Promise(r => setTimeout(r, 2500)); return true; }})()""")
+        out["gallery_labels"] = await js(labels) or []
+        await shot("-gallery")
+        await js(f"(() => {{ const i = [...{find}.shadowRoot.querySelectorAll('.pbar .switch input')][1]; if (i) i.click(); }})()")
         out["export"] = await js(f"""(() => {{ const p = {find}; const o = URL.createObjectURL;
             URL.createObjectURL = (b) => {{ b.text().then(t => window.__exp = t); return 'blob:x'; }};
             p.exportFile(); URL.createObjectURL = o; return true; }})()""")
@@ -410,6 +435,12 @@ async def run(tmp):
             r = await c.ws(type="echo_local/kiosk/push", echo=NODE)
             check((r.get("push") or {}).get("ok"), f"Send to the Echo again ({r})")
 
+            # a sections dashboard for the preview to draw natively (as Home Assistant's editor saves one)
+            await c.ws(type="lovelace/dashboards/create", url_path="dash-test", title="Test dashboard", mode="storage", show_in_sidebar=False, require_admin=False)
+            await c.ws(type="lovelace/config/save", url_path="dash-test", config={"views": [{"title": "Home", "type": "sections", "sections": [
+                {"type": "grid", "cards": [{"type": "heading", "heading": "Living Room"}, {"type": "tile", "entity": "light.ceiling_lights"},
+                                           {"type": "thermostat", "entity": "climate.ecobee"}, {"type": "custom:mushroom-chips-card"}]}]}]})
+
             # the frontend's onboarding's last step (hr.onboard leaves it: the other tests use no browser as an administrator)
             async with session.post(f"{hr.HA}/api/onboarding/integration", headers=c.h,
                                     json={"client_id": f"{hr.HA}/", "redirect_uri": f"{hr.HA}/?auth_callback=1"}) as r: pass
@@ -428,12 +459,21 @@ async def run(tmp):
                       and (im["draft"].get("place") or {}) == ew["place"] and im.get("save"),
                       f"an import from another app by what both share, Echo-Wall's own keys kept, Save offered ({im})")
                 lay = await c.ws(type="echo_local/home/get", echo=NODE, app=EW)
-                check(not (out.get("saved") or {}).get("dirty") and lay.get("wallpaper") == "light" and lay.get("favorites") == ["light.kitchen_lights", "light.ceiling_lights"],
+                check(not (out.get("saved") or {}).get("dirty") and lay.get("wallpaper") == "light" and lay.get("favorites") == ["light.kitchen_lights", "light.ceiling_lights"]
+                      and lay.get("dashboard") == "dash-test",
                       f"Save: in Home Assistant ({out.get('saved')}, {lay})")
                 ed = out.get("edit") or {}
                 lay2 = await c.ws(type="echo_local/home/get", echo=NODE, app=EW)
                 check(ed.get("editing") and ed.get("changed") and ed.get("dirty") and lay2 == lay,
                       f"the panel's switch: the preview's edit mode; a tile hidden there reaches the draft, not Home Assistant ({ed})")
+                check(out.get("dash_field") and "dash-test" in out["dash_field"] and "lovelace" in out["dash_field"],
+                      f"the form's dashboard field: Home Assistant's dashboards ({out.get('dash_field')})")
+                dl = " ".join(out.get("dash_labels") or [])
+                check("Living Room" in dl and "Ceiling Lights" in dl and "Ecobee" in dl and "Mushroom chips card" in dl,
+                      f"the dashboard's section a page after Home, drawn natively: a tile, a thermostat, a card it cannot draw ({dl[:200]})")
+                gl = " ".join(out.get("gallery_labels") or [])
+                check(out.get("gallery") and "Analog clock" in gl and "Large · 2x2" in gl and "Thermostat" in gl,
+                      f"Card sizes: every card at every size in the preview ({gl[:160]})")
                 x = out.get("exported") or {}
                 check(x.get("format") == "echo-local-home" and x.get("app") == EW and x.get("echo") == NODE
                       and (x.get("common") or {}).get("theme") == "light" and x.get("layout", {}).get("wallpaper") == "light",
