@@ -11,6 +11,8 @@ LIBS    := libpryon.so libopus.so libz.so
 RING    := src/hassmic/ring_band.c
 # a screen: the clock, the request's words and alarms above the band (display.h)
 SCREEN  := src/hassmic/display_screen.c
+# the Echo's own voice: Fire OS's offline Ivona engine through its app's JNI glue, dlopen'd (docs/re-ivona.md)
+SPEECH  := src/hassmic/speech_ivona.c
 # NDK system libraries the backend needs (not stock: no stubs for them)
 SYSLIBS := -lOpenSLES
 
