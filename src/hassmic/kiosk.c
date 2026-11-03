@@ -72,6 +72,7 @@ static long long shell_started;
 #define HOME_PKG  "org.hassmic.home"       /* hassmic's codeless black home (tools/mkhome.py): in front = no app */
 #define GONE_MS   5000                     /* nothing in front this long (an app closed, crashed): the screen app again */
 #define LAUNCH_MS 15000                    /* and started again at most this often */
+#define SHELL_GONE_MS 40000                /* the shell polls every 15 s: two missed, its bar is gone (no touch held for it) */
 
 static long long mono_ms(void) { struct timespec t; clock_gettime(CLOCK_MONOTONIC, &t); return t.tv_sec * 1000LL + t.tv_nsec / 1000000; }
 static void path(char *out, size_t cap)
@@ -521,6 +522,30 @@ void kiosk_shell_pull(const char *edge, float at)
     pthread_mutex_unlock(&lock);
 }
 
+/* the shell's word of the screen's orientation (GET /kiosk/shell/orientation/land|port, at its start, on every turn and
+ * with each poll) and whether its bar is on: the touch gate holds a touch at the top edge only while both are known */
+static int shell_land = -1, shell_on;
+int kiosk_shell_orientation(const char *o)
+{
+    int land = !strcmp(o, "land") ? 1 : !strcmp(o, "port") ? 0 : -1;
+    if (land < 0) return -1;
+    pthread_mutex_lock(&lock); shell_land = land; shell_seen_at = mono_ms(); pthread_mutex_unlock(&lock);
+    return 0;
+}
+
+const char *kiosk_shell_top(void)
+{
+    static char edge[2][3];
+    const char *t = board.touch_top;
+    if (!t || strlen(t) != 5 || t[2] != ' ') return NULL;
+    pthread_mutex_lock(&lock);
+    int land = shell_land, ok = shell_on && shell_seen_at && mono_ms() - shell_seen_at < SHELL_GONE_MS;
+    pthread_mutex_unlock(&lock);
+    if (!ok || land < 0) return NULL;
+    memcpy(edge[0], t, 2); memcpy(edge[1], t + 3, 2);
+    return edge[land ? 0 : 1];
+}
+
 size_t kiosk_shell_wait(unsigned v, int ms, char *out, size_t cap)
 {
     struct timespec ts; clock_gettime(CLOCK_REALTIME, &ts);
@@ -548,7 +573,7 @@ int kiosk_shell_peer_ok(int fd)
  * screen app opens one by its SCREEN intent's extra "screen") */
 char *kiosk_shell_json(int enabled, size_t *len)
 {
-    pthread_mutex_lock(&lock); shell_seen_at = mono_ms(); pthread_mutex_unlock(&lock);
+    pthread_mutex_lock(&lock); shell_seen_at = mono_ms(); shell_on = enabled; pthread_mutex_unlock(&lock);
     size_t cap = 4096, n = 0; char *o = malloc(cap);
     if (!o) return NULL;
     char fg[APP_MAX + 1]; int f = kiosk_in_front(fg, sizeof fg);

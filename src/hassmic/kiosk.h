@@ -54,4 +54,8 @@ void  kiosk_shell_pull(const char *edge, float at);
 /* the shell's long poll: the pulls after version v, waiting up to ms; JSON {"v","edge","at","top"} into out */
 size_t kiosk_shell_wait(unsigned v, int ms, char *out, size_t cap);
 char *kiosk_shell_json(int enabled, size_t *len);
+/* the shell says the screen's orientation ("land", "port"; -1: neither) */
+int   kiosk_shell_orientation(const char *o);
+/* the panel's edge (board.touch_top) that is the screen's top now, while the shell runs with its bar on; else NULL */
+const char *kiosk_shell_top(void);
 #endif

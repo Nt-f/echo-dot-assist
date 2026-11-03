@@ -103,8 +103,31 @@ public class Shell extends Service {
 
     int dp(float v) { return (int) TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, v, getResources().getDisplayMetrics()); }
 
+    /* the screen's orientation for hassmic's touch gate (which panel edge is the top, where a pull is held back from the
+     * app): at the start, with every poll, and at once when the screen turns */
+    String orientation() {
+        android.util.DisplayMetrics m = new android.util.DisplayMetrics();
+        wm.getDefaultDisplay().getRealMetrics(m);
+        return m.widthPixels > m.heightPixels ? "land" : "port";
+    }
+
+    void tellOrientation() {
+        try {
+            HttpURLConnection c = (HttpURLConnection) new URL(CONFIG + "/orientation/" + orientation()).openConnection();
+            c.setConnectTimeout(2000); c.setReadTimeout(3000);
+            c.getResponseCode(); c.disconnect();
+        } catch (Exception e) { }               // hassmic restarting: the next poll says it
+    }
+
+    @Override
+    public void onConfigurationChanged(android.content.res.Configuration cfg) {
+        super.onConfigurationChanged(cfg);
+        new Thread(this::tellOrientation, "shell-turn").start();
+    }
+
     void poll() {
         while (running) {
+            tellOrientation();
             try {
                 HttpURLConnection c = (HttpURLConnection) new URL(CONFIG).openConnection();
                 c.setConnectTimeout(2000); c.setReadTimeout(3000);

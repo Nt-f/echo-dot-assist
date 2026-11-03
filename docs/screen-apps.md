@@ -135,14 +135,24 @@ hassmic's kiosk app (`io.github.gamer92000.echodotassist.kiosk`) runs, beside wh
 process of its own (`:shell`):
 
 - **The bar** (`Shell.java`): a swipe down from the middle of the top edge opens the bar over
-  any app. No window lies over the edge: hassmic reads the touchscreen beside Android (`display_screen.c`
-  `touch_thread`, the same evdev the app gets), and a touch that starts within 4 % of a panel edge and moves 10 %
-  inwards is a pull; the shell long-polls `GET /kiosk/shell/pull/<v>` (`{v, edge, at, top}`: the panel edge, where
-  along it, and `board.touch_top`, which panel edge is the top in landscape and in portrait) and opens the bar for the
-  screen's top edge with `at` in 0.3-0.7. The app below sees the whole touch too (a tap at the top is its own, and a
-  swipe down also reaches it, as a notification shade's does); like HTML's `preventDefault`, nothing can be taken back
-  from the app, so only a gesture an app rarely uses there opens the bar. Where hassmic reads no touchscreen (`pulls`
-  false in `/kiosk/shell`) the shell falls back to an invisible strip over the middle 40 % of the top 18 dp. The bar: Home (the screen app), the screen app's web screens, then the apps the owner installed. A touch elsewhere,
+  any app, and the app below never gets that swipe, as Android's own status bar takes its own. No window lies over the
+  edge for it: hassmic stands between the touch screen and Android (`touchgate.c`, called from `display_screen.c`
+  `touch_thread`). It grabs the panel's evdev device and writes every touch on to a uinput copy of it, which Android
+  takes for the touch screen. A touch that starts in the middle 40 % of the top edge (within 4 % of it) is held back
+  until it shows what it is. If it comes down 5 % of the screen, mostly straight, it is a pull: the bar's alone, and
+  since the app never saw its start nothing has to be cancelled. If it lifts (a tap), goes 3 % sideways, gets a second
+  finger, or rests 300 ms (a long press), it goes on to the app from where it began; nothing is held past 600 ms.
+  Every other touch goes on at once. Which panel edge is the screen's top comes from `board.touch_top` and the
+  orientation the shell reports (`GET /kiosk/shell/orientation/land|port`, at its start, on every turn, with each
+  poll). Nothing is held while the shell is not polling or its bar is off. The shell long-polls
+  `GET /kiosk/shell/pull/<v>` (`{v, edge, at, top}`) and opens the bar. hassmic checks that the copy's node is in
+  `/dev/input` before it grabs the panel, so Android is never left without the touch screen. Without the copy it reads
+  beside Android, and the app gets the pull too. Without a touch reader at all (`pulls` false in `/kiosk/shell`), the
+  shell falls back to an invisible strip over the middle 40 % of the top 18 dp. One cost: Amazon's `touchlogger`
+  (touch telemetry, which also resets the panel when it sees a storm of ghost touches) reads the grabbed panel, so it
+  sees nothing.
+
+  The bar: Home (the screen app), the screen app's web screens, then the apps the owner installed. A touch elsewhere,
   a swipe up or 8 s close it. hassmic starts it (`am startservice`) when it has not polled `GET /kiosk/shell` for a
   minute; that answer (`{enabled, app, front, contract, screens: [names]}`) goes to this app's uid only.
 - **The watcher** (`Watcher.java`): an accessibility service that tells hassmic, `GET /kiosk/shell/front/<package>`,

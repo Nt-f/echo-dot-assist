@@ -1183,6 +1183,11 @@ static void handle(int fd)
         if (!from_loopback(fd) || !kiosk_shell_peer_ok(fd) || kiosk_shell_front(r.path + 19)) respond_c(fd, 0, 404, "application/json", NULL, "{}", 2);
         else respond_c(fd, 0, 200, "application/json", NULL, "{}", 2);
     }
+    else if (!strcmp(r.method, "GET") && !strncmp(r.path, "/kiosk/shell/orientation/", 25)) {
+        /* the shell: the screen turned (or still as it was): which panel edge is the top, for the touch gate */
+        if (!from_loopback(fd) || !kiosk_shell_peer_ok(fd) || kiosk_shell_orientation(r.path + 25)) respond_c(fd, 0, 404, "application/json", NULL, "{}", 2);
+        else respond_c(fd, 0, 200, "application/json", NULL, "{}", 2);
+    }
     else if (!strcmp(r.method, "GET") && !strncmp(r.path, "/kiosk/shell/pull/", 18)) {
         /* the shell's long poll for a swipe in from the edge (hassmic reads the touch screen): answers once there is a
          * newer one than <v>, or after 25 s */

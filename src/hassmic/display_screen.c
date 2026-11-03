@@ -17,8 +17,10 @@
  * the clock in a dim red between display_night_start and _end, or while the room is dark (the light sensor, under
  * 3 lux).  The backlight is Android's screen_brightness, set through the settings tool as the band's timeout is.
  *
- * Touch: the panel's evdev device (board.touch, read beside Android's input, never grabbed): a tap while an alarm
- * rings snoozes it (a timer: stops it), a press of 1.5 s stops it (core_touch).
+ * Touch: the panel's evdev device (board.touch): a tap while an alarm rings snoozes it (a timer: stops it), a press of
+ * 1.5 s stops it (core_touch).  Where the board says which edge is the top (board.touch_top), hassmic stands between
+ * the panel and Android (touchgate.h: grabbed, a uinput copy for Android) so a pull from the top is the shell's bar's
+ * alone; failing that it reads beside Android, and the app sees the pull too.
  */
 #ifndef _GNU_SOURCE
 #define _GNU_SOURCE
@@ -30,6 +32,7 @@
 #include "kiosk.h"
 #include "ring.h"
 #include "statefile.h"
+#include "touchgate.h"
 #include <arpa/inet.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -39,6 +42,7 @@
 #include <signal.h>
 #include <limits.h>
 #include <linux/input.h>
+#include <linux/uinput.h>
 #include <math.h>
 #include <poll.h>
 #include <pthread.h>
@@ -448,6 +452,12 @@ static int is_night(const struct look *l, int dark_room)
 
 /* ---------------------------------------------------------------- touch */
 
+static int tg_write(void *ctx, const struct input_event *ev, int n)
+{
+    int u = *(int *)ctx;
+    return write(u, ev, (size_t)n * sizeof *ev) == (ssize_t)((size_t)n * sizeof *ev) ? 0 : -1;
+}
+
 static void *touch_thread(void *arg)
 {
     const char *spec = arg; int fd = -1;
@@ -460,20 +470,47 @@ static void *touch_thread(void *arg)
         }
     } else fd = open(spec, O_RDONLY);
     if (fd < 0) { fprintf(stderr, "display: no touch screen (%s)\n", spec); return NULL; }
-    fprintf(stderr, "display: touches from %s\n", spec);
-    /* the panel's own axes, for the swipe in from an edge (the shell's bar, docs/screen-apps.md "The shell"): seen here
-     * beside Android, so no window over the apps has to take the touch, and the app under the finger gets it all */
+    /* the panel's own axes, for the swipe in from an edge (the shell's bar, docs/screen-apps.md "The shell") */
     struct input_absinfo ax = { 0 }, ay = { 0 };
     int axes = board.touch_top && !ioctl(fd, EVIOCGABS(ABS_MT_POSITION_X), &ax) && !ioctl(fd, EVIOCGABS(ABS_MT_POSITION_Y), &ay)
                && ax.maximum > ax.minimum && ay.maximum > ay.minimum;
+    /* hassmic between the panel and Android (touchgate.h): a pull from the top is the bar's alone, as Android's status
+     * bar takes it.  Without a uinput copy or the grab: beside Android, the app sees the pull too */
+    int u = -1; struct tg gate;
+    if (axes && (u = tg_mirror(fd)) >= 0) {
+        if (ioctl(fd, EVIOCGRAB, 1)) { ioctl(u, UI_DEV_DESTROY); close(u); u = -1; }
+        else tg_init(&gate, &ax, &ay);
+    }
+    fprintf(stderr, "display: touches from %s%s\n", spec, u >= 0 ? " (through hassmic: a pull from the top is the bar's)" : axes ? " (beside Android)" : "");
     long long down = 0; struct input_event ev;
     /* the kernel drops a position equal to the last one sent, so a finger down where the last one was lifted sends none:
      * start from the panel's current values (EVIOCGABS gave them) */
     int x = axes ? ax.value : -1, y = axes ? ay.value : -1, sx = -1, sy = -1, pulled = 0;
-    while (read(fd, &ev, sizeof ev) == (ssize_t)sizeof ev) {
+    for (;;) {
+        if (u >= 0) {
+            /* a held touch goes on to the app when it rests: wait no longer than that */
+            int w = tg_wait_ms(&gate, mono_ms());
+            struct pollfd p = { fd, POLLIN, 0 };
+            int k = poll(&p, 1, w);
+            if (k == 0) { if (tg_tick(&gate, mono_ms(), tg_write, &u) < 0) goto passive; continue; }
+            if (k < 0) { if (errno == EINTR) continue; break; }
+        }
+        if (read(fd, &ev, sizeof ev) != (ssize_t)sizeof ev) break;
+        if (u >= 0) {
+            float at = -1; int r = tg_event(&gate, &ev, mono_ms(), kiosk_shell_top(), tg_write, &u, &at);
+            if (r < 0) goto passive;
+            if (r > 0) { pulled = 1; kiosk_shell_pull(gate.edge, at); }
+        }
+        if (0) {
+passive:
+            /* Android's copy refused a write: the panel back to Android as it was, hassmic beside it */
+            fprintf(stderr, "display: the touch copy failed (%s): touches beside Android\n", strerror(errno));
+            ioctl(fd, EVIOCGRAB, 0); ioctl(u, UI_DEV_DESTROY); close(u); u = -1;
+            continue;
+        }
         if (axes && ev.type == EV_ABS && ev.code == ABS_MT_POSITION_X) { x = ev.value; continue; }
         if (axes && ev.type == EV_ABS && ev.code == ABS_MT_POSITION_Y) { y = ev.value; continue; }
-        if (axes && ev.type == EV_SYN && ev.code == SYN_REPORT && down && x >= 0 && y >= 0) {
+        if (axes && u < 0 && ev.type == EV_SYN && ev.code == SYN_REPORT && down && x >= 0 && y >= 0) {
             if (sx < 0) { sx = x; sy = y; }
             if (!pulled) {
                 /* started within 4 % of an edge, moved in by 10 % of that axis: a pull from that edge */
@@ -496,6 +533,7 @@ static void *touch_thread(void *arg)
             if (held < TAP_MS) core_touch(0); else if (held >= HOLD_MS) core_touch(1);
         }
     }
+    if (u >= 0) { ioctl(fd, EVIOCGRAB, 0); ioctl(u, UI_DEV_DESTROY); close(u); }
     fprintf(stderr, "display: the touch screen went away\n");
     close(fd);
     return NULL;

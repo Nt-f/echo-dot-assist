@@ -9,8 +9,8 @@ What changed for people using the Echo, newest first. Details and measurements a
   you installed. The screen app can be hassmic's kiosk, Echo-Wall, or any app on the Echo (Echo Local › Screen ›
   App lists them); one not made for hassmic logs in to Home Assistant by itself, and hassmic draws the words of a
   request and a ringing alarm over it. The Echo's keyboard is hassmic's too now, for every app. When an app closes,
-  the screen app comes back by itself. Nothing covers the top edge to catch that swipe: a tap there goes to the app
-  below as anywhere else.
+  the screen app comes back by itself. The swipe is the bar's alone, as Android's own pull-down is: the app below
+  never gets it, while a tap or any other touch at the top edge is still the app's.
 - **An app on the Echo Show can be reached from your network** (issue #109): each app has a **Network** switch beside
   its Internet one (settings page, Echo Local's Apps tab). On, the firewall admits the ports that app listens on, from
   your own network only, and follows them when the app moves to another one: Kiosk Satellite's DLNA renderer (its port
