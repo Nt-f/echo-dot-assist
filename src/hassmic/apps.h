@@ -11,11 +11,14 @@
 #define APPS_H
 #include <stddef.h>
 
-/* malloc'd JSON: {"apps":[{"package","net"}...]}: every app installed in /data/app that is no system app's update,
+/* malloc'd JSON: {"apps":[{"package","net","lan"}...]}: every app installed in /data/app that is no system app's update,
  * and whether it may reach the internet; NULL where there is no Android (packages.xml) or no memory */
 char *apps_json(size_t *len);
 /* net 1: the package may reach the internet; 0 ok, -1 not an installed app of the owner's, -2 not written */
 int   apps_set_net(const char *pkg, int on);
+/* lan 1: the ports the package listens on may be reached from the home network (private and link-local addresses:
+ * root's firewall, lockdown.sh hassmic_in; issue #109: a DLNA renderer, a cast receiver); 0 ok, as apps_set_net */
+int   apps_set_lan(const char *pkg, int on);
 
 /* An APK in pieces (state/apps-staged.apk), each at most APPS_CHUNK, in order: offset 0 starts anew.  0 ok, -1 not
  * at the end of what is staged (409), -2 too big, -3 not written */

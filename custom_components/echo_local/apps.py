@@ -12,6 +12,8 @@ Websocket (administrators only, as the options are):
 
     echo_local/apps/list       {echo}                 the Echo's answer, plus "send": this side's upload to the Echo
     echo_local/apps/net        {echo, package, on}    internet for that app
+    echo_local/apps/lan        {echo, package, on}    that app reachable from the home network (the ports it listens on:
+                                                      a DLNA renderer, a cast receiver; issue #109)
     echo_local/apps/uninstall  {echo, package}        removed (root refuses the screen app)
     echo_local/apps/install    {echo, path}           an APK from a folder Home Assistant may read"""
 from __future__ import annotations
@@ -116,7 +118,7 @@ class ApkUploadView(HomeAssistantView):
 
 async def async_setup(hass: HomeAssistant) -> None:
     hass.http.register_view(ApkUploadView())
-    for c in (ws_list, ws_net, ws_uninstall, ws_install):
+    for c in (ws_list, ws_net, ws_lan, ws_uninstall, ws_install):
         websocket_api.async_register_command(hass, c)
 
     async def install_apk(call: ServiceCall) -> None:
@@ -152,6 +154,19 @@ async def ws_list(hass: HomeAssistant, connection, msg: dict) -> None:
 async def ws_net(hass: HomeAssistant, connection, msg: dict) -> None:
     try:
         await _entry(hass, msg["echo"]).runtime_data.echo.app_net(msg["package"], msg["on"])
+    except (EchoError, HomeAssistantError) as e:
+        connection.send_error(msg["id"], "echo", str(e))
+        return
+    connection.send_result(msg["id"])
+
+
+@websocket_api.require_admin
+@websocket_api.websocket_command({vol.Required("type"): "echo_local/apps/lan", vol.Required("echo"): str,
+                                  vol.Required("package"): PKG, vol.Required("on"): bool})
+@websocket_api.async_response
+async def ws_lan(hass: HomeAssistant, connection, msg: dict) -> None:
+    try:
+        await _entry(hass, msg["echo"]).runtime_data.echo.app_lan(msg["package"], msg["on"])
     except (EchoError, HomeAssistantError) as e:
         connection.send_error(msg["id"], "echo", str(e))
         return

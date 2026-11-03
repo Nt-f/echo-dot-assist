@@ -7,9 +7,10 @@ What protects an Echo running hassmic, and where that ends. Nobody has audited a
 
 | Direction | What gets through |
 |---|---|
-| **Out** | Amazon's daemons: local addresses only, plus DNS to the servers DHCP hands out. `otad` and `ace_otad` (firmware updates): never. hassmic itself: anywhere, to fetch replies and music from where Home Assistant or Music Assistant point it. |
+| **Out** | Amazon's daemons: local addresses only, plus DNS to the servers DHCP hands out. `otad` and `ace_otad` (firmware updates): never. hassmic itself: anywhere, to fetch replies and music from where Home Assistant or Music Assistant point it. An app you installed on an Echo Show: local addresses only, until you switch its **Internet** on (settings page or Echo Local's Apps tab); Amazon's apps never. |
 | **In, TCP** | 16384–32767 only: 26053 ESPHome, 16700 Wyoming, 28928 Sendspin, 28929 updates, 28931 settings page |
 | **In, UDP** | 16384–32767 only (28930: arbitration between Echos, 28932: Drop In audio), and 2330 only while arbitration is in Kiosk Satellite mode (their fixed port) |
+| **In, an app's own ports** | Echo Shows: none, until you switch an app's **Network** on; then the TCP ports it listens on and the UDP ports it holds (a DLNA renderer's, its SSDP 1900), from private and link-local addresses only, found by the app's uid in the kernel's socket tables and followed when they move (issue #109). Never below 1024, never an Amazon app's. |
 | **In, ICMP** | ping (echo request) from private and link-local addresses only; answers to the Echo's own traffic |
 
 Put the Echo on a network without internet as a second layer.

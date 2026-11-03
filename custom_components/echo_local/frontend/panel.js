@@ -343,6 +343,11 @@ class EchoLocalPanel extends HTMLElement {
           try { await this.ws({ type: 'echo_local/apps/net', echo: this.echo, package: app.package, on }); app.net = on; this.toast(`${app.package}: ${on ? 'may reach the internet' : 'kept off the internet'}`); }
           catch (e) { this.toast('Not changed: ' + ((e && e.message) || e)); this.loadApps(); }
         }),
+        h('span', { class: 'note', title: 'Reachable from your network: the ports this app listens on, from your own network only (a DLNA renderer, a cast receiver)' }, 'Network'),
+        this.switch(!!app.lan, async (on) => {
+          try { await this.ws({ type: 'echo_local/apps/lan', echo: this.echo, package: app.package, on }); app.lan = on; this.toast(`${app.package}: ${on ? 'reachable from your network' : 'not reachable from your network'}`); }
+          catch (e) { this.toast('Not changed: ' + ((e && e.message) || e)); this.loadApps(); }
+        }),
         h('button', { class: 'btn small danger', disabled: isScreen || busy, title: isScreen ? 'The screen app: pick another one under Screen first' : '', onclick: async () => {
           if (!confirm(`Remove ${app.package} from the Echo? Its data goes with it.`)) return;
           try { await this.ws({ type: 'echo_local/apps/uninstall', echo: this.echo, package: app.package }); this.loadApps(); }
@@ -401,7 +406,7 @@ class EchoLocalPanel extends HTMLElement {
 
     box.append(h('div', { class: 'grid' },
       h('div', { class: 'card' }, h('h2', null, 'Apps on this Echo'),
-        h('div', { class: 'about' }, 'The apps you installed beside the screen app (not Amazon’s or Android’s own). Each shows on Echo-Wall’s Home and in its switcher. The Echo keeps every app off the internet until you switch it on here.'),
+        h('div', { class: 'about' }, 'The apps you installed beside the screen app (not Amazon’s or Android’s own). Each shows in the bar pulled down from the top of the screen. The Echo keeps every app off the internet until you switch its Internet on, and out of reach of your network until you switch its Network on (then only the ports it listens on, from your own network).'),
         list, h('div', { style: 'height:12px' })),
       h('div', { class: 'card' }, h('h2', null, 'Add an app'),
         h('div', { class: 'about' }, 'An APK built for 32-bit ARM (armeabi-v7a) and Android 7.1 (the Echo Show 5); up to 200 MB. Installing an app that is there already updates it (same signature).'),

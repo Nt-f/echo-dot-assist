@@ -229,6 +229,7 @@ UNIT_TESTS := hash ws noise ble_crypto micgain micend afemeta wordtail wakealign
 	sbc web_crypto web_tar web_soundpack web_matrix web_loudness ring_pack mww blueprint_dropin buttons buttons_privacy afe_parcel lux ring_band sounds wifictl ringbar volcurve band_map setup_wipe alarms display
 UNIT_TESTS += errsay
 UNIT_TESTS += apps
+UNIT_TESTS += lockdown
 unit: $(addprefix unit-,$(UNIT_TESTS))
 
 # errsay.c: Home Assistant's pipeline errors as the sentences the Echo says
@@ -274,6 +275,10 @@ unit-spkgain:
 unit-tz:
 	@mkdir -p build
 	cc -O2 -Wall -Wextra -Isrc/hassmic tests/unit/tz_test.c src/hassmic/tz.c -o build/tz_test && .venv/bin/python tests/unit/tz_ref.py build/tz_test
+# lockdown.sh's per-app rules (the internet, the home network: issue #109) against stand-in tables
+unit-lockdown:
+	python3 tests/unit/lockdown_test.py
+
 unit-apps:
 	@mkdir -p build
 	cc -O2 -Wall -Wextra -Isrc/hassmic tests/unit/apps_test.c src/hassmic/apps.c src/hassmic/statefile.c src/third_party/monocypher.c -lpthread -o build/apps_test && build/apps_test

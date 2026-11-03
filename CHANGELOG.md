@@ -4,6 +4,10 @@ What changed for people using the Echo, newest first. Details and measurements a
 
 ## 2026-11-03
 
+- **An app on the Echo Show can be reached from your network** (issue #109): each app has a **Network** switch beside
+  its Internet one (settings page, Echo Local's Apps tab). On, the firewall admits the ports that app listens on, from
+  your own network only, and follows them when the app moves to another one: Kiosk Satellite's DLNA renderer (its port
+  and SSDP discovery on 1900) works, as does any other app that phones or media servers talk to. Off by default.
 - **Echo-Wall is an app of its own now, with its own Home Assistant integration.** Its home screens moved out of
   Echo Local into the Echo-Wall integration (installed from github.com/Nt-f/Echo-Wall with HACS), whose sidebar panel
   "Echo-Wall" arranges every device running the app, Echo Shows and any Android tablet alike (the app logs in to Home

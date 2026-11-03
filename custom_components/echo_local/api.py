@@ -160,6 +160,10 @@ class Echo:
     async def app_net(self, package: str, on: bool) -> None:
         await self.call("POST", "/api/apps", f"net {package} {1 if on else 0}".encode())
 
+    async def app_lan(self, package: str, on: bool) -> None:
+        """the app reachable from the home network: the ports it listens on, from private addresses (issue #109)"""
+        await self.call("POST", "/api/apps", f"lan {package} {1 if on else 0}".encode())
+
     async def apk_send(self, path: str, progress=None) -> tuple[int, str]:
         """an APK sent in pieces from offset 0 (a new upload: an earlier one dropped), read from the file as it goes
         (up to 200 MB: not held in memory); its size and BLAKE2b-256, which the install names"""

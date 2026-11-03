@@ -708,7 +708,7 @@ static void kiosk_api(int fd, struct req *r)
 }
 
 /* The owner's apps (apps.h): GET /api/apps the installed ones, which may reach the internet and how the last install
- * or removal went; POST "net <package> 0|1".  POST /api/apps/apk/<offset> a piece of an APK (APPS_CHUNK at most, in
+ * or removal went; POST "net <package> 0|1" (the internet) or "lan <package> 0|1" (reachable from the home network).  POST /api/apps/apk/<offset> a piece of an APK (APPS_CHUNK at most, in
  * order), /api/apps/apk/install "<size> <BLAKE2b-256 hex>", /api/apps/uninstall "<package>": root's apps.sh does them,
  * GET /api/apps says when (install.state).  An approved client only (this page, the Echo Local integration): an app
  * runs code on the Echo, and the internet switch opens the firewall for it */
@@ -753,10 +753,11 @@ static void apps_api(int fd, struct req *r)
         respond_s(fd, r, 200, "application/json", NULL, j, n); free(j); return;
     }
     char pkg[160]; int on = -1;
-    if (!r->body || sscanf(r->body, "net %159s %d", pkg, &on) != 2 || (on != 0 && on != 1)) {
-        respond_sjson(fd, r, 400, "{\"error\":\"net <package> 0|1\"}"); return;
+    char kind[4] = "";
+    if (!r->body || sscanf(r->body, "%3s %159s %d", kind, pkg, &on) != 3 || (strcmp(kind, "net") && strcmp(kind, "lan")) || (on != 0 && on != 1)) {
+        respond_sjson(fd, r, 400, "{\"error\":\"net|lan <package> 0|1\"}"); return;
     }
-    int e = apps_set_net(pkg, on);
+    int e = kind[0] == 'n' ? apps_set_net(pkg, on) : apps_set_lan(pkg, on);
     if (e == -1) respond_sjson(fd, r, 400, "{\"error\":\"not an app installed on this Echo\"}");
     else if (e) respond_sjson(fd, r, 500, "{\"error\":\"cannot write state/apps\"}");
     else respond_sjson(fd, r, 200, "{\"ok\":true}");

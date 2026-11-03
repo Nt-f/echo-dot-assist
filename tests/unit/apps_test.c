@@ -40,7 +40,7 @@ int main(void)
 
     size_t n; char *j = apps_json(&n);
     CHECK(j && n == strlen(j));
-    CHECK(j && !strcmp(j, "{\"apps\":[{\"package\":\"org.schabi.newpipe\",\"version\":1015,\"net\":false},{\"package\":\"org.hassmic.screen\",\"version\":0,\"net\":false}],"
+    CHECK(j && !strcmp(j, "{\"apps\":[{\"package\":\"org.schabi.newpipe\",\"version\":1015,\"net\":false,\"lan\":false},{\"package\":\"org.hassmic.screen\",\"version\":0,\"net\":false,\"lan\":false}],"
                           "\"install\":{\"state\":\"idle\",\"package\":\"\",\"error\":\"\",\"have\":0}}"));
     free(j);
 
@@ -56,11 +56,22 @@ int main(void)
     CHECK(apps_set_net("a..b", 0) == -1);
     CHECK(apps_set_net("org.hassmic.screen", 1) == 0);
     j = apps_json(NULL);
-    CHECK(j && strstr(j, "{\"package\":\"org.schabi.newpipe\",\"version\":1015,\"net\":true}") && strstr(j, "{\"package\":\"org.hassmic.screen\",\"version\":0,\"net\":true}"));
+    CHECK(j && strstr(j, "{\"package\":\"org.schabi.newpipe\",\"version\":1015,\"net\":true,\"lan\":false}") && strstr(j, "{\"package\":\"org.hassmic.screen\",\"version\":0,\"net\":true,\"lan\":false}"));
     free(j);
     CHECK(apps_set_net("org.schabi.newpipe", 0) == 0);
     CHECK(!strcmp(file(st), "net org.hassmic.screen\n"));
     CHECK(apps_set_net("not.installed", 0) == 0);                   /* taking off one gone is fine */
+    /* reachable from the home network (issue #109): a list of its own beside the internet's, the same checks */
+    CHECK(apps_set_lan("org.schabi.newpipe", 1) == 0);
+    CHECK(!strcmp(file(st), "net org.hassmic.screen\nlan org.schabi.newpipe\n"));
+    CHECK(apps_set_lan("com.amazon.webview.chromium", 1) == -1);    /* never Amazon's */
+    CHECK(apps_set_lan("a;b", 1) == -1);
+    j = apps_json(NULL);
+    CHECK(j && strstr(j, "{\"package\":\"org.schabi.newpipe\",\"version\":1015,\"net\":false,\"lan\":true}")
+            && strstr(j, "{\"package\":\"org.hassmic.screen\",\"version\":0,\"net\":true,\"lan\":false}"));
+    free(j);
+    CHECK(apps_set_net("org.hassmic.screen", 0) == 0 && apps_set_lan("org.schabi.newpipe", 0) == 0);
+    CHECK(!strcmp(file(st), ""));
 
     /* an APK in pieces, checked whole, handed to root; root's answer read back */
     char res[300], req[300], apk[300];

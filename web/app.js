@@ -985,7 +985,7 @@ function appsCard() {
   const card = h('div', { class: 'card hidden', id: 'apps' },
     cardHead('Apps', 'Apps you installed beside the screen app', 'box', h('div', { class: 'ringd-headbtns' },
       h('button', { class: 'small', onclick: () => file.click() }, icon('up'), 'Add app…'), file),
-      'An app added here (an APK file: a 32-bit ARM build, armeabi-v7a, for Android 7.1) appears on the screen app\'s Home and in its switcher by itself; pull down from the middle of the top edge for the bar of apps and Home. The Echo\'s firewall keeps everything but hassmic on your own network, so an app reaches the internet only once it is switched on here. Amazon\'s own apps can never be. The Echo Local integration in Home Assistant can add and remove apps too.'),
+      'An app added here (an APK file: a 32-bit ARM build, armeabi-v7a, for Android 7.1) appears on the screen app\'s Home and in its switcher by itself; pull down from the middle of the top edge for the bar of apps and Home. The Echo\'s firewall keeps everything but hassmic on your own network, so an app reaches the internet only once its Internet switch is on here, and nothing on your network can reach an app until its Network switch is on (then only the ports that app itself listens on, from your own network: a DLNA renderer, a cast receiver). Amazon\'s own apps can never be. The Echo Local integration in Home Assistant can add and remove apps too.'),
     appsBox, appsMsg);
   file.onchange = () => { const f = file.files[0]; file.value = ''; if (f) apkAdd(f, card); };
   loadApps(card).catch(() => {});
@@ -999,13 +999,19 @@ async function loadApps(card) {
   if (d.none) return d;
   card.classList.remove('hidden');
   const rows = d.apps.map((a) => {
-    const sw = h('input', { type: 'checkbox', role: 'switch', 'aria-label': `Internet for ${a.package}`, onchange: async () => {
-      try { await echo.call('POST', '/api/apps', `net ${a.package} ${sw.checked ? 1 : 0}`); await loadApps(card); }
-      catch (e) { sw.checked = !sw.checked; toast(errText(e)); }
-    } });
-    sw.checked = a.net;
+    // two switches: the internet (out) and the home network (in: issue #109, a DLNA renderer, a cast receiver)
+    const toggle = (kind, label, on) => {
+      const sw = h('input', { type: 'checkbox', role: 'switch', 'aria-label': `${label} for ${a.package}`, onchange: async () => {
+        try { await echo.call('POST', '/api/apps', `${kind} ${a.package} ${sw.checked ? 1 : 0}`); await loadApps(card); }
+        catch (e) { sw.checked = !sw.checked; toast(errText(e)); }
+      } });
+      sw.checked = on;
+      return h('label', { class: 'switch', title: label }, sw, h('span'));
+    };
     const del = h('button', { class: 'icon-btn', title: 'Remove', 'aria-label': `Remove ${a.package}`, onclick: () => apkRemove(a.package, card) }, icon('trash'));
-    return infoRow(a.package, `${a.net ? 'May reach the internet' : 'Your network only'} · version ${a.version}`, null, [del, h('label', { class: 'switch' }, sw, h('span'))]);
+    const what = [a.net ? 'may reach the internet' : 'kept off the internet', a.lan ? 'reachable from your network' : 'not reachable from your network'].join(', ');
+    return infoRow(a.package, `${what[0].toUpperCase()}${what.slice(1)} · version ${a.version}`, null,
+      [del, h('span', { class: 'help' }, 'Internet'), toggle('net', 'Internet', a.net), h('span', { class: 'help' }, 'Network'), toggle('lan', 'Reachable from your network', a.lan)]);
   });
   appsBox.replaceChildren(...(rows.length ? rows : [h('p', { class: 'help' }, 'No apps installed yet.')]));
   if (!appsBusy) appsMsg.textContent = apkState(d.install || {});

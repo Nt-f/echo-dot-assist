@@ -7,7 +7,8 @@
  * instead, and system's 1000 is hassmic's).  Root's firewall (lockdown.sh app_uids) applies the same rule again: what
  * hassmic writes is only a wish.
  *
- * state/apps: "net <package>" a line, at most APPS_MAX.
+ * state/apps: "net <package>" (may reach the internet) and "lan <package>" (may be reached from the home network: root's
+ * firewall admits the ports that app listens on, from private addresses; issue #109) lines, at most APPS_MAX of each.
  *
  * Installing and removing are root's (scripts/device/apps.sh, run by main.sh's ota_watch): hassmic stages the APK in
  * state/apps-staged.apk, checks it whole, and writes state/apps-request ("<id> install <size>" or "<id> uninstall
@@ -142,23 +143,27 @@ static void install_json(char *o, size_t cap)
              ok && rest && strcmp(rest, "-") ? rest : "", failed && rest ? rest : "", staged_size());
 }
 
-struct allowed { char pkg[APPS_MAX][PKG_MAX + 1]; int n; };
+/* the two lists of state/apps: [0] the internet ("net"), [1] the home network ("lan") */
+static const char *const kinds[2] = { "net", "lan" };
+struct allowed { char pkg[2][APPS_MAX][PKG_MAX + 1]; int n[2]; };
 
 static void load(struct allowed *a)
 {
     char p[300]; state_path(p, sizeof p);
-    a->n = 0;
-    char *t = slurp(p, 8192, NULL); if (!t) return;
+    a->n[0] = a->n[1] = 0;
+    char *t = slurp(p, 16384, NULL); if (!t) return;
     for (char *l = t, *nl; l && *l; l = nl) {
         if ((nl = strchr(l, '\n'))) *nl++ = 0;
-        if (!strncmp(l, "net ", 4) && is_pkg(l + 4, strlen(l + 4)) && a->n < APPS_MAX) snprintf(a->pkg[a->n++], PKG_MAX + 1, "%s", l + 4);
+        for (int k = 0; k < 2; k++)
+            if (!strncmp(l, kinds[k], 3) && l[3] == ' ' && is_pkg(l + 4, strlen(l + 4)) && a->n[k] < APPS_MAX)
+                snprintf(a->pkg[k][a->n[k]++], PKG_MAX + 1, "%s", l + 4);
     }
     free(t);
 }
 
-static int allowed_has(const struct allowed *a, const char *pkg)
+static int allowed_has(const struct allowed *a, int k, const char *pkg)
 {
-    for (int i = 0; i < a->n; i++) if (!strcmp(a->pkg[i], pkg)) return 1;
+    for (int i = 0; i < a->n[k]; i++) if (!strcmp(a->pkg[k][i], pkg)) return 1;
     return 0;
 }
 
@@ -170,8 +175,8 @@ static void add_json(const char *pkg, long version, void *ctx)
         char *b = realloc(o->o, o->cap * 2); if (!b) return;
         o->o = b; o->cap *= 2;
     }
-    o->n += (size_t)snprintf(o->o + o->n, o->cap - o->n, "%s{\"package\":\"%s\",\"version\":%ld,\"net\":%s}", o->count++ ? "," : "", pkg,
-                             version, allowed_has(o->a, pkg) ? "true" : "false");
+    o->n += (size_t)snprintf(o->o + o->n, o->cap - o->n, "%s{\"package\":\"%s\",\"version\":%ld,\"net\":%s,\"lan\":%s}", o->count++ ? "," : "", pkg,
+                             version, allowed_has(o->a, 0, pkg) ? "true" : "false", allowed_has(o->a, 1, pkg) ? "true" : "false");
 }
 
 char *apps_json(size_t *len)
@@ -195,7 +200,7 @@ char *apps_json(size_t *len)
 struct find { const char *pkg; int found; };
 static void find_one(const char *pkg, long version, void *ctx) { (void)version; struct find *f = ctx; if (!strcmp(pkg, f->pkg)) f->found = 1; }
 
-int apps_set_net(const char *pkg, int on)
+static int set_kind(int k, const char *pkg, int on)
 {
     if (!is_pkg(pkg, strlen(pkg))) return -1;
     static struct allowed a;
@@ -205,17 +210,21 @@ int apps_set_net(const char *pkg, int on)
     /* only an installed app of the owner's is added; one gone may still be taken off */
     if (on && (each_app(find_one, &f) < 0 || !f.found)) { pthread_mutex_unlock(&lock); return -1; }
     int i = 0;
-    for (; i < a.n && strcmp(a.pkg[i], pkg); i++) {}
-    if (on && i == a.n) { if (a.n >= APPS_MAX) { pthread_mutex_unlock(&lock); return -2; } snprintf(a.pkg[a.n++], PKG_MAX + 1, "%s", pkg); }
-    if (!on && i < a.n) { memmove(a.pkg[i], a.pkg[i + 1], (size_t)(a.n - i - 1) * sizeof a.pkg[0]); a.n--; }
-    char t[APPS_MAX * (PKG_MAX + 6) + 1]; size_t n = 0;
-    for (int k = 0; k < a.n; k++) n += (size_t)snprintf(t + n, sizeof t - n, "net %s\n", a.pkg[k]);
+    for (; i < a.n[k] && strcmp(a.pkg[k][i], pkg); i++) {}
+    if (on && i == a.n[k]) { if (a.n[k] >= APPS_MAX) { pthread_mutex_unlock(&lock); return -2; } snprintf(a.pkg[k][a.n[k]++], PKG_MAX + 1, "%s", pkg); }
+    if (!on && i < a.n[k]) { memmove(a.pkg[k][i], a.pkg[k][i + 1], (size_t)(a.n[k] - i - 1) * sizeof a.pkg[k][0]); a.n[k]--; }
+    char t[2 * APPS_MAX * (PKG_MAX + 6) + 1]; size_t n = 0;
+    for (int j = 0; j < 2; j++) for (int m = 0; m < a.n[j]; m++) n += (size_t)snprintf(t + n, sizeof t - n, "%s %s\n", kinds[j], a.pkg[j][m]);
     char p[300]; state_path(p, sizeof p);
     int bad = statefile_write(p, 0644, t, n);           /* root reads it; nothing secret */
     pthread_mutex_unlock(&lock);
-    if (!bad) fprintf(stderr, "apps: %s %s the internet\n", pkg, on ? "may reach" : "kept off");
+    if (!bad) fprintf(stderr, "apps: %s %s\n", pkg, k == 0 ? (on ? "may reach the internet" : "kept off the internet")
+                                                       : (on ? "reachable from the home network" : "not reachable from the home network"));
     return bad ? -2 : 0;
 }
+
+int apps_set_net(const char *pkg, int on) { return set_kind(0, pkg, on); }
+int apps_set_lan(const char *pkg, int on) { return set_kind(1, pkg, on); }
 
 int apps_chunk(long off, const void *data, size_t n)
 {
