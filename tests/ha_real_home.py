@@ -132,7 +132,7 @@ async def browser(session, token, png):
             except Exception as e:
                 out["bright"][wp] = str(e)
         # a dashboard after Home (the form's "Dashboard after Home"): its section a page of its own, drawn natively; a
-        # swipe (touch: Flutter pages by touch, not by a mouse's drag) to it
+        # swipe of the mouse to it
         out["dash_field"] = await js(f"""(async () => {{ const p = {find}; await new Promise(r => setTimeout(r, 300));
             const s = [...p.shadowRoot.querySelectorAll('.card select')].find(x => [...x.options].some(o => o.value === 'dash-test'));
             if (!s) return null; s.value = 'dash-test'; s.dispatchEvent(new Event('change')); return [...s.options].map(o => o.value); }})()""")
@@ -140,10 +140,12 @@ async def browser(session, token, png):
         async def swipe():
             y = rect["y"] + rect["height"] * .55
             pts = [rect["x"] + rect["width"] * f for f in (.85, .7, .55, .4, .25, .15)]
-            await cdp("Input.dispatchTouchEvent", type="touchStart", touchPoints=[{"x": pts[0], "y": y}])
+            # with the mouse, as on a computer (Flutter's web default lets only touch swipe; lib/preview.dart's scrollBehavior)
+            await cdp("Input.dispatchMouseEvent", type="mouseMoved", x=pts[0], y=y)
+            await cdp("Input.dispatchMouseEvent", type="mousePressed", x=pts[0], y=y, button="left", clickCount=1)
             for x in pts[1:]:
-                await asyncio.sleep(.03); await cdp("Input.dispatchTouchEvent", type="touchMove", touchPoints=[{"x": x, "y": y}])
-            await cdp("Input.dispatchTouchEvent", type="touchEnd", touchPoints=[])
+                await asyncio.sleep(.03); await cdp("Input.dispatchMouseEvent", type="mouseMoved", x=x, y=y, button="left", buttons=1)
+            await cdp("Input.dispatchMouseEvent", type="mouseReleased", x=pts[-1], y=y, button="left", clickCount=1)
             await asyncio.sleep(1.5)
         out["seen"] = list(out["labels"])            # every page swiped past (Home's later pages: the Echo's apps' tiles)
         for _ in range(3):
@@ -196,6 +198,28 @@ async def browser(session, token, png):
             out["edit"].update(await js(f"""(() => {{ const p = {find}; const c = p.cur();
                 const changed = Object.keys(Object.assign({{}}, c.draft, c.saved)).filter(k => JSON.stringify(c.draft[k]) !== JSON.stringify(c.saved[k]));
                 return {{ dirty: p.dirty(), changed, hidden: changed }}; }})()""") or {})
+        # a card dragged with the mouse in the edit mode: to the last cell of the second row (a swap or a gap, either way
+        # a new place in the draft)
+        card = await js(f"""(() => {{ const f = {find}.shadowRoot.querySelector('iframe'); const d = f.contentDocument;
+            const c = [...d.querySelectorAll('flt-semantics')].map(e => [e, e.getBoundingClientRect()])
+              .filter(([e, b]) => b.width > 150 && b.width < 260 && b.height > 120 && b.height < 230 && b.x < 600)
+              .map(([e, b]) => ({{ x: b.x + b.width / 2, y: b.y + b.height / 2, label: (e.getAttribute('aria-label') || e.textContent || '').trim().slice(0, 30) }}));
+            return c[0] || null; }})()""")
+        before = await js(f"(() => JSON.stringify({find}.cur().draft.place || {{}}))()")
+        out["mdrag"] = {"card": card}
+        if card:
+            sx, sy = rect["x"] + card["x"] * rect["scale"], rect["y"] + card["y"] * rect["scale"]
+            tx, ty = rect["x"] + (16 + 3 * 235.5 + 110) * rect["scale"], rect["y"] + (112 + 180 + 83) * rect["scale"]
+            await cdp("Input.dispatchMouseEvent", type="mouseMoved", x=sx, y=sy)
+            await cdp("Input.dispatchMouseEvent", type="mousePressed", x=sx, y=sy, button="left", clickCount=1)
+            for i in range(1, 16):
+                await asyncio.sleep(.04)
+                await cdp("Input.dispatchMouseEvent", type="mouseMoved", x=sx + (tx - sx) * i / 15, y=sy + (ty - sy) * i / 15, button="left", buttons=1)
+            await asyncio.sleep(.4)
+            await cdp("Input.dispatchMouseEvent", type="mouseReleased", x=tx, y=ty, button="left", clickCount=1)
+            await asyncio.sleep(1.5)
+            out["mdrag"]["before"] = before
+            out["mdrag"]["after"] = await js(f"(() => JSON.stringify({find}.cur().draft.place || {{}}))()")
         await shot("-edit")
         # every card at every size, with this Home Assistant's devices (the preview's gallery)
         out["gallery"] = await js(f"""(async () => {{ const p = {find}; const i = [...p.shadowRoot.querySelectorAll('.pbar .switch input')][1];
@@ -515,6 +539,9 @@ async def run(tmp):
                 scr = out.get("screen") or {}
                 check("Show Home Assistant on the screen" in scr.get("rows", []) and "Sent to the Echo" in scr.get("push", ""),
                       f"the Screen tab: the kiosk's options, the last push ({scr.get('rows', [])[:2]}, {scr.get('push')!r})")
+                md = out.get("mdrag") or {}
+                check(md.get("card") and md.get("after") and md.get("after") != md.get("before"),
+                      f"a card dragged with the mouse in the preview's edit mode: a new place in the draft ({md.get('card')}, {md.get('before')} -> {md.get('after')})")
                 pg = out.get("pages") or {}
                 check(pg.get("first") and "Test page" in (pg.get("added") or {}).get("pages", []) and (pg.get("added") or {}).get("draft") == ["Test page"]
                       and pg.get("room") and len(pg.get("hidden") or []) == 1 and pg.get("shown") == []

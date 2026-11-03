@@ -13,6 +13,14 @@ What changed for people using the Echo, newest first. Details and measurements a
 - **Pages from Echo Local's panel.** "Pages after Home" in the form lists every page (your own, the rooms, a
   dashboard's sections): add a page, rename or delete your own, move any up or down, take a room or a dashboard
   section off and show it again. On the Echo, edit mode's "Remove page" takes a room's page off too.
+- **Moving and resizing cards on the Echo, reworked.** A card held at the screen's edge now carries on to any page,
+  another room's or Home (a device dropped on Home becomes one of Home's tiles); before, it could not leave its own
+  room. Cards pushed aside stay on their page, next to where they were, instead of jumping to another page; a resized
+  card keeps its place and only the cards it grows over move; a card taken off pulls the next page's cards back. The
+  page you are on stays put when pages come and go, the edit bar's arrows and Done are always on the screen, and a
+  camera keeps its live picture in the edit mode, under your finger too.
+- **The panel's preview swipes with a mouse or a trackpad**, and a click beside the page dots turns the page; cards
+  drag with the mouse in its edit mode.
 - **Saves from the panel reach the Echo after Home Assistant restarts.** Echo-Wall logged in again before Echo Local
   had loaded, was refused, and stopped following the layout until the app restarted; it now asks again.
 
