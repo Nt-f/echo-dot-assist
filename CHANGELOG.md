@@ -4,6 +4,10 @@ What changed for people using the Echo, newest first. Details and measurements a
 
 ## 2026-11-04
 
+- **Drop In hears you from across the room on the Echo Show**: whether you are talking is now decided by a speech
+  detector (RNNoise) instead of by loudness. The Show's microphone puts speech at the level of its room's noise, so
+  only speech right into the Echo got through, in calls from Home Assistant and from other Echos alike. The noise of
+  the room is also taken down by up to 12 dB in calls.
 - **Drop In from Home Assistant sounds smoother**: the card buffers the Echo's sound briefly (60 ms) and fades over
   gaps, where every late bit of audio was a pop. Your microphone starts **muted** in every call, with its button over
   the picture. On the Echo, room noise no longer teaches the call's gain a "quiet talker", which lifted the next

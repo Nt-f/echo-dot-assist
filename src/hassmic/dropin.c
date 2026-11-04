@@ -30,7 +30,7 @@
  *
  * Mic: micAsr, what the pipeline gets.  Playback on the mixer's Voip stream, which puts the front end in its call mode
  * (audio.h).  The front end's listening mode only while this side talks (main.c core_dropin_listen says why): its level
- * NEAR_DB over the room's floor and, while the far end plays, over the echo to expect; on with the first such frame,
+ * RNNoise hears speech (VAD_ON) and, while the far end plays, its level is over the echo to expect; on with the first such frame,
  * off LISTEN_HANG_MS after the last.  What the echo canceller leaves of the far end would come back to the other side
  * as an echo, so an echo suppressor here ducks the mic by SUPPRESS_DB while the far end plays, unless this side is
  * clearly louder than the echo has been for DOUBLE_TALK_N frames in a row (double talk passes): the echo's level against
@@ -44,6 +44,7 @@
 #include "arb.h"
 #include "audio.h"
 #include "core.h"
+#include "micdenoise.h"
 #include "micgain.h"
 #include "ws.h"
 #include "../third_party/monocypher.h"
@@ -107,12 +108,15 @@ static int answer_ms = ANSWER_MS, lost_ms = LOST_MS;
 #define SUPPRESS_OWN_DB -40.0f          /* our own sounds (the connect chime came back at -50 dBFS ducked by 25) */
 #define DOUBLE_TALK_DB 6.0f             /* the near end this much over the echo estimate passes... */
 #define DOUBLE_TALK_N 3                 /* ...for this many frames in a row: an echo's onset is shorter */
-#define NEAR_DB     9.0f                /* this side talks: this far over the room's floor */
-/* ...and at least this loud in micAsr.  An empty room's floor is -74 dBFS: sounds of -65..-70 passed NEAR_DB, opened the
- * gate and got the speech gain (+24 dB) put on them: the far Echo sent -40..-54 dBFS of amplified room noise, which the
- * other end took for the far end talking (wake word ignored, its listening mode never on: STT heard nothing; trace of a
- * call with an empty master bedroom, 2026-10-15).  Quiet speech in micAsr is -55 and up */
-#define NEAR_MIN_DB -58.0f
+/* This side talks: RNNoise's speech probability (micdenoise.h, an instance per call) over VAD_ON.  Before, by the level:
+ * 9 dB over the room's floor and over -58 dBFS, which an empty room's sounds of -65..-70 had passed on a Dot (trace of
+ * 2026-10-15: amplified room noise the other end took for talking).  On the Echo Show 5 that line is where speech is:
+ * its capture puts a wake word at -60..-70 dBFS over a room at -69, room noise peaks at -58..-61, and the gate stayed
+ * shut for 95 % of a call (trace of a call from Home Assistant, 2026-11-04: only speech into the Echo came through).
+ * The corpus at the Show's levels over noise at -69 (speech frames passed / noise frames passed): RNNoise at 0.7
+ * 80/1.1 % at -50 dBFS, 79/0.7 % at -60, 74/1.2 % at -66; the level rule 58/3.2 %, 11/3.6 %, 0/1.3 % */
+#define VAD_ON      0.7f
+#define DENOISE_DB  12.0f               /* what RNNoise takes off the room at most: micdenoise.c's strongest by ear */
 /* The far end talks when it plays this far over its own floor (what it sent in its pauses: the noise of its room
  * after its gain, -88..-38 dBFS in that call), and over FAR_DB: an older build on the other side still sends that noise */
 #define FAR_OVER_DB 25.0f
@@ -542,6 +546,7 @@ void dropin_ha_end(int gen, const char *why)
 static OpusEncoder *enc;
 static int enc_gen = -1;
 static struct micgain gain;
+static struct micdenoise *dn;           /* the call's RNNoise: its speech probability, and the audio that goes out */
 static float es_c, es_g;                /* echo against what we play, dB (peak held); the gain applied, linear */
 static int dt_n;                        /* frames in a row over the echo estimate */
 static float far_hold;                  /* what we play, held: falls FAR_FALL dB a frame */
@@ -603,17 +608,19 @@ static void send_frame(const int16_t *pcm, int own)
         opus_encoder_ctl(enc, OPUS_SET_PACKET_LOSS_PERC, LOSS_PERC); opus_encoder_ctl(enc, OPUS_SET_COMPLEXITY, 5);
         opus_encoder_ctl(enc, OPUS_SET_SIGNAL, OPUS_SIGNAL_VOICE);
         micgain_init(&gain, MICGAIN_LEVEL); micgain_start(&gain, 1);
-        /* the talker's level only from what the gate could take for one (NEAR_MIN_DB): without it a room's steady noise
-         * 9 dB over the gain's floor (-62 dBFS in micAsr in a quiet room) passed for a quiet talker, the gain climbed
-         * to its top (+36 dB, 12 dB/s), and the next sound over NEAR_MIN_DB opened the gate with all of it: a cough,
-         * a door, the fridge starting came out louder than speech (a call from Home Assistant, 2026-11-04) */
-        gain.talker_min_db = NEAR_MIN_DB;
+        if (dn) md_reset(dn, DENOISE_DB); else dn = md_new(DENOISE_DB);
         es_c = -30; es_g = 1; dt_n = 0; far_hold = -100; floor_db = -70; near_until = 0; listen_on = 0; listen_at = 0; enc_gen = gen;
     }
     int16_t f[FRAME];
-    memcpy(f, pcm, sizeof f);
+    float m = level_db(pcm, FRAME), target = 1, vad = 0; long long now = now_ms(); int farend, near;
+    /* RNNoise in its two 10 ms frames: the louder one's probability (a syllable's onset in either opens it); its output
+     * goes out, 12 ms behind, which nothing here needs to know: the levels below are the mic's own */
+    if (dn) for (int h = 0; h < FRAME; h += MICDENOISE_FRAME) {
+        int16_t o[MICDENOISE_FRAME * 2];
+        if (md_run(dn, pcm + h, MICDENOISE_FRAME, o) == MICDENOISE_FRAME) memcpy(f + h, o, sizeof o / 2); else memcpy(f + h, pcm + h, sizeof o / 2);
+        if (md_speech(dn) > vad) vad = md_speech(dn);
+    } else memcpy(f, pcm, sizeof f);
     /* echo suppression: the far end talks and the mic is not clearly louder than its echo has been */
-    float m = level_db(f, FRAME), target = 1; long long now = now_ms(); int farend, near;
     far_hold = far > far_hold - FAR_FALL ? far : far_hold - FAR_FALL;
     farend = far_voice(far_hold, ffloor);
     int over = farend && m >= far_hold + es_c + DOUBLE_TALK_DB;
@@ -625,7 +632,7 @@ static void send_frame(const int16_t *pcm, int own)
         if (es_c > 0) es_c = 0;
     }
     floor_db = m < floor_db ? (m > -90 ? m : -90) : floor_db + 0.03f;     /* drops at once, rises 1.5 dB/s */
-    near = !own && m > floor_db + NEAR_DB && m > NEAR_MIN_DB && (!farend || dt_n >= DOUBLE_TALK_N);
+    near = !own && vad >= VAD_ON && (!farend || dt_n >= DOUBLE_TALK_N);
     /* A gate: open while this side talks (and LISTEN_HANG_MS after, unless the far end plays), else ducked.  Ducked only
      * while the far end played (the first try), the gain lifted the room in its pauses from -72 to -48 dBFS while the
      * rest went out at -70: hiss that came and went with every sentence of the other side (2026-10-08) */
@@ -633,6 +640,7 @@ static void send_frame(const int16_t *pcm, int own)
     else if (!near && (farend || now >= near_until)) target = powf(10, SUPPRESS_DB / 20);
     /* the gain first: after the ducking it would give the 25 dB back (+24 dB at micAsr's level, measured) */
     gain.hold = own || farend;                          /* the talker's level is learnt while the other side is quiet */
+    gain.speech = near;                                 /* ...and from speech only: a room's noise is no quiet talker */
     micgain_run(&gain, f, f, FRAME);
     float step = (target - es_g) / FRAME;              /* within a frame: a word's onset is not cut */
     for (int i = 0; i < FRAME; i++) { if ((step < 0 && es_g > target) || (step > 0 && es_g < target)) es_g += step; f[i] = (int16_t)(f[i] * es_g); }
@@ -640,9 +648,10 @@ static void send_frame(const int16_t *pcm, int own)
     int want = now < near_until;
     if (want != listen_on && now - listen_at >= 250) { listen_on = want; listen_at = now; core_dropin_listen(want); }
     /* HASSMIC_DROPIN_TRACE=<file>: the gate's inputs and decisions per frame, for tuning on a device (export it in
-     * hassmic.conf): ms, mic dB, far dB, echo estimate, floor, this side talks, own sound, double talk run, gate, gain */
+     * hassmic.conf): ms, mic dB, far dB, echo estimate, floor, this side talks, own sound, double talk run, gate, gain,
+     * RNNoise's speech probability */
     { static FILE *tr; if (!tr && getenv("HASSMIC_DROPIN_TRACE")) tr = fopen(getenv("HASSMIC_DROPIN_TRACE"), "w");
-      if (tr) { fprintf(tr, "%lld %.1f %.1f %.1f %.1f %d %d %d %.2f %.1f\n", now, m, far, es_c, floor_db, near, own, dt_n, target, gain.gain_db); fflush(tr); } }
+      if (tr) { fprintf(tr, "%lld %.1f %.1f %.1f %.1f %d %d %d %.2f %.1f %.2f\n", now, m, far, es_c, floor_db, near, own, dt_n, target, gain.gain_db, vad); fflush(tr); } }
     if (ha) {                                           /* to web.c's channel, as PCM: the oldest goes when it lags */
         crypto_wipe(key, sizeof key);
         pthread_mutex_lock(&dl);
