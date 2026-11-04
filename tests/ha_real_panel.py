@@ -28,6 +28,10 @@ EW_INT = os.environ.get("HASSMIC_ECHO_WALL") or next((p for p in (os.path.join(h
                                                               for d in ("Echo-Wall", "hassmic-homeview")) if os.path.isdir(p)), "")
 
 
+# the Echo Show's apps (apps.c, root's apps.sh, Echo Local's Apps tab) where this tree has them
+HAVE_APPS = os.path.exists(os.path.join(hr.ROOT, "scripts", "device", "apps.sh"))
+
+
 def write_config(conf):
     rk.write_config(conf)
     if EW_INT:
@@ -107,16 +111,16 @@ async def browser(session, token, png):
                 os.makedirs(os.path.dirname(png), exist_ok=True); open(png.replace(".png", name + ".png"), "wb").write(base64.b64decode(r["data"]))
         await shot("")
         out["screen"] = await js(f"""(async () => {{ const p = {find}; p.tab = 'screen'; await p.loadKiosk();
-            await p.loadApps(); await new Promise(r => setTimeout(r, 500)); return {{ rows: [...p.shadowRoot.querySelectorAll('.card .row .name')].map(e => e.textContent),
+            if (p.loadApps) await p.loadApps(); await new Promise(r => setTimeout(r, 500)); return {{ rows: [...p.shadowRoot.querySelectorAll('.card .row .name')].map(e => e.textContent),
               apps: [...p.shadowRoot.querySelectorAll('.card select option')].map(e => e.textContent),
               push: (p.shadowRoot.querySelector('.pushst') || {{}}).textContent || '' }}; }})()""")
         await asyncio.sleep(0.5); await shot("-screen")
-        out["appstab"] = await js(f"""(async () => {{ const p = {find}; p.tab = 'apps'; p.render(); await p.loadApps();
+        if HAVE_APPS: out["appstab"] = await js(f"""(async () => {{ const p = {find}; p.tab = 'apps'; p.render(); await p.loadApps();
             await new Promise(r => setTimeout(r, 500)); const r = p.shadowRoot;
             return {{ tabs: [...r.querySelectorAll('.tab')].map(e => e.textContent), apps: [...r.querySelectorAll('.item.app .nm div:first-child')].map(e => e.textContent),
                      screenApp: [...r.querySelectorAll('.item.app')].filter(e => e.textContent.includes('the home app')).map(e => e.querySelector('.danger').disabled),
                      status: (r.querySelector('.inst') || {{}}).textContent || '' }}; }})()""")
-        await asyncio.sleep(0.3); await shot("-apps")
+        if HAVE_APPS: await asyncio.sleep(0.3); await shot("-apps")
         out["home"] = await js(f"""(async () => {{ const p = {find}; p.tab = 'home'; p.render();
             for (let i = 0; i < 40; i++) {{ const w = p.shadowRoot.querySelector('echo-wall-panel'); if (w && w.dev && w.shadowRoot.querySelector('main *:not(.empty)')) break;
               await new Promise(r => setTimeout(r, 250)); }}
@@ -336,7 +340,7 @@ async def run(tmp):
             out = await browser(session, admin_tok, os.path.join(hr.ROOT, "build", "test-logs", "panel.png"))
             if out is not None:
                 check(out.get("echos") == ["Echo Show 5 a1b2c3"] and any("Screen on" in x and "Echo-Wall" in x for x in out.get("sub", []))
-                      and out.get("tabs") == (["Screen", "Home", "Apps"] if EW_INT else ["Screen", "Apps"]),
+                      and out.get("tabs") == ["Screen"] + (["Home"] if EW_INT else []) + (["Apps"] if HAVE_APPS else []),
                       f"the panel: the Echo, its screen on with Echo-Wall, the Screen and Apps tabs ({out.get('echos')}, {out.get('sub')}, {out.get('tabs')})")
                 scr = out.get("screen") or {}
                 check("Connect it to Home Assistant" in scr.get("rows", []) and "Sent to the Echo" in scr.get("push", ""),
@@ -348,10 +352,10 @@ async def run(tmp):
                 for k_, f_ in (out.get("fit") or {}).items():
                     check(isinstance(f_, dict) and not f_.get("wide") and f_.get("scroll", 1) <= 1 and (k_.startswith("phone") or f_.get("nav", 0) >= 250),
                           f"{k_}: fits the window, the Echos' list whole ({f_})")
-                check("org.schabi.newpipe (installed)" in scr.get("apps", []) and "Echo-Wall" in scr.get("apps", []),
+                if HAVE_APPS: check("org.schabi.newpipe (installed)" in scr.get("apps", []) and "Echo-Wall" in scr.get("apps", []),
                       f"the Screen tab: any app installed on the Echo offered as the screen app ({[x for x in scr.get('apps', []) if '.' in x or 'Echo' in x][:6]})")
                 ap = out.get("appstab") or {}
-                check("Apps" in ap.get("tabs", []) and "org.schabi.newpipe" in ap.get("apps", []) and ap.get("screenApp") == [True]
+                if HAVE_APPS: check("Apps" in ap.get("tabs", []) and "org.schabi.newpipe" in ap.get("apps", []) and ap.get("screenApp") == [True]
                       and ap.get("status", "").startswith("Removed org.example.app"),
                       f"the Apps tab: the apps, Remove off for the screen app ({ap})")
     finally:
