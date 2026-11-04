@@ -125,6 +125,23 @@ async def browser(session, token, png):
             return {{ dev: w.dev, kept: p.shadowRoot.querySelector('echo-wall-panel') === w && w.dev === before, embedded: w.hasAttribute('embedded'),
                      header: getComputedStyle(w.shadowRoot.querySelector('header')).display }}; }})()""")
         await asyncio.sleep(1.5); await shot("-home")
+        # every tab at a laptop's width and a phone's: nothing wider than the window, the Echos' list kept its width
+        out["fit"] = {}
+        for wname, w, hgt, mobile in (("laptop", 1100, 800, False), ("phone", 390, 844, True)):
+            await cdp("Emulation.setDeviceMetricsOverride", width=w, height=hgt, deviceScaleFactor=1, mobile=mobile)
+            await asyncio.sleep(1.0)
+            for tab in ("screen", "home", "apps"):
+                r = await js(f"""(async () => {{ const p = {find}; p.tab = '{tab}'; p.render();
+                    if ('{tab}' === 'screen' && !p.kiosk) await p.loadKiosk();
+                    await new Promise(r => setTimeout(r, 900)); const R = p.shadowRoot;
+                    const nav = R.querySelector('nav'), main = R.querySelector('main');
+                    const wide = [...R.querySelectorAll('main *')].concat([...((R.querySelector('echo-wall-panel') || {{}}).shadowRoot || {{ querySelectorAll: () => [] }}).querySelectorAll('*')])
+                      .filter(e => e.getBoundingClientRect().right > innerWidth + 1).slice(0, 4).map(e => e.tagName + '.' + e.className);
+                    return {{ tab: p.tab, nav: nav ? Math.round(nav.getBoundingClientRect().width) : 0, main: main ? Math.round(main.getBoundingClientRect().width) : 0,
+                             scroll: Math.max(document.documentElement.scrollWidth, main ? main.scrollWidth + main.getBoundingClientRect().left : 0) - innerWidth, wide }}; }})()""")
+                out["fit"][f"{wname}-{tab}"] = r
+                await shot(f"-{wname}-{tab}")
+        await cdp("Emulation.setDeviceMetricsOverride", width=1500, height=1000, deviceScaleFactor=1, mobile=False)
         out["console"] = console
         open(png.replace(".png", "-console.txt"), "w").write("\n".join(console))
         return out
@@ -328,6 +345,9 @@ async def run(tmp):
                     hm = out.get("home") or {}
                     check(hm.get("dev") == "dev_echo_show" and hm.get("embedded") and hm.get("header") == "none" and hm.get("kept"),
                           f"the Home tab: Echo-Wall's panel for this Echo's device, no header or list of its own, kept across tabs ({hm})")
+                for k_, f_ in (out.get("fit") or {}).items():
+                    check(isinstance(f_, dict) and not f_.get("wide") and f_.get("scroll", 1) <= 1 and (k_.startswith("phone") or f_.get("nav", 0) >= 250),
+                          f"{k_}: fits the window, the Echos' list whole ({f_})")
                 check("org.schabi.newpipe (installed)" in scr.get("apps", []) and "Echo-Wall" in scr.get("apps", []),
                       f"the Screen tab: any app installed on the Echo offered as the screen app ({[x for x in scr.get('apps', []) if '.' in x or 'Echo' in x][:6]})")
                 ap = out.get("appstab") or {}

@@ -50,7 +50,7 @@ header .menu { display: none; }
 :host([narrow]) header .menu { display: inline-flex; }
 .iconbtn { background: none; border: 0; color: inherit; width: 40px; height: 40px; border-radius: 50%; cursor: pointer; font-size: 22px; }
 .iconbtn:hover { background: rgba(127,127,127,.15); }
-.wrap { display: grid; grid-template-columns: 260px 1fr; min-height: calc(100% - var(--header-height, 56px)); }
+.wrap { display: grid; grid-template-columns: 260px 1fr; min-height: calc(100vh - var(--header-height, 56px)); }   /* (the Echos' list down to the bottom on a short tab) */
 :host([narrow]) .wrap { grid-template-columns: 1fr; }
 nav { border-right: 1px solid var(--line); padding: 12px 8px; background: var(--card-background-color); }
 :host([narrow]) nav { border-right: 0; border-bottom: 1px solid var(--line); display: flex; overflow-x: auto; gap: 6px; padding: 8px; }
@@ -65,6 +65,11 @@ nav .lbl { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; co
 .echo .dev.on::after { content: ''; position: absolute; inset: 3px; border-radius: 2px; background: var(--accent); opacity: .7; }
 .echo .t { font-weight: 500; } .echo .s { font-size: 12px; color: var(--muted); }
 main { padding: 16px 20px 40px; min-width: 0; }
+:host([narrow]) main { padding: 12px 10px 32px; }
+:host([narrow]) .card { padding: 4px 12px 12px; }
+:host([narrow]) .item.app { flex-wrap: wrap; }
+:host([narrow]) .item.app .nm { flex-basis: 100%; }
+.tabs { overflow-x: auto; }
 .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); margin-bottom: 16px; }
 .tab { background: none; border: 0; border-bottom: 2px solid transparent; padding: 10px 14px; font: inherit; color: var(--muted); cursor: pointer; }
 .tab.sel { color: var(--accent); border-bottom-color: var(--accent); }
@@ -87,13 +92,14 @@ main { padding: 16px 20px 40px; min-width: 0; }
 .btn.small { padding: 4px 10px; font-size: 13px; }
 .grid { display: grid; grid-template-columns: minmax(320px, 1fr) minmax(320px, 1.25fr); gap: 16px; align-items: start; }
 @media (max-width: 1100px) { .grid { grid-template-columns: 1fr; } }
+.grid > * { min-width: 0; }                         /* (a card no wider than the column: its inputs give way) */
 .card { background: var(--card-background-color); border-radius: var(--r); border: 1px solid var(--line); padding: 4px 16px 12px;
   box-shadow: var(--ha-card-box-shadow, none); }
 .card h2 { font-size: 16px; font-weight: 500; margin: 14px 0 4px; }
 .card .about { font-size: 13px; color: var(--muted); margin-bottom: 6px; }
 .row { padding: 12px 0; border-top: 1px solid var(--line); }
 .row:first-of-type { border-top: 0; }
-.row .head { display: flex; align-items: center; gap: 10px; }
+.row .head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }   /* (narrow: the control under its name) */
 .row .name { flex: 1; font-size: 15px; }
 .row .help { font-size: 12px; color: var(--muted); margin-top: 3px; }
 .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
@@ -103,6 +109,7 @@ main { padding: 16px 20px 40px; min-width: 0; }
 input[type=text], input[type=number], input[type=url], select, textarea { font: inherit; font-size: 14px; color: inherit;
   background: var(--soft); border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; }
 input[type=number] { width: 110px; }
+select, input[type=text], input[type=url] { max-width: 100%; }
 textarea { width: 100%; min-height: 90px; font-family: var(--code-font-family, monospace); font-size: 13px; }
 .switch { position: relative; width: 40px; height: 22px; flex: none; }
 .switch input { opacity: 0; width: 0; height: 0; }
@@ -483,7 +490,7 @@ class EchoLocalPanel extends HTMLElement {
         this.render();
       } }, 'Send to the Echo again'));
     const row = (name, ctl, help) => h('div', { class: 'row' }, h('div', { class: 'head' }, h('span', { class: 'name' }, name), ctl), help && h('div', { class: 'help' }, help));
-    const text = (key, ph, type) => { const i = h('input', { type: type || 'text', placeholder: ph || '', style: 'min-width:240px' }); i.value = o[key] || ''; i.addEventListener('input', () => { o[key] = i.value; touch(); }); return i; };
+    const text = (key, ph, type) => { const i = h('input', { type: type || 'text', placeholder: ph || '', style: 'min-width:min(240px, 100%)' }); i.value = o[key] || ''; i.addEventListener('input', () => { o[key] = i.value; touch(); }); return i; };
     const sw = (key) => this.switch(!!o[key], (on) => { o[key] = on; touch(); });
 
     // (an entry from before keeps kinds there are none of any more: "music", now the drawer's own)
