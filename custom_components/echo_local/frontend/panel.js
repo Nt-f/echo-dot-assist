@@ -9,7 +9,9 @@
 // (Nt-f/Echo-Wall).  Only Home Assistant's websocket (this.hass.connection).  Plain custom element, no build step.
 'use strict';
 
-const KIND_LABEL = { wall: 'Home (the screen app draws it)', clock: 'Clock', dashboard: "Home Assistant's own UI", music: 'Music Assistant', custom: 'A page of your own' };
+// the home app's pages, as the drawer names them (kiosk.py screens()); Music is the drawer's own (the Echo's Music
+// Assistant player), no page of the app's
+const KIND_LABEL = { wall: 'Home (the home app’s own)', dashboard: 'A Home Assistant dashboard', clock: 'Clock (the home app’s own)', custom: 'A web page of your own' };
 const WALL = 'io.github.nt_f.echowall';
 const KNOWN_APPS = [['', 'As the Echo has it (its settings page\'s Screen page)'], ['io.github.nt_f.echowall', 'Echo-Wall'], ['io.github.nt_f.echoscreen', 'Echo-Screen'], ['me.jxl.kiosk_satellite', 'Kiosk Satellite']];
 
@@ -230,14 +232,14 @@ class EchoLocalPanel extends HTMLElement {
   async loadKiosk() {
     try {
       const r = await this.ws({ type: 'echo_local/kiosk/get', echo: this.echo });
-      this.kiosk = { saved: clone(r.options), draft: clone(r.options), kinds: r.kinds, music: r.music_panel, url: r.ha_url, push: r.push };
+      this.kiosk = { saved: clone(r.options), draft: clone(r.options), kinds: r.kinds, url: r.ha_url, push: r.push };
     } catch (e) { this.kiosk = { error: (e && e.message) || String(e) }; }
     this.render();
   }
 
   async saveKiosk() {
     const k = this.kiosk;
-    const pick = ['kiosk', 'kiosk_screens', 'kiosk_default', 'kiosk_dashboard', 'kiosk_music', 'kiosk_custom_name', 'kiosk_custom_url',
+    const pick = ['kiosk', 'kiosk_screens', 'kiosk_default', 'kiosk_dashboard', 'kiosk_custom_name', 'kiosk_custom_url',
       'kiosk_return', 'kiosk_admin', 'kiosk_ha_url', 'kiosk_app', 'kiosk_app_settings'];
     const opts = {}; for (const p of pick) if (p in k.draft) opts[p] = k.draft[p];
     try {
@@ -375,7 +377,7 @@ class EchoLocalPanel extends HTMLElement {
       const isScreen = app.package === screenApp;
       list.append(h('div', { class: 'item app' },
         h('div', { class: 'nm' }, h('div', null, app.package),
-          h('div', { class: 'id' }, `version ${app.version}` + (isScreen ? ' · the screen app' : ''))),
+          h('div', { class: 'id' }, `version ${app.version}` + (isScreen ? ' · the home app' : ''))),
         h('span', { class: 'note' }, 'Internet'),
         this.switch(!!app.net, async (on) => {
           try { await this.ws({ type: 'echo_local/apps/net', echo: this.echo, package: app.package, on }); app.net = on; this.toast(`${app.package}: ${on ? 'may reach the internet' : 'kept off the internet'}`); }
@@ -386,7 +388,7 @@ class EchoLocalPanel extends HTMLElement {
           try { await this.ws({ type: 'echo_local/apps/lan', echo: this.echo, package: app.package, on }); app.lan = on; this.toast(`${app.package}: ${on ? 'its ports open to your network' : 'its ports closed'}`); }
           catch (e) { this.toast('Not changed: ' + ((e && e.message) || e)); this.loadApps(); }
         }),
-        h('button', { class: 'btn small danger', disabled: isScreen || busy, title: isScreen ? 'The screen app: pick another one under Screen first' : '', onclick: async () => {
+        h('button', { class: 'btn small danger', disabled: isScreen || busy, title: isScreen ? 'The home app: pick another one on the Screen tab first' : '', onclick: async () => {
           if (!confirm(`Remove ${app.package} from the Echo? Its data goes with it.`)) return;
           try { await this.ws({ type: 'echo_local/apps/uninstall', echo: this.echo, package: app.package }); this.loadApps(); }
           catch (e) { this.toast('Not removed: ' + ((e && e.message) || e)); }
@@ -444,7 +446,7 @@ class EchoLocalPanel extends HTMLElement {
 
     box.append(h('div', { class: 'grid' },
       h('div', { class: 'card' }, h('h2', null, 'Apps on this Echo'),
-        h('div', { class: 'about' }, 'The apps you installed beside the screen app (not Amazon’s or Android’s own). Each shows in the bar pulled down from the top of the screen. The Echo keeps every app off the internet until you switch its Internet on, and out of reach of your network until you switch its Network on (then only the ports it listens on, from your own network).'),
+        h('div', { class: 'about' }, 'The apps you installed beside the home app (not Amazon’s or Android’s own). Each shows in the drawer pulled down from the top of the screen. The Echo keeps every app off the internet until you switch its Internet on, and nothing on your network reaches it until you switch its Open ports on (then only the ports it listens on, from your own network).'),
         list, h('div', { style: 'height:12px' })),
       h('div', { class: 'card' }, h('h2', null, 'Add an app'),
         h('div', { class: 'about' }, 'An APK built for 32-bit ARM (armeabi-v7a) and Android 7.1 (the Echo Show 5); up to 200 MB. Installing an app that is there already updates it (same signature).'),
@@ -472,7 +474,7 @@ class EchoLocalPanel extends HTMLElement {
     const p = k.push || {};
     const pst = h('div', { class: 'pushst' + (p.at && !p.ok ? ' bad' : '') },
       h('span', { class: 'grow' }, !p.at ? 'Not sent to the Echo since Home Assistant started (it keeps what it had).'
-        : p.ok ? `Sent to the Echo ${ago(p.at)}` + (p.kiosk ? `: ${p.screens} screen${p.screens === 1 ? '' : 's'} and a fresh login.` : ': the screen off.')
+        : p.ok ? `Sent to the Echo ${ago(p.at)}` + (p.kiosk ? `: ${p.screens} page${p.screens === 1 ? '' : 's'} and a fresh login.` : ': the home app not connected.')
         : `Not sent to the Echo (${ago(p.at)}): ${p.error}`),
       h('button', { class: 'btn small', onclick: async (ev) => {
         ev.target.disabled = true;
@@ -484,7 +486,10 @@ class EchoLocalPanel extends HTMLElement {
     const text = (key, ph, type) => { const i = h('input', { type: type || 'text', placeholder: ph || '', style: 'min-width:240px' }); i.value = o[key] || ''; i.addEventListener('input', () => { o[key] = i.value; touch(); }); return i; };
     const sw = (key) => this.switch(!!o[key], (on) => { o[key] = on; touch(); });
 
-    const scr = (o.kiosk_screens || ['wall', 'dashboard']).slice();
+    // (an entry from before keeps kinds there are none of any more: "music", now the drawer's own)
+    const scr = (o.kiosk_screens || ['wall', 'dashboard']).filter((x) => k.kinds.includes(x));
+    if (scr.length !== (o.kiosk_screens || []).length && o.kiosk_screens) { o.kiosk_screens = scr.slice(); k.saved.kiosk_screens = scr.slice(); }
+    if (o.kiosk_default && !k.kinds.includes(o.kiosk_default)) { o.kiosk_default = scr[0] || 'wall'; k.saved.kiosk_default = o.kiosk_default; }
     const screens = h('div', { class: 'list screens' });
     const drawScreens = () => {
       screens.textContent = '';
@@ -492,18 +497,26 @@ class EchoLocalPanel extends HTMLElement {
       order.forEach((kind) => {
         const on = scr.includes(kind), i = scr.indexOf(kind);
         const it = h('div', { class: 'item' },
-          h('div', { class: 'nm' }, this.switch(on, (v) => { if (v) scr.push(kind); else scr.splice(scr.indexOf(kind), 1); o.kiosk_screens = scr.slice(); touch(); drawScreens(); }),
+          h('div', { class: 'nm' }, this.switch(on, (v) => { if (v) scr.push(kind); else scr.splice(scr.indexOf(kind), 1); o.kiosk_screens = scr.slice(); touch(); drawScreens(); showFields(); }),
             h('span', null, KIND_LABEL[kind] || kind)),
           on && h('button', { class: 'mini', disabled: i === 0, onclick: () => { scr.splice(i - 1, 0, scr.splice(i, 1)[0]); o.kiosk_screens = scr.slice(); touch(); drawScreens(); } }, '↑'),
           on && h('button', { class: 'mini', disabled: i === scr.length - 1, onclick: () => { scr.splice(i + 1, 0, scr.splice(i, 1)[0]); o.kiosk_screens = scr.slice(); touch(); drawScreens(); } }, '↓'));
         screens.append(it);
       });
     };
-    drawScreens();
+    // a page's own fields only while it is on
+    const dashRow = () => row('Dashboard', text('kiosk_dashboard', 'lovelace'), 'Its path, as in its address: lovelace is Overview.');
+    const fields = h('div');
+    const showFields = () => {
+      fields.textContent = '';
+      if (scr.includes('dashboard')) fields.append(dashRow());
+      if (scr.includes('custom')) fields.append(row('Web page’s name', text('kiosk_custom_name', 'Page')), row('Web page’s address', text('kiosk_custom_url', 'http://…', 'url')));
+    };
+    drawScreens(); showFields();
     const def = h('select', { onchange: () => { o.kiosk_default = def.value; touch(); } }, k.kinds.map((x) => h('option', { value: x, selected: (o.kiosk_default || 'wall') === x }, KIND_LABEL[x] || x)));
     const ret = h('input', { type: 'number', min: 0, max: 3600, step: 10 }); ret.value = o.kiosk_return ?? 120;
     ret.addEventListener('input', () => { if (ret.checkValidity() && ret.value !== '') { o.kiosk_return = +ret.value; touch(); } });
-    // the screen apps known by name, then every app installed on this Echo (any app may be the screen app: one not made
+    // the home apps known by name, then every app installed on this Echo (any app may be the home app: one not made
     // for hassmic is started as the launcher starts it, logs in to Home Assistant by itself, and gets the words and
     // alarms drawn over it by hassmic), then one typed in
     const installed = ((this.apps && this.apps.apps) || []).map((a) => a.package).filter((p) => !KNOWN_APPS.some(([v]) => v === p)).sort();
@@ -526,22 +539,20 @@ class EchoLocalPanel extends HTMLElement {
     settings.addEventListener('input', () => { o.kiosk_app_settings = settings.value; touch(); });
 
     return h('div', null, bar, pst, h('div', { class: 'grid' },
-      h('div', { class: 'card' }, h('h2', null, 'On the screen'),
-        row('Give the home app Home Assistant (a login, these screens)', sw('kiosk')),
-        h('div', { class: 'row' }, h('div', { class: 'head' }, h('span', { class: 'name' }, 'Screens')), h('div', { class: 'help' }, 'On, in the order the Echo\'s drawer (pulled down from the top edge) offers them.'), screens),
-        row('Start on, and go back to', def),
-        row('Back to it after untouched for', h('span', null, ret, ' ', h('span', { class: 'note' }, 's')), '0: never.'),
-        row("Dashboard (Home Assistant's own UI)", text('kiosk_dashboard', 'lovelace'), 'Its path: lovelace is Overview.'),
-        row('Music Assistant', text('kiosk_music', k.music || 'its panel’s path or an address')),
-        row('Your page’s name', text('kiosk_custom_name', 'Page')),
-        row('Your page’s address', text('kiosk_custom_url', 'http://…', 'url'))),
-      h('div', { class: 'card' }, h('h2', null, 'The screen app'),
-        h('div', { class: 'about' }, 'The Echo\'s home app (docs/screen-apps.md): Echo-Wall, Echo-Screen, Kiosk Satellite or any app installed on the Echo. One made for hassmic gets Home Assistant\'s address and this Echo\'s login; any other logs in by itself, and hassmic shows its face over it for a ringing alarm. Whatever it is, the Echo\'s drawer (pulled down from the middle of the top edge) leads to it, its screens and every other app.'),
+      h('div', { class: 'card' }, h('h2', null, 'Home app'),
+        h('div', { class: 'about' }, 'The app the Echo opens and comes back to: Echo-Wall, Echo-Screen, Kiosk Satellite or any app installed on the Echo (docs/screen-apps.md). Pull down from the top edge, over any app, for the Echo’s drawer: Home (this app), Face, Music (the Echo’s own Music Assistant player), the pages below and your other apps.'),
         row('App', h('span', null, appSel, ' ', appOwn)),
         wallRow,
-        h('div', { class: 'row' }, h('div', { class: 'head' }, h('span', { class: 'name' }, 'Its settings')), h('div', { class: 'help' }, 'One key=value a line; sent sealed with the Echo’s login.'), settings),
-        row('The Echo’s user is an administrator', sw('kiosk_admin'), 'Home Assistant’s settings on the Echo.'),
-        row('Home Assistant’s address for the Echo', text('kiosk_ha_url', k.url), 'Empty: the one found. The Echo reaches local addresses only.'))));
+        row('Connect it to Home Assistant', sw('kiosk'), 'Gives it a Home Assistant login of this Echo’s own and the pages below. Off: it gets neither (an app not made for hassmic logs in by itself).'),
+        h('div', { class: 'row' }, h('div', { class: 'head' }, h('span', { class: 'name' }, 'Its own settings')), h('div', { class: 'help' }, 'One key=value a line, as the app documents them; sent sealed with the Echo’s login.'), settings),
+        row('The Echo’s login is an administrator', sw('kiosk_admin'), 'Lets Home Assistant’s settings be changed from the Echo. Off is safer.'),
+        row('Home Assistant’s address for the Echo', text('kiosk_ha_url', k.url), 'Empty: the one found. The Echo reaches local addresses only.')),
+      h('div', { class: 'card' }, h('h2', null, 'Pages in the drawer'),
+        h('div', { class: 'about' }, 'The home app’s pages: the drawer offers them in its row of apps, in this order, before your other apps. Music (in the drawer’s top row) is the Echo’s own player (its Music Assistant token goes on the Echo’s settings page), not a page here.'),
+        screens,
+        fields,
+        row('Opens on', def, 'Where the home app starts.'),
+        row('Back to it after', h('span', null, ret, ' ', h('span', { class: 'note' }, 's untouched')), '0: stays where it was left.'))));
   }
 }
 

@@ -79,7 +79,7 @@ async def run(tmp):
                   f"the options: the screen's, with the address the Echo gets ({o.get('description_placeholders')})")
             o = await c.post(f"/api/config/config_entries/options/flow/{o['flow_id']}",
                              {"kiosk": True, "kiosk_screens": ["wall", "dashboard"], "kiosk_default": "wall", "kiosk_return": 90,
-                              "kiosk_admin": False, "kiosk_dashboard": "lovelace", "kiosk_music": "", "kiosk_custom_name": "",
+                              "kiosk_admin": False, "kiosk_dashboard": "lovelace", "kiosk_custom_name": "",
                               "kiosk_custom_url": "", "kiosk_ha_url": "", "kiosk_app": "io.github.nt_f.echowall",
                               "kiosk_app_settings": "# the HomeView's photos\nimmich.url = http://192.168.1.9:2283\nimmich.key=s3cret-immich-key\n"})
             check(o.get("type") == "create_entry", f"saved ({o.get('type')})")

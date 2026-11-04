@@ -377,8 +377,9 @@ kiosk_helper() {
 # The home app (screen.c's choice, state/screen_home; docs/screen-apps.md), Android models.  This fork's own kiosk app
 # (a bar over every app, a watcher, a keyboard) went when the fork moved onto upstream's screen (2026-11-03); left
 # installed, its bar still came over apps now and then: taken off.  The Echo has no keyboard of its own (Fire OS's went
-# with Amazon's apps), so the home app's, where it ships one (Echo-Wall's EchoKeyboard), is enabled and made the one in
-# use: looked at when the home app changes, else every 10 min (ime and settings are Java: a second each).
+# with Amazon's apps; the guided setup installs Simple Keyboard, docs/screen-apps.md): where the one in use is gone (the
+# old kiosk app's was), the home app's, if it ships one (Echo-Wall's EchoKeyboard), is enabled and made the one in use.
+# Looked at when the home app changes, else every 10 min (ime and settings are Java: a second each).
 OLD_KIOSK=io.github.gamer92000.echodotassist.kiosk
 home_seen= home_n=0
 home_tick() {
@@ -393,7 +394,9 @@ home_tick() {
     home_seen=$h home_n=60
     ime=$(ime list -a -s 2>/dev/null | grep -m1 "^$h/")
     [ -n "$ime" ] || return 0
-    [ "$(settings get secure default_input_method 2>/dev/null)" = "$ime" ] && return 0
+    cur=$(settings get secure default_input_method 2>/dev/null)
+    [ "$cur" = "$ime" ] && return 0
+    case "$cur" in ''|null|$OLD_KIOSK/*) ;; *) ime list -a -s 2>/dev/null | grep -qxF "$cur" && return 0;; esac   # one that works: kept
     ime enable $ime > /dev/null 2>&1
     if ime set $ime > /dev/null 2>&1; then echo "home app: its keyboard $ime is the Echo's"; else echo "home app: its keyboard $ime could not be set"; fi
 }

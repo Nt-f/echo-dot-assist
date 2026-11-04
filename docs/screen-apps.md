@@ -133,8 +133,9 @@ integration of its own (Nt-f/Echo-Wall, `custom_components/echo_wall`, its `docs
 
 ## What the Echo lacks
 
-- **No keyboard of Fire OS's.** The guided setup installs Simple Keyboard (open source, no network access); an app
-  may bring its own.
+- **No keyboard of Fire OS's.** The guided setup installs Simple Keyboard (open source, no network access); a home
+  app may bring its own (Echo-Wall does), which root's `main.sh` makes the one in use where the Echo has none that
+  works.
 - **No navigation bar, no system UI.** The drawer is the way between apps; over an app, a swipe along the light band
   is Back.
 - **Memory.** The Echo Show 5 has 1 GB for Android, hassmic and the app; a Flutter UI takes about 62 MB, a WebView

@@ -130,18 +130,15 @@ class EchoLocalOptionsFlow(OptionsFlowWithReload):
             # Home's layout is the sidebar panel's (Echo Local › Home screen), and the Echo's own edit mode's
             return self.async_create_entry(data={**self.config_entry.options, **user_input})
         kinds = [selector.SelectOptionDict(value=v, label=l) for v, l in (
-            ("clock", "Clock (a screen app's own: not hassmic's built-in kiosk)"),
-            ("wall", "Home (drawn by the screen app: Echo-Wall)"), ("dashboard", "Home Assistant's own UI"),
-            ("music", "Music Assistant"), ("custom", "A page of your own"))]
-        music = k.music_panel(self.hass)
+            ("wall", "Home: the home app's own (Echo-Wall's Home)"), ("dashboard", "A Home Assistant dashboard"),
+            ("clock", "Clock: the home app's own (where it has one)"), ("custom", "A web page of your own"))]
         schema = vol.Schema({
             vol.Required(k.OPT_KIOSK, default=o.get(k.OPT_KIOSK, False)): bool,
-            vol.Required(k.OPT_SCREENS, default=o.get(k.OPT_SCREENS, ["wall", "dashboard"] + (["music"] if music else []))):
+            vol.Required(k.OPT_SCREENS, default=[x for x in o.get(k.OPT_SCREENS, ["wall", "dashboard"]) if x in k.SCREEN_KINDS]):
                 selector.SelectSelector(selector.SelectSelectorConfig(options=kinds, multiple=True)),
-            vol.Required(k.OPT_DEFAULT, default=o.get(k.OPT_DEFAULT, "wall")):
+            vol.Required(k.OPT_DEFAULT, default=o.get(k.OPT_DEFAULT) if o.get(k.OPT_DEFAULT) in k.SCREEN_KINDS else "wall"):
                 selector.SelectSelector(selector.SelectSelectorConfig(options=kinds, mode=selector.SelectSelectorMode.DROPDOWN)),
             vol.Optional(k.OPT_DASHBOARD, default=o.get(k.OPT_DASHBOARD, "lovelace")): str,
-            vol.Optional(k.OPT_MUSIC, default=o.get(k.OPT_MUSIC, music)): str,
             vol.Optional(k.OPT_CUSTOM_NAME, default=o.get(k.OPT_CUSTOM_NAME, "")): str,
             vol.Optional(k.OPT_CUSTOM_URL, default=o.get(k.OPT_CUSTOM_URL, "")): str,
             vol.Required(k.OPT_RETURN, default=o.get(k.OPT_RETURN, 120)):

@@ -114,7 +114,7 @@ async def browser(session, token, png):
         out["appstab"] = await js(f"""(async () => {{ const p = {find}; p.tab = 'apps'; p.render(); await p.loadApps();
             await new Promise(r => setTimeout(r, 500)); const r = p.shadowRoot;
             return {{ tabs: [...r.querySelectorAll('.tab')].map(e => e.textContent), apps: [...r.querySelectorAll('.item.app .nm div:first-child')].map(e => e.textContent),
-                     screenApp: [...r.querySelectorAll('.item.app')].filter(e => e.textContent.includes('the screen app')).map(e => e.querySelector('.danger').disabled),
+                     screenApp: [...r.querySelectorAll('.item.app')].filter(e => e.textContent.includes('the home app')).map(e => e.querySelector('.danger').disabled),
                      status: (r.querySelector('.inst') || {{}}).textContent || '' }}; }})()""")
         await asyncio.sleep(0.3); await shot("-apps")
         out["home"] = await js(f"""(async () => {{ const p = {find}; p.tab = 'home'; p.render();
@@ -303,9 +303,9 @@ async def run(tmp):
                                {"name": "Home Assistant", "url": "http://192.168.1.211:8123/dashboard-wall"}]}
             o = subprocess.run([hr.HA_PY, "-c", code, os.path.join(conf, "custom_components"), json.dumps(old)], capture_output=True, text=True)
             ad = json.loads(o.stdout or "null") if o.returncode == 0 else o.stderr[-300:]
-            check(isinstance(ad, dict) and ad.get("kiosk") and ad.get("kiosk_screens") == ["wall", "music", "dashboard"] and ad.get("kiosk_app") == EW
-                  and ad.get("kiosk_music") == "d5369777_music_assistant" and ad.get("kiosk_dashboard") == "dashboard-wall" and ad.get("kiosk_return") == 90,
-                  f"the Echo's screen adopted by a new entry ({ad})")
+            check(isinstance(ad, dict) and ad.get("kiosk") and ad.get("kiosk_screens") == ["wall", "dashboard"] and ad.get("kiosk_app") == EW
+                  and "kiosk_music" not in ad and ad.get("kiosk_dashboard") == "dashboard-wall" and ad.get("kiosk_return") == 90,
+                  f"the Echo's screen adopted by a new entry (Music Assistant's page left out: the drawer's own) ({ad})")
             o = subprocess.run([hr.HA_PY, "-c", code, os.path.join(conf, "custom_components"), json.dumps({**old, "enabled": False})], capture_output=True, text=True)
             check(o.stdout.strip() == "null", "... none while the Echo's screen is off")
             kg = await c.ws(type="echo_local/kiosk/get", echo=NODE)
@@ -322,7 +322,7 @@ async def run(tmp):
                       and out.get("tabs") == (["Screen", "Home", "Apps"] if EW_INT else ["Screen", "Apps"]),
                       f"the panel: the Echo, its screen on with Echo-Wall, the Screen and Apps tabs ({out.get('echos')}, {out.get('sub')}, {out.get('tabs')})")
                 scr = out.get("screen") or {}
-                check("Give the home app Home Assistant (a login, these screens)" in scr.get("rows", []) and "Sent to the Echo" in scr.get("push", ""),
+                check("Connect it to Home Assistant" in scr.get("rows", []) and "Sent to the Echo" in scr.get("push", ""),
                       f"the Screen tab: the kiosk's options, the last push ({scr.get('rows', [])[:2]}, {scr.get('push')!r})")
                 if EW_INT:
                     hm = out.get("home") or {}

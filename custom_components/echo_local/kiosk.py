@@ -3,8 +3,10 @@ from here.
 
 The integration's options (config_flow.py OptionsFlow, or the sidebar panel's Screen tab) pick the home app (any app
 installed on the Echo: the same choice as the settings page's Screen page, the last one made counts) and its screens:
-Home (hassmic:home, drawn by the app: Echo-Wall), the clock, a dashboard of Home Assistant's own UI, Music Assistant,
-a page of one's own; the drawer offers them by name.  The Echo has no keyboard, so it gets a login of its own: a Home Assistant user
+Home (hassmic:home, drawn by the app: Echo-Wall), the clock, a dashboard of Home Assistant's own UI, a page of one's
+own; the drawer offers them by name.  Music is not among them: the drawer's Music is the Echo's own Music Assistant
+player (src/ui/music.c, set up on the Echo's settings page); Music Assistant's web page as a screen went with it.
+The Echo has no keyboard, so it gets a login of its own: a Home Assistant user
 made for this Echo ("<Echo> kiosk", not an administrator unless the options say so) and a long-lived token of it, sealed
 for the Echo on the way.  Removing the integration's entry removes that user."""
 from __future__ import annotations
@@ -26,7 +28,7 @@ _LOGGER = logging.getLogger(__name__)
 OPT_KIOSK = "kiosk"                     # on: the home app gets the screens and a login; off: neither
 OPT_SCREENS = "kiosk_screens"           # of SCREEN_KINDS, in this order
 OPT_DASHBOARD = "kiosk_dashboard"       # url path of the dashboard ("lovelace" = Overview)
-OPT_MUSIC = "kiosk_music"               # Music Assistant: a panel's url path or a whole address
+OPT_MUSIC = "kiosk_music"               # gone (the drawer's own Music): read nowhere, left in old entries' options
 OPT_CUSTOM_NAME = "kiosk_custom_name"
 OPT_CUSTOM_URL = "kiosk_custom_url"
 OPT_DEFAULT = "kiosk_default"           # the kind it starts on
@@ -48,18 +50,10 @@ def app_settings(text: str) -> dict[str, str]:
         out[k.strip().lower()] = v.strip()
     return out
 
-SCREEN_KINDS = ["clock", "wall", "dashboard", "music", "custom"]
+SCREEN_KINDS = ["wall", "dashboard", "clock", "custom"]
 DATA_USER, DATA_TOKEN = "kiosk_user", "kiosk_token"
 
 
-def music_panel(hass: HomeAssistant) -> str:
-    """the Music Assistant add-on's sidebar panel (ingress, "<slug>_music_assistant"), "" without one"""
-    panels = hass.data.get("frontend_panels", {})
-    for path, p in panels.items():
-        title = (getattr(p, "sidebar_title", None) or "").lower()
-        if "music_assistant" in path or title == "music assistant":
-            return path
-    return ""
 
 
 def ha_url(hass: HomeAssistant, entry: ConfigEntry) -> str:
@@ -84,10 +78,6 @@ def screens(hass: HomeAssistant, entry: ConfigEntry) -> tuple[list[tuple[str, st
             out.append((k, "Home", "hassmic:home"))
         elif k == "dashboard":
             out.append((k, "Home Assistant", f"{base}/{(o.get(OPT_DASHBOARD) or 'lovelace').strip('/')}"))
-        elif k == "music":
-            m = (o.get(OPT_MUSIC) or music_panel(hass) or "").strip()
-            if m:
-                out.append((k, "Music", m if m.startswith(("http://", "https://")) else f"{base}/{m.strip('/')}"))
         elif k == "custom":
             u = (o.get(OPT_CUSTOM_URL) or "").strip()
             if u.startswith(("http://", "https://")):
@@ -168,7 +158,7 @@ def adopt(hass: HomeAssistant, echo_cfg: dict) -> dict | None:
         elif u == "hassmic:clock":
             k = "clock"
         elif "music_assistant" in u or name == "Music":
-            k = "music"; o[OPT_MUSIC] = u.split("/")[-1] if u.startswith(echo_cfg.get("ha", "") + "/") else u
+            continue                    # the drawer's own Music now
         elif u.startswith(echo_cfg.get("ha", "") + "/") and name == "Home Assistant":
             k = "dashboard"; o[OPT_DASHBOARD] = u[len(echo_cfg["ha"]) + 1:] or "lovelace"
         elif u.startswith(("http://", "https://")):

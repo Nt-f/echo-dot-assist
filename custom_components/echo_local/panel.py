@@ -50,7 +50,6 @@ def _kiosk_schema():
         vol.Optional(k.OPT_SCREENS): vol.All([vol.In(k.SCREEN_KINDS)], vol.Length(max=len(k.SCREEN_KINDS))),
         vol.Optional(k.OPT_DEFAULT): vol.In(k.SCREEN_KINDS),
         vol.Optional(k.OPT_DASHBOARD): vol.All(str, vol.Length(max=200)),
-        vol.Optional(k.OPT_MUSIC): vol.All(str, vol.Length(max=400)),
         vol.Optional(k.OPT_CUSTOM_NAME): vol.All(str, vol.Length(max=40)),
         vol.Optional(k.OPT_CUSTOM_URL): vol.All(str, vol.Length(max=400)),
         vol.Optional(k.OPT_RETURN): vol.All(vol.Coerce(int), vol.Range(min=0, max=3600)),
@@ -74,7 +73,7 @@ def ws_kiosk_get(hass: HomeAssistant, connection, msg: dict) -> None:
     if e is None:
         connection.send_error(msg["id"], "not_found", "no such Echo")
         return
-    connection.send_result(msg["id"], {"options": dict(e.options), "kinds": k.SCREEN_KINDS, "music_panel": k.music_panel(hass),
+    connection.send_result(msg["id"], {"options": dict(e.options), "kinds": k.SCREEN_KINDS,
                                        "ha_url": k.ha_url(hass, e), "push": k.last_push(hass, e)})
 
 

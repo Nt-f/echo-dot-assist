@@ -4,6 +4,14 @@ What changed for people using the Echo, newest first. Details and measurements a
 
 ## 2026-11-04
 
+- **Echo Local's Screen tab, reworded around the home app.** The **App** comes first; "Give the home app Home
+  Assistant" is **Connect it to Home Assistant**; its screens are **Pages in the drawer** (Home, a Home Assistant
+  dashboard, a clock, a web page of yours), each page's own fields shown only while it is on. The Music Assistant page
+  is gone: the drawer's own **Music** is the Echo's Music Assistant player.
+- **The drawer is easier to pull over an app**: from the middle 80 % of the top edge (was 40 %).
+- **The old app switcher is gone for good.** This fork's former kiosk app stayed installed after the move to the new
+  screen, and its bar still came over apps now and then; the update removes it. Its keyboard went with it: Echo-Wall
+  1.1 brings its keyboard back, and the Echo uses it where it has no other.
 - **Switching apps from the drawer no longer flashes the face.** Picking an app in the drawer pulled over another left
   hassmic's face on the screen for the second the new app took to start; the app you came from now stays until the
   new one is up, as on Android.

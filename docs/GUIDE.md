@@ -462,7 +462,7 @@ satellite of its own has to run without its microphone (as a display) while hass
 - **The drawer**: pull down from the top edge of the screen, whatever shows, as on Amazon's own Echo Show. In it:
   **Home** (the home app), **Face** (where the home app is another), **Music**, **Do not disturb**, **Screen off** (a
   touch wakes it), what plays (tap it for the music), the Echo's volume, and below, the **app switcher**: the home
-  app's own screens (Echo-Wall's dashboard, Music Assistant, a page of yours, as Echo Local names them) and every app
+  app's own pages (Echo-Wall's Home, a Home Assistant dashboard, a web page of yours, as Echo Local names them) and every app
   you installed (swipe the row sideways when there are many). Over an app, pull from the middle of the top edge: the
   app never gets that swipe, so it does not scroll or refresh, while a tap there, or a swipe sideways, is still the
   app's. hassmic holds a touch that starts there back from the app for a moment (a tap goes on as you lift your
@@ -573,16 +573,17 @@ the manner of Apple's HomeView. Frosted-glass widgets over a photo or a gradient
 digital clock, the date and weather, the thermostat's temperature big, what plays, a camera, your scenes and locks;
 then a page per room with a tile per light, switch, fan, cover, lock, speaker and door or motion sensor, swiped
 sideways. A tap switches, a long press opens the controls (brightness, position, volume, temperature). Left alone for
-2 minutes it shows the lock screen (a photo, the time, the next alarm). Also **Home Assistant's own dashboards**,
-**Music Assistant**, and a page of your own, as tiles on Home. Echo-Wall is an app of its own (it runs on any Android
+2 minutes it shows the lock screen (a photo, the time, the next alarm). Also **Home Assistant's own dashboards** and
+a web page of your own, as pages in the drawer (music is the drawer's own **Music**, the Echo's Music Assistant player). Echo-Wall is an app of its own (it runs on any Android
 tablet too) with a Home Assistant integration of its own; install both as its README says (the app with `adb install`,
 the integration from its repository with HACS). Kiosk Satellite (Home Assistant's dashboards in a browser of its own)
 is the other choice, and it is set up by the guided setup.
 
 It is set up from Home Assistant, in the Echo Local integration (the one for the Echo's alarms): **Echo Local** in the
-sidebar › the Echo › *Screen* (or *Settings › Devices & services › Echo Local › Configure*). Switch on "Show Home
-Assistant to the home app", pick the screens (Home first; the drawer offers them by name) and the home app (Echo-Wall:
-the same choice as the settings page's Screen page). The Echo has no keyboard to log in with, so the integration makes
+sidebar › the Echo › *Screen* (or *Settings › Devices & services › Echo Local › Configure*). Pick the **App** (Echo-Wall:
+the same choice as the settings page's Screen page), switch on **Connect it to Home Assistant**, and pick its **Pages in
+the drawer** (Home first; the drawer offers them by name, in its row of apps). With Echo-Wall as the app, its Home is
+arranged in the *Home* tab beside *Screen* (Echo-Wall's own panel, there once its integration is installed). The Echo has no keyboard to log in with, so the integration makes
 a Home Assistant user for it ("Echo Show 5 … kiosk": local network only, not an administrator unless you tick that) and
 hands the Echo a token of it, sealed for that Echo on the way; only the home app gets it, and deleting the
 integration's entry deletes the user.
