@@ -18,6 +18,8 @@ What changed for people using the Echo, newest first. Details and measurements a
 - **The old app switcher is gone for good.** This fork's former kiosk app stayed installed after the move to the new
   screen, and its bar still came over apps now and then; the update removes it. Its keyboard went with it: Echo-Wall
   1.1 brings its keyboard back, and the Echo uses it where it has no other.
+- **Going from the Music view to the home app no longer stops at the face.** Home in the drawer pulled over the
+  Echo's own Music view showed the face's eyes for a moment before the home app came up; the music stays until it does.
 - **Switching apps from the drawer no longer flashes the face.** Picking an app in the drawer pulled over another left
   hassmic's face on the screen for the second the new app took to start; the app you came from now stays until the
   new one is up, as on Android.
