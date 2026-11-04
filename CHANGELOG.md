@@ -4,6 +4,10 @@ What changed for people using the Echo, newest first. Details and measurements a
 
 ## 2026-11-04
 
+- **The drawer shuts with a swipe up from anywhere on it**, its row of apps included, and a short push is enough (a
+  tenth of its height, or a light flick); pulling it down opens it from a third of the way.
+- **Echo Local's panel fits a phone**: cards no wider than the screen, settings under their names where it is narrow;
+  on a computer the Echos' list runs to the bottom whatever the tab.
 - **Echo Local's Screen tab, reworded around the home app.** The **App** comes first; "Give the home app Home
   Assistant" is **Connect it to Home Assistant**; its screens are **Pages in the drawer** (Home, a Home Assistant
   dashboard, a clock, a web page of yours), each page's own fields shown only while it is on. The Music Assistant page

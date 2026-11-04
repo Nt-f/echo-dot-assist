@@ -578,8 +578,9 @@ void scene_touch(struct scene *s, int ev, int x, int y, long long now)
             return;
         }
         if (s->dragging) { act(s, s->pact, s->parg, EV_DRAG); return; }
-        /* up on the open drawer, not along its apps: it goes with the finger */
-        if (drawer_open(s) && !s->sc_drag && dy < -TAP_PX && abs(dy) > abs(dx) && (!s->sc || s->sc->axis)) {
+        /* up on the open drawer, from anywhere on it or under it (its apps row too: along it the row scrolls, up it
+         * shuts): it goes with the finger */
+        if (drawer_open(s) && !s->sc_drag && dy < -TAP_PX && abs(dy) > abs(dx) && (!s->sc || !s->sc->axis)) {
             s->edge = 1; s->pressed = 0; drawer_pull(s, s->y0, TOUCH_DOWN); drawer_pull(s, y, TOUCH_MOVE);
             return;
         }

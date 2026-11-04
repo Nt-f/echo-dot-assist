@@ -119,7 +119,7 @@ struct music {
 struct face { struct anim ew, lh, rh, gx, gy, mw, mh, ma, cr, cg, cb, br; long long blink_at, sacc_at, poke_at; float sgx, sgy, pokex; };
 /* pos 0 closed .. 1 open, t where it goes; pulling: a finger has it (grab: where on it); from_app: pulled over an app
  * (from), the picture of it under the drawer */
-struct drawer { float pos, t, grab, vy; long long ty; int pulling, from_app, go; char from[96], go_pkg[96];
+struct drawer { float pos, t, grab, vy; long long ty; int pulling, from_app, go, was_open;   /* was_open: the pull began on it open */ char from[96], go_pkg[96];
                 long long vol_sent_at; int vol_drag; float vol_frac;
                 struct scroller apps;                          /* the apps row, along */
                 char go_cls[80]; };                            /* how go_pkg is started (scene.h's launch: home:, screen:<name>) */

@@ -109,6 +109,7 @@ void drawer_pull(struct scene *s, int y, int ev)
             } else d->from_app = 0;
         }
         d->go = 0;                                              /* (grabbed again as it closed for a Home: that Home no more) */
+        d->was_open = d->pos > 0.9f;
         d->pulling = 1; d->grab = y - d->pos * H; d->vy = 0; d->ty = s->now;
         return;
     }
@@ -121,7 +122,9 @@ void drawer_pull(struct scene *s, int y, int ev)
     }
     d->pulling = 0;                                             /* TOUCH_UP: open or shut, by the flick or by how far */
     if (s->now - d->ty > 120) d->vy = 0;
-    d->t = d->vy > 0.4f ? 1 : d->vy < -0.4f ? 0 : d->pos > 0.4f ? 1 : 0;
+    /* little is enough either way: pushed up a tenth from open, it shuts; pulled down a third from shut, it opens; a
+     * light flick (half the speed it took before) decides before either */
+    d->t = d->vy > 0.2f ? 1 : d->vy < -0.2f ? 0 : d->was_open ? (d->pos > 0.9f ? 1 : 0) : (d->pos > 0.3f ? 1 : 0);
 }
 
 /* the home app's package (labelled Home, as on Amazon's own: what it is, the page says) */
