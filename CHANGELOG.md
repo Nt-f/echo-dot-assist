@@ -16,6 +16,9 @@ What changed for people using the Echo, newest first. Details and measurements a
 
 ## 2026-11-04
 
+- **Install Echo-Wall from Echo Local.** With Echo-Wall picked as an Echo Show's home app but not on it yet, the Screen
+  tab offers **Install Echo-Wall**: Home Assistant downloads its newest release from GitHub and installs it on the Echo
+  (the Echo itself stays off the internet); the Apps tab shows how it goes.
 - **Drop In: you are heard at a normal voice from the first word** (Echo Show especially): a call started the Echo's
   microphone gain from a Dot's level, 10 dB under what an Echo Show 5 needs, and it caught up only slowly. It now
   starts from your last wake word's level. A low hum in the room (mains, a fridge: under 200 Hz) is taken out of the
