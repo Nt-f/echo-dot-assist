@@ -142,6 +142,25 @@ System) off takes any certificate, but then anyone on your network could slip th
         message: "Timer {{ states('sensor.kitchen_echo_ringing_timers') }} is ringing in the kitchen"
   ```
 
+### The Echo's own voice
+
+Where the firmware has Amazon's offline voice (Ivona, "Nina": the Echo Show 5, `docs/re-ivona.md`), the Echo speaks
+without Home Assistant's text to speech:
+
+- **Its voice for Home Assistant**: Home Assistant's Wyoming integration finds "hassmic" on the Echo (port 16710) and
+  offers it as a text-to-speech engine, for the voice assistant and for `tts.speak` to any speaker. It takes text as it
+  is written: each sentence is made as soon as it is complete.
+- **Replies in the Echo's own voice** (settings page, Voice, off by default): the reply is said on the Echo from its
+  text, Home Assistant's audio is never downloaded. A reply Home Assistant does not stream (most intents, short AI
+  answers) is said whole as soon as its text is there. A long AI answer that Home Assistant streams: with the Echo as
+  the voice assistant's text-to-speech, each sentence is said the moment the AI has written it, so the answer starts
+  while the rest is still being written; with another text-to-speech (Piper, a cloud), the Echo says the whole answer
+  once it is complete. The Echo learns which it is after one such answer, and looks again every 20th, so after
+  switching the text-to-speech to the Echo it may take up to 20 long answers until they are spoken sentence by
+  sentence. "Alexa, stop", the wake word and the action button cut a streamed answer as any other; the rest of it is
+  not said. Rarely, a `tts.speak` with the Echo's voice for another speaker sent in the moment an answer starts
+  streaming is said here instead, and that answer is said whole at its end.
+
 ## Wake word
 
 Three engines, picked under "Wake word" on the [settings page](#settings-page):

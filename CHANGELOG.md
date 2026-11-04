@@ -22,6 +22,12 @@ What changed for people using the Echo, newest first. Details and measurements a
   call's sound first: on an Echo Show 5 it came out louder than the voice. **A phone's camera in the Drop In card** reached the Echo Show on its side;
   it is upright now, and a phone held upright shows whole with bars beside it. **The settings page** was blank after
   the last update (a typo in the camera's help text). Echo Local 2026.11.21.
+- **Long AI replies start sooner in the Echo's own voice** (Echo Show with Amazon's voice installed, "Replies in the
+  Echo's own voice" on): when your voice assistant's text-to-speech is the Echo itself ("hassmic" in Home Assistant's
+  Wyoming integration), the Echo now says each sentence of an AI's reply as soon as it is written, instead of waiting
+  for the whole answer and then downloading it from Home Assistant. With another text-to-speech the Echo says the
+  whole reply in its own voice once it is complete, and no longer downloads Home Assistant's audio for it. Others
+  using the Echo's voice (tts.speak to other speakers) get their sentences as they come too.
 - **Drop In with video starts frosted, as Amazon's does** (Echo Show): when you drop in on an Echo Show that did not
   ring, its picture is blurred for the first 3 seconds and clears over the next one, so whoever is there has a moment
   before they are seen. On a Show and in the Drop In card alike; a call answered with the button is seen at once.
