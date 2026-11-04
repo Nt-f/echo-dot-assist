@@ -34,7 +34,10 @@ def ws_list(hass: HomeAssistant, connection, msg: dict) -> None:
     from . import kiosk
     connection.send_result(msg["id"], {"echos": [
         {"echo": e.unique_id or "", "title": e.title, "entry_id": e.entry_id, "kiosk": bool(e.options.get(kiosk.OPT_KIOSK)),
-         "app": (e.options.get(kiosk.OPT_APP) or "").strip(), "screens": e.options.get(kiosk.OPT_SCREENS) or ["wall", "dashboard"]}
+         "app": (e.options.get(kiosk.OPT_APP) or "").strip(), "screens": e.options.get(kiosk.OPT_SCREENS) or ["wall", "dashboard"],
+         # the Home Assistant user made for this Echo (kiosk.py): the one Echo-Wall's app logs in as, which its "Home"
+         # tab (Echo-Wall's own panel, embedded) shows the device of
+         "user": e.data.get(kiosk.DATA_USER) or ""}
         for e in _entries(hass)]})
 
 

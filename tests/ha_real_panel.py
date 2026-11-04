@@ -23,8 +23,15 @@ NODE = "echo-show-5-a1b2c3"
 EW = "io.github.nt_f.echowall"
 
 
+# Echo-Wall's integration (Nt-f/Echo-Wall, a repo of its own), for the Home tab: where it is checked out beside this one
+EW_INT = os.environ.get("HASSMIC_ECHO_WALL") or next((p for p in (os.path.join(hr.ROOT, "..", d, "custom_components", "echo_wall")
+                                                              for d in ("Echo-Wall", "hassmic-homeview")) if os.path.isdir(p)), "")
+
+
 def write_config(conf):
     rk.write_config(conf)
+    if EW_INT:
+        shutil.copytree(EW_INT, os.path.join(conf, "custom_components", "echo_wall"), ignore=shutil.ignore_patterns("__pycache__"))
 
 
 async def as_user(session, token):
@@ -110,6 +117,14 @@ async def browser(session, token, png):
                      screenApp: [...r.querySelectorAll('.item.app')].filter(e => e.textContent.includes('the screen app')).map(e => e.querySelector('.danger').disabled),
                      status: (r.querySelector('.inst') || {{}}).textContent || '' }}; }})()""")
         await asyncio.sleep(0.3); await shot("-apps")
+        out["home"] = await js(f"""(async () => {{ const p = {find}; p.tab = 'home'; p.render();
+            for (let i = 0; i < 40; i++) {{ const w = p.shadowRoot.querySelector('echo-wall-panel'); if (w && w.dev && w.shadowRoot.querySelector('main *:not(.empty)')) break;
+              await new Promise(r => setTimeout(r, 250)); }}
+            const w = p.shadowRoot.querySelector('echo-wall-panel'); if (!w) return {{ text: (p.shadowRoot.querySelector('main') || {{}}).textContent || '' }};
+            const before = w.dev; p.tab = 'screen'; p.render(); p.tab = 'home'; p.render();
+            return {{ dev: w.dev, kept: p.shadowRoot.querySelector('echo-wall-panel') === w && w.dev === before, embedded: w.hasAttribute('embedded'),
+                     header: getComputedStyle(w.shadowRoot.querySelector('header')).display }}; }})()""")
+        await asyncio.sleep(1.5); await shot("-home")
         out["console"] = console
         open(png.replace(".png", "-console.txt"), "w").write("\n".join(console))
         return out
@@ -188,7 +203,7 @@ async def run(tmp):
     echo = hr.Echo(tmp, "Echo Show 5 a1b2c3", "02:00:00:a1:b2:c3", 26190, net, os.path.join(hr.ROOT, "build", "hassmic-host"))
     halog = open(os.path.join(tmp, "ha.log"), "w")
     hass = subprocess.Popen([hr.HA_PY, "-m", "homeassistant", "-c", conf, "--skip-pip"], stdout=halog, stderr=subprocess.STDOUT, cwd=conf)
-    apps = os.path.join(tmp, "apps"); os.makedirs(os.path.join(apps, "io.github.gamer92000.echodotassist.kiosk"))
+    apps = os.path.join(tmp, "apps"); os.makedirs(os.path.join(apps, "io.github.nt_f.echowall"))
     os.environ["HASSMIC_APP_DATA"] = apps
     # the Echo Show's apps: packages.xml, root's apps.sh with the stand-in pm (as fake_web_apps.py has them)
     fwa = type("fwa", (), {"xml": staticmethod(apps_xml), "PM": APPS_PM})
@@ -259,6 +274,19 @@ async def run(tmp):
             check("unauthorized" in e.lower(), "the list: administrators only")
             e = await fails(k.ws(type="echo_local/kiosk/set", echo=NODE, options={"kiosk_admin": True}))
             check("unauthorized" in e.lower(), "the screen's options: administrators only (the kiosk does not make itself one)")
+            # ---- Echo-Wall beside it: its app logged in as this Echo's user, its panel in Echo Local's Home tab
+            if not EW_INT:
+                print("note: no Echo-Wall integration checked out beside this repo (HASSMIC_ECHO_WALL): the Home tab is not tried")
+            else:
+                f = await c.post("/api/config/config_entries/flow", {"handler": "echo_wall"})
+                f = await c.post(f"/api/config/config_entries/flow/{f['flow_id']}", {})
+                check(f.get("type") == "create_entry", f"Echo-Wall's integration added ({f.get('type')})")
+                r = await k.ws(type="echo_wall/register", device="dev_echo_show", name="Echo-Wall on the Show", model="Echo Show 5", screen=[960, 470])
+                check(r.get("device") == "dev_echo_show", "Echo-Wall's app registered with the Echo's login")
+                p = (await c.ws(type="get_panels")).get("echo-wall") or {}
+                check(p and not p.get("title"), f"beside Echo Local, Echo-Wall's panel has no sidebar entry of its own ({p.get('title')!r})")
+                el = await c.ws(type="echo_local/list")
+                check(bool(el["echos"][0].get("user")), "the list: the Echo's user, for the Home tab")
             await k.sock.close()
 
             # ---- the Echo Show's apps (where the Echo side, apps.c and root's apps.sh, is in this tree)
@@ -291,11 +319,15 @@ async def run(tmp):
             out = await browser(session, admin_tok, os.path.join(hr.ROOT, "build", "test-logs", "panel.png"))
             if out is not None:
                 check(out.get("echos") == ["Echo Show 5 a1b2c3"] and any("Screen on" in x and "Echo-Wall" in x for x in out.get("sub", []))
-                      and out.get("tabs") == ["Screen", "Apps"],
+                      and out.get("tabs") == (["Screen", "Home", "Apps"] if EW_INT else ["Screen", "Apps"]),
                       f"the panel: the Echo, its screen on with Echo-Wall, the Screen and Apps tabs ({out.get('echos')}, {out.get('sub')}, {out.get('tabs')})")
                 scr = out.get("screen") or {}
-                check("Show Home Assistant on the screen" in scr.get("rows", []) and "Sent to the Echo" in scr.get("push", ""),
+                check("Give the home app Home Assistant (a login, these screens)" in scr.get("rows", []) and "Sent to the Echo" in scr.get("push", ""),
                       f"the Screen tab: the kiosk's options, the last push ({scr.get('rows', [])[:2]}, {scr.get('push')!r})")
+                if EW_INT:
+                    hm = out.get("home") or {}
+                    check(hm.get("dev") == "dev_echo_show" and hm.get("embedded") and hm.get("header") == "none" and hm.get("kept"),
+                          f"the Home tab: Echo-Wall's panel for this Echo's device, no header or list of its own, kept across tabs ({hm})")
                 check("org.schabi.newpipe (installed)" in scr.get("apps", []) and "Echo-Wall" in scr.get("apps", []),
                       f"the Screen tab: any app installed on the Echo offered as the screen app ({[x for x in scr.get('apps', []) if '.' in x or 'Echo' in x][:6]})")
                 ap = out.get("appstab") or {}

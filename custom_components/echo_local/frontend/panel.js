@@ -10,6 +10,7 @@
 'use strict';
 
 const KIND_LABEL = { wall: 'Home (the screen app draws it)', clock: 'Clock', dashboard: "Home Assistant's own UI", music: 'Music Assistant', custom: 'A page of your own' };
+const WALL = 'io.github.nt_f.echowall';
 const KNOWN_APPS = [['', 'As the Echo has it (its settings page\'s Screen page)'], ['io.github.nt_f.echowall', 'Echo-Wall'], ['io.github.nt_f.echoscreen', 'Echo-Screen'], ['me.jxl.kiosk_satellite', 'Kiosk Satellite']];
 
 const h = (tag, props, ...kids) => {
@@ -188,12 +189,12 @@ class EchoLocalPanel extends HTMLElement {
     this.apps = null;
   }
 
-  set hass(h) { const first = !this._hass; this._hass = h; if (first) this.load(); }
+  set hass(h) { const first = !this._hass; this._hass = h; if (first) this.load(); if (this._wall) this._wall.hass = h; }
   get hass() { return this._hass; }
-  set narrow(n) { this.toggleAttribute('narrow', !!n); }
+  set narrow(n) { this.toggleAttribute('narrow', !!n); this._narrow = !!n; if (this._wall) this._wall.narrow = !!n; }
 
   connectedCallback() { this.render(); }
-  disconnectedCallback() { clearTimeout(this._appsPoll); }
+  disconnectedCallback() { clearTimeout(this._appsPoll); if (this._wall && this._wall.release) this._wall.release(); this._wall = null; }
 
   ws(msg) { return this._hass.connection.sendMessagePromise(msg); }
   echoInfo(node = this.echo) { return this.state.echos.find((e) => e.echo === node); }
@@ -286,11 +287,47 @@ class EchoLocalPanel extends HTMLElement {
     main.textContent = '';
     if (!this.echoInfo()) { main.append(h('div', { class: 'empty' }, 'Add an Echo to Echo Local first.')); return; }
     const hasApps = !(this.apps && this.apps.none);
-    if (this.tab === 'apps' && !hasApps) this.tab = 'screen';
+    const hasHome = this.echoInfo().app === WALL;
+    if ((this.tab === 'apps' && !hasApps) || (this.tab === 'home' && !hasHome)) this.tab = 'screen';
     main.append(h('div', { class: 'tabs' },
       h('button', { class: 'tab' + (this.tab === 'screen' ? ' sel' : ''), onclick: () => { this.tab = 'screen'; if (!this.kiosk) this.loadKiosk(); this.render(); } }, 'Screen'),
+      hasHome && h('button', { class: 'tab' + (this.tab === 'home' ? ' sel' : ''), onclick: () => { this.tab = 'home'; this.render(); } }, 'Home'),
       hasApps && h('button', { class: 'tab' + (this.tab === 'apps' ? ' sel' : ''), onclick: () => { this.tab = 'apps'; this.loadApps(); this.render(); } }, 'Apps')));
-    main.append(this.tab === 'apps' ? this.appsTab() : this.screenTab());
+    main.append(this.tab === 'apps' ? this.appsTab() : this.tab === 'home' ? this.homeTab() : this.screenTab());
+  }
+
+  // ---------------------------------------------------------------- the Home tab: Echo-Wall's panel, for this Echo
+
+  // Echo-Wall's integration (Nt-f/Echo-Wall) registers its panel; beside Echo Local it has no sidebar entry and lives
+  // here.  Its element is loaded from that panel's module and kept across redraws (its drafts and preview with it),
+  // one for every Echo: it shows the device that logged in as this Echo's user.
+  wallModule() {
+    const p = this._hass && this._hass.panels && this._hass.panels['echo-wall'];
+    return p && p.config && p.config._panel_custom && p.config._panel_custom.module_url;
+  }
+
+  homeTab() {
+    const url = this.wallModule();
+    if (!url) {
+      return h('div', { class: 'card' }, h('h2', null, 'Echo-Wall’s Home'),
+        h('div', { class: 'about' }, 'Echo-Wall keeps its Home (tiles, rooms, wallpaper) in an integration of its own. Add it in HACS as a custom repository (Nt-f/Echo-Wall, type Integration), restart Home Assistant, then Settings › Devices & services › Add integration › Echo-Wall. Its Home is arranged here afterwards.'),
+        h('a', { href: 'https://my.home-assistant.io/redirect/hacs_repository/?owner=Nt-f&repository=Echo-Wall&category=integration', target: '_blank', rel: 'noreferrer' }, 'Open it in HACS →'));
+    }
+    const box = h('div', { class: 'hometab' });
+    const embed = { user: this.echoInfo().user || '' };
+    const put = () => {
+      if (!this._wall) { this._wall = document.createElement('echo-wall-panel'); this._wall.narrow = !!this._narrow; }
+      this._wall.embed = embed;
+      if (this._wall.hass !== this._hass) this._wall.hass = this._hass;
+      box.append(this._wall);
+    };
+    if (customElements.get('echo-wall-panel')) put();
+    else {
+      box.append(h('div', { class: 'empty' }, 'Loading Echo-Wall…'));
+      import(url).then(() => customElements.whenDefined('echo-wall-panel')).then(() => { box.textContent = ''; put(); })
+        .catch((e) => { box.textContent = ''; box.append(h('div', { class: 'banner' }, 'Echo-Wall’s panel did not load: ' + ((e && e.message) || e))); });
+    }
+    return box;
   }
 
   switch(on, cb) {
@@ -471,7 +508,15 @@ class EchoLocalPanel extends HTMLElement {
     // alarms drawn over it by hassmic), then one typed in
     const installed = ((this.apps && this.apps.apps) || []).map((a) => a.package).filter((p) => !KNOWN_APPS.some(([v]) => v === p)).sort();
     const offered = [...KNOWN_APPS, ...installed.map((p) => [p, `${p} (installed)`])];
-    const appSel = h('select', { onchange: () => { o.kiosk_app = appSel.value === '*' ? (o.kiosk_app || '') : appSel.value; appOwn.style.display = appSel.value === '*' ? '' : 'none'; touch(); } },
+    // Echo-Wall keeps its Home's layout in an integration of its own (Nt-f/Echo-Wall, sidebar panel /echo-wall):
+    // a way there, or to HACS for it when Home Assistant has no such panel yet
+    const hasWall = !!this.wallModule();
+    const wallRow = row('Its Home', hasWall
+      ? h('a', { href: '#', onclick: (ev) => { ev.preventDefault(); if (this.echoInfo().app !== WALL) { this.toast('Save first: Echo-Wall as the app'); return; } this.tab = 'home'; this.render(); } }, 'Arrange it in the Home tab →')
+      : h('a', { href: 'https://my.home-assistant.io/redirect/hacs_repository/?owner=Nt-f&repository=Echo-Wall&category=integration', target: '_blank', rel: 'noreferrer' }, 'Add Echo-Wall’s integration from HACS →'),
+      hasWall ? 'Tiles, rooms and wallpaper: Echo-Wall’s own integration, in its Home tab.' : 'Its layout lives in an integration of its own: in HACS, a custom repository (Nt-f/Echo-Wall, Integration), then Settings › Devices › Add integration › Echo-Wall.');
+    wallRow.style.display = (o.kiosk_app || '') === WALL ? '' : 'none';
+    const appSel = h('select', { onchange: () => { o.kiosk_app = appSel.value === '*' ? (o.kiosk_app || '') : appSel.value; appOwn.style.display = appSel.value === '*' ? '' : 'none'; wallRow.style.display = appSel.value === WALL ? '' : 'none'; touch(); } },
       offered.map(([v, l]) => h('option', { value: v, selected: (o.kiosk_app || '') === v }, l)),
       h('option', { value: '*', selected: !offered.some(([v]) => v === (o.kiosk_app || '')) }, 'Another app (its package)…'));
     const appOwn = text('kiosk_app', 'org.example.screen');
@@ -483,7 +528,7 @@ class EchoLocalPanel extends HTMLElement {
     return h('div', null, bar, pst, h('div', { class: 'grid' },
       h('div', { class: 'card' }, h('h2', null, 'On the screen'),
         row('Give the home app Home Assistant (a login, these screens)', sw('kiosk')),
-        h('div', { class: 'row' }, h('div', { class: 'head' }, h('span', { class: 'name' }, 'Screens')), h('div', { class: 'help' }, 'On, in the order hassmic\'s bar (pulled down from the top edge) offers them.'), screens),
+        h('div', { class: 'row' }, h('div', { class: 'head' }, h('span', { class: 'name' }, 'Screens')), h('div', { class: 'help' }, 'On, in the order the Echo\'s drawer (pulled down from the top edge) offers them.'), screens),
         row('Start on, and go back to', def),
         row('Back to it after untouched for', h('span', null, ret, ' ', h('span', { class: 'note' }, 's')), '0: never.'),
         row("Dashboard (Home Assistant's own UI)", text('kiosk_dashboard', 'lovelace'), 'Its path: lovelace is Overview.'),
@@ -491,8 +536,9 @@ class EchoLocalPanel extends HTMLElement {
         row('Your page’s name', text('kiosk_custom_name', 'Page')),
         row('Your page’s address', text('kiosk_custom_url', 'http://…', 'url'))),
       h('div', { class: 'card' }, h('h2', null, 'The screen app'),
-        h('div', { class: 'about' }, 'The Android app that has the screen (docs/screen-apps.md): hassmic\'s kiosk, Echo-Wall, or any app installed on the Echo. One made for hassmic gets Home Assistant\'s address and this Echo\'s login; any other logs in by itself, and hassmic draws the words of a request and a ringing alarm over it. Whatever it is, hassmic\'s bar (pulled down from the top edge) leads to it and to every other app.'),
+        h('div', { class: 'about' }, 'The Echo\'s home app (docs/screen-apps.md): Echo-Wall, Echo-Screen, Kiosk Satellite or any app installed on the Echo. One made for hassmic gets Home Assistant\'s address and this Echo\'s login; any other logs in by itself, and hassmic shows its face over it for a ringing alarm. Whatever it is, the Echo\'s drawer (pulled down from the middle of the top edge) leads to it, its screens and every other app.'),
         row('App', h('span', null, appSel, ' ', appOwn)),
+        wallRow,
         h('div', { class: 'row' }, h('div', { class: 'head' }, h('span', { class: 'name' }, 'Its settings')), h('div', { class: 'help' }, 'One key=value a line; sent sealed with the Echo’s login.'), settings),
         row('The Echo’s user is an administrator', sw('kiosk_admin'), 'Home Assistant’s settings on the Echo.'),
         row('Home Assistant’s address for the Echo', text('kiosk_ha_url', k.url), 'Empty: the one found. The Echo reaches local addresses only.'))));
