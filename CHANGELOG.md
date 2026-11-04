@@ -4,6 +4,8 @@ What changed for people using the Echo, newest first. Details and measurements a
 
 ## 2026-11-04
 
+- **Echo Local's cards in Firefox**: the alarm card and the Drop In card said "Configuration error" on every reload
+  of a dashboard in Firefox (the first load was fine; Chrome and the app were never affected). Echo Local 2026.11.18.
 - **Drop In on an Echo Show from a Home Assistant dashboard**: the card **Echo Drop In** (Echo Local) shows the Echo's
   picture and plays its sound in the browser, and your microphone talks on the Echo, a few hundred ms behind. The
   Echo answers it like a Drop In from another Echo. [The guide](docs/GUIDE.md#drop-in-from-home-assistant-echo-show).

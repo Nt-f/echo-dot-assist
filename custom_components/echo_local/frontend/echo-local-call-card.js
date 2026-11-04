@@ -175,8 +175,10 @@ class EchoLocalCallCard extends HTMLElement {
   disconnectedCallback() { if (this.ws) this.stop(''); }
 }
 
-if (!customElements.get('echo-local-call-card')) {
-  customElements.define('echo-local-call-card', EchoLocalCallCard);
-  window.customCards = window.customCards || [];
+// once Home Assistant's root element is, through its registry of then (echo-local-alarms-card.js says why: Firefox)
+customElements.whenDefined('home-assistant').then(() => {
+  if (!window.customElements.get('echo-local-call-card')) window.customElements.define('echo-local-call-card', EchoLocalCallCard);
+});
+window.customCards = window.customCards || [];
+if (!window.customCards.some((c) => c.type === 'echo-local-call-card'))
   window.customCards.push({ type: 'echo-local-call-card', name: 'Echo Drop In', description: 'See and talk to an Echo Show (Echo Local)' });
-}

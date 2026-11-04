@@ -193,7 +193,8 @@ async def card_in_chrome(session, token, eid, echo):
                 else if (m.type === 'auth_ok') ok();
                 else if (m.id && wait[m.id]) {{ wait[m.id](m.result); delete wait[m.id]; }} }}; }});
             window._hass = {{ states: {{}}, callWS: (msg) => new Promise((ok) => {{ id++; wait[id] = ok; ws.send(JSON.stringify({{ ...msg, id }})); }}) }};
-            await import('/echo_local/echo-local-call-card.js');
+            customElements.define('home-assistant', class extends HTMLElement {{}});   // the card defines itself after HA's root
+            await import('/echo_local/echo-local-call-card.js'); await customElements.whenDefined('echo-local-call-card');
         }})()""")
         voip = os.path.join(echo.state, "voip.raw"); v0 = os.path.getsize(voip) if os.path.exists(voip) else 0
         out = await js(f"""(async () => {{
