@@ -33,6 +33,16 @@ int  dropin_last(unsigned *attempt);            /* the last call's DROPIN_R_* (-
 void dropin_mic(const int16_t *pcm, size_t n, int own);
 float dropin_far_level(void);                   /* the loudest of the far end that can be in the mic now, dBFS (-100: none) */
 int  dropin_far_talking(void);                  /* the other side's voice plays here now (or did, ECHO_MS ago) */
+/* A call from Home Assistant (web.c GET /api/call; docs/video-dropin.md): the connection is the far end, 20 ms frames of
+ * 16 kHz PCM both ways.  begin: the call's generation (>= 0; connected at once, or ringing with drop_in_answer), or -1
+ * and why (the refusal words of a call from an Echo).  state: DROPIN_* of that call (IDLE once it is over, whoever
+ * ended it).  out: the next frame of this side's mic, 1 if one was waiting.  in: a frame to play.  end: Home Assistant
+ * hung up or went. */
+int  dropin_ha_begin(char *err, size_t errsz);
+int  dropin_ha_state(int gen);
+int  dropin_ha_out(int gen, int16_t pcm[320]);
+void dropin_ha_in(int gen, const int16_t pcm[320]);
+void dropin_ha_end(int gen, const char *why);
 /* arb's hook: a member's message (arb.h) */
 void dropin_message(const unsigned char from[8], const char *node, unsigned ip, const unsigned char *p, size_t n);
 #endif

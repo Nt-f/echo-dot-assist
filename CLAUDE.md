@@ -98,6 +98,9 @@ aioesphomeapi, wyoming, aiosendspin, noiseprotocol, aiohttp):
 .venv/bin/python tests/fake_web_camera.py     # the camera (camera.c, GET /api/camera/stream) with a stand-in camera
                                              # (tests/fake_camera.py): sealed records through Echo Local's api.py and
                                              # tsmux.py, one viewer, refusals, the lens, the setting, not exported
+.venv/bin/python tests/fake_web_call.py       # a Drop In from Home Assistant (GET /api/call, dropin.c's "home-assistant"
+                                             # far end) through Echo Local's api.py: audio both ways, hang-ups, ringing,
+                                             # refusals, lost
 .venv/bin/python tests/ha_real_camera.py      # Echo Local's camera entity in a real HA: on/off, a still from the H.264,
                                              # live view as HLS (PyAV: --setup installs stream's requirements)
 .venv/bin/python tests/fake_wifi_join.py      # checkers' setup join (wifi-join.sh) through a fake adb and WifiService
@@ -384,6 +387,9 @@ No model `#ifdef`s in shared code: new differences become a board field, a `devi
   `automation.trigger`, since ServiceNotFound would end the conversation's run with "Done"; the reply from "Drop In
   result" where the Echo has it, else from the timing of the "Drop In" sensor). Keep the entities' states, event
   types, icons and the action's name stable: released blueprints rely on them; a new result is a new event type.
+  From Home Assistant (docs/video-dropin.md): web.c `GET /api/call` (signed; records sealed both ways, keys per call
+  and direction) is the far end, `dropin_ha_*`: PCM 16 kHz 20 ms frames instead of Opus/UDP, no arb messages, peer
+  "home-assistant"; Echo Local's `api.py` `Echo.drop_in()` / `EchoCall`.
 - **Bluetooth**: `ble.c`/`ble_crypto.c` talk raw HCI (`hci.h`) to the controller for the HA Bluetooth proxy (scan, GATT,
   Just Works pairing); Amazon's `btmanagerd` is stopped. A2DP shares the controller; scanning pauses while a phone plays,
   and for 1 s from a wake word round (`ble_quiet` in `main.c` `wake_heard`): the scan's share of the antenna costs

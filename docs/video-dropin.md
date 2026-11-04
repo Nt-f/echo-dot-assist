@@ -1,6 +1,6 @@
 # Video Drop In from Home Assistant (plan)
 
-Status: plan (2026-11-04). A call from a Home Assistant dashboard to an Echo Show: the Echo's camera and microphone to
+Status: step 1 done (2026-11-04: the Echo's side, audio; `tests/fake_web_call.py`), the rest planned. A call from a Home Assistant dashboard to an Echo Show: the Echo's camera and microphone to
 the browser, the browser's microphone to the Echo's speaker, answered and ended like a Drop In between Echos. It
 replaces watching the camera entity for live use (HLS: seconds behind, and no clear start or end).
 
