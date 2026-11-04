@@ -4,6 +4,10 @@ What changed for people using the Echo, newest first. Details and measurements a
 
 ## 2026-11-04
 
+- **The Echo Show 5's camera in Home Assistant**, through the Echo Local integration: live on dashboards, recordings,
+  stills. Off by default (Features on the settings page, or the camera's own switch in Home Assistant). It runs only
+  while someone looks, a red dot in the screen's corner shows meanwhile, the lens cover stops it, and the video goes
+  encrypted to Home Assistant alone. [The guide](docs/GUIDE.md#camera-echo-show) has the rest.
 - **The drawer comes down from a finger landing a little below the top edge** (up to 48 px on an Echo Show 5), not
   only from its very edge, over the face and over apps.
 - **The drawer shuts with a swipe up from anywhere on it**, its row of apps included, and a short push is enough (a

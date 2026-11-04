@@ -27,7 +27,7 @@ from . import apps, kiosk, panel
 from .const import CARD_URL, CONF_KEY, DAY_KEYS, DOMAIN, PANEL_PATH, PANEL_URL, SCAN_INTERVAL_S
 
 _LOGGER = logging.getLogger(__name__)
-PLATFORMS = [Platform.SWITCH]
+PLATFORMS = [Platform.SWITCH, Platform.CAMERA]
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
 
@@ -56,12 +56,25 @@ class EchoLocalCoordinator(DataUpdateCoordinator[dict]):
 
     async def _async_update_data(self) -> dict:
         try:
-            return await self.echo.alarms()
+            data = await self.echo.alarms()
+            data["camera"] = await self._camera()
+            return data
         except EchoAuthError as e:
             raise ConfigEntryAuthFailed(str(e)) from e
         except EchoError as e:
             raise UpdateFailed(str(e)) from e
 
+    async def _camera(self) -> dict:
+        """the camera's state (camera.py): {} on an Echo without one; the last one kept when it cannot be read now"""
+        last = (self.data or {}).get("camera", {})
+        if self.data is not None and not last.get("present"):
+            return last                     # none at the first look: no need to ask every 30 s
+        try:
+            return await self.echo.camera()
+        except EchoAuthError:
+            raise
+        except EchoError:
+            return last                     # an older build (404, unsigned) or a moment without the Echo
     async def run(self, what) -> None:
         """a change on the Echo, then the list read again at once (the next poll would be up to 30 s on)"""
         try:
