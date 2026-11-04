@@ -38,7 +38,7 @@ owner() {
 }
 # "<name> <update time>" of every package: what changed is what pm installed
 stamps() { sed -n 's/^ *<package name="\([A-Za-z0-9_.]*\)" .* ut="\([0-9a-f]*\)".*/\1 \2/p' $X; }
-screen_app() { p=$(sed -n 's/^app //p' $ST/kiosk 2>/dev/null | head -1); echo "${p:-io.github.gamer92000.echodotassist.kiosk}"; }
+screen_app() { head -1 $ST/screen_home 2>/dev/null; }   # the home app (screen.c): never removed from here
 
 case "$what" in
 install)
