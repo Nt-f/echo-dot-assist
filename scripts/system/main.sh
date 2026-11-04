@@ -388,6 +388,17 @@ home_tick() {
         if pm uninstall $OLD_KIOSK > /dev/null 2>&1; then echo "home app: the old kiosk app (its bar, watcher, keyboard) removed"
         else echo "home app: the old kiosk app could not be removed"; fi
     fi
+    # the screen's rotation, whatever app is the home app (kiosk_tick's watch runs only with Kiosk Satellite there):
+    # after an app's reinstall the Show 5 came up in portrait with auto-rotate on, Echo-Wall drawn sideways
+    # (2026-11-04); dumpsys window policy: 20 ms, settings only when it is wrong
+    if [ -n "$KIOSK_ROTATION" ]; then
+        case "$(dumpsys window policy 2>/dev/null | grep mCurrentRotation)" in
+        ""|*"mCurrentRotation=$KIOSK_ROTATION"*) ;;
+        *)  settings put system accelerometer_rotation 0
+            settings put system user_rotation $KIOSK_ROTATION
+            echo "home app: the screen back to its rotation ($KIOSK_ROTATION)";;
+        esac
+    fi
     h=$(head -1 /data/local/hassmic/state/screen_home 2>/dev/null)
     case "$h" in ''|*[!A-Za-z0-9_.]*) home_seen=; return 0;; esac
     if [ "$h" = "$home_seen" ] && [ $home_n -gt 0 ]; then home_n=$((home_n - 1)); return 0; fi
