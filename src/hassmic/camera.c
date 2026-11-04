@@ -12,6 +12,7 @@
  * Its own lock, never held across a read of the child's pipe: the reader is web.c's connection thread. */
 #define _GNU_SOURCE
 #include "camera.h"
+#include "video.h"
 #include "board.h"
 #include "screen.h"
 #include "core.h"
@@ -218,7 +219,9 @@ int camera_streaming(void) { pthread_mutex_lock(&lk); int s = cur.id && !cur.end
 size_t camera_json(char *o, size_t cap)
 {
     pthread_mutex_lock(&lk);
-    int n = snprintf(o, cap, "{\"present\":%d,\"on\":%d,\"covered\":%d,\"streaming\":%d}", camera_present(), on, lens_now(), cur.id && !cur.ended);
+    /* shows_video: a call's picture from the other side goes on this screen (video.c): the card offers its camera */
+    int n = snprintf(o, cap, "{\"present\":%d,\"on\":%d,\"covered\":%d,\"streaming\":%d,\"shows_video\":%d}", camera_present(), on, lens_now(),
+                     cur.id && !cur.ended, video_present());
     pthread_mutex_unlock(&lk);
     return n < 0 ? 0 : (size_t)n < cap ? (size_t)n : cap - 1;
 }
@@ -226,16 +229,38 @@ size_t camera_json(char *o, size_t cap)
 /* lk held */
 /* face 0: a stream (HMCAM_DOT=1, pictures leave the Echo: the red dot shows); 1: the face's eyes (cam.c's face mode:
  * face rectangles only, no picture leaves the process, so no dot) */
+static pid_t child(const char *fake, char **mine, size_t nmine, int *in, int *out);
+static int stream_kbps;                                         /* lk held: a stream's rate, 0 cam.c's own (1500) */
 static pid_t spawn(int *in, int *out, int face)
 {
-    int pin[2], pout[2]; char dex[PATH_MAX], lib[PATH_MAX], cp[PATH_MAX + 16];
-    const char *fake = getenv("HASSMIC_FAKE_CAMERA");
-    next_to_me("screen.dex", dex, sizeof dex); next_to_me("libhmcam.so", lib, sizeof lib);
-    snprintf(cp, sizeof cp, "CLASSPATH=%s", dex);
+    char dex[PATH_MAX], cp[PATH_MAX + 16];
+    snprintf(cp, sizeof cp, "CLASSPATH=%s", next_to_me("screen.dex", dex, sizeof dex));
     static char dot1[] = "HMCAM_DOT=1", dot0[] = "HMCAM_DOT=0", mode[] = "HMCAM_MODE=face", fw[] = "HMCAM_W=640", fh[] = "HMCAM_H=480",
                 fk[] = "HMCAM_KBPS=200", ff[] = "HMCAM_FPS=10";
-    char *mine[] = { cp, face ? dot0 : dot1, mode, fw, fh, fk, ff };
-    size_t nmine = face ? 7 : 2;
+    char kb[32]; snprintf(kb, sizeof kb, "HMCAM_KBPS=%d", stream_kbps);
+    char *mine[] = { cp, face ? dot0 : dot1, mode, fw, fh, fk, ff }, *stream[] = { cp, dot1, kb };
+    if (!face) return child(getenv("HASSMIC_FAKE_CAMERA"), stream, stream_kbps > 0 ? 3 : 2, in, out);
+    return child(getenv("HASSMIC_FAKE_CAMERA"), mine, 7, in, out);
+}
+
+/* video.c: cam.c's play mode, the other side's picture on this screen (HASSMIC_FAKE_VIDEO on the PC).  Its stdout is
+ * closed here at once: it writes nothing */
+pid_t camera_player(int *in)
+{
+    char dex[PATH_MAX], cp[PATH_MAX + 16]; int out;
+    snprintf(cp, sizeof cp, "CLASSPATH=%s", next_to_me("screen.dex", dex, sizeof dex));
+    static char mode[] = "HMCAM_MODE=play";
+    char *mine[] = { cp, mode };
+    pid_t pid = child(getenv("HASSMIC_FAKE_VIDEO"), mine, 2, in, &out);
+    if (pid > 0) close(out);
+    return pid;
+}
+
+/* fake: the PC's stand-in program, else app_process with libhmcam.so; mine: the child's own variables */
+static pid_t child(const char *fake, char **mine, size_t nmine, int *in, int *out)
+{
+    int pin[2], pout[2]; char lib[PATH_MAX];
+    next_to_me("libhmcam.so", lib, sizeof lib);
     extern char **environ;
     size_t ne = 0; while (environ[ne]) ne++;
     char **envp = malloc((ne + nmine + 1) * sizeof *envp);
@@ -266,7 +291,9 @@ static pid_t spawn(int *in, int *out, int face)
     return pid;
 }
 
-int camera_begin(const char **why)
+int camera_begin(const char **why) { return camera_begin_call(why, 0); }
+
+int camera_begin_call(const char **why, int kbps)
 {
     int r = -1;
     pthread_mutex_lock(&lk);
@@ -278,7 +305,7 @@ int camera_begin(const char **why)
     else if ((cur.id && !cur.ended) || cur.out >= 0) *why = "busy";
     else {
         face_stop_locked("a stream wants the camera");          /* one client of the camera at a time: the stream's */
-        int in, out; pid_t pid = spawn(&in, &out, 0);
+        int in, out; stream_kbps = kbps; pid_t pid = spawn(&in, &out, 0);
         if (pid < 0) *why = "failed";
         else {
             cur.id = id_next++; cur.pid = pid; cur.in = in; cur.out = out; cur.ended = 0; r = cur.id;

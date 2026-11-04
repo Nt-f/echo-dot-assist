@@ -296,6 +296,138 @@ static int faces(jobject cam, jclass cc, int W, int H)
 
 /* ---------------------------------------------------------------- camera and encoder */
 
+/* ---------------------------------------------------------------- the other side's picture (HMCAM_MODE=play) */
+
+/* A Drop In's picture from the other side (an Echo Show's camera, or a browser's through Echo Local), on this screen:
+ * hassmic's video.c runs this mode as its child while a call has video and writes the same records to its stdin as the
+ * stream mode writes to stdout.  No camera is opened.  MediaCodec's H.264 decoder (the MT8163's own) draws straight
+ * into a SurfaceFlinger layer of the screen's size, cropped to fill it (SCALE_TO_FIT_WITH_CROPPING: 16:9 on the Show
+ * 5's 2:1), under the band (the call's animation stays on it) and over the UI's layer and every app.  The codec's
+ * config comes either as a record of its own (type 1, as MediaCodec's encoder gives it) or inline ahead of a key
+ * frame (a browser's WebCodecs in Annex B); delta frames before the first key frame are dropped.
+ *
+ * The picture must never outlive the call (a frozen face on someone's Show): stdin's end, or PLAY_IDLE_MS without a
+ * frame, hides the layer and ends the process; the layer is this process's, so a kill takes it too.  stdout: nothing.
+ * Exit status: 0 stdin ended, 2 no VM, 4 no decoder or layer, 5 no frames for PLAY_IDLE_MS. */
+#define VIDEO_LAYER  1999995000         /* between the UI's 1999990000 and the band's 2000000000 (src/ui/android.c) */
+#define PLAY_IDLE_MS 3000
+#define PLAY_MAX     (4 << 20)          /* a record's largest: a key frame of 1080p at a high rate is some 300 KB */
+
+static int read_full(uint8_t *p, size_t n, int wait_ms)
+{
+    while (n) {
+        struct pollfd q = { 0, POLLIN, 0 };
+        int k = poll(&q, 1, wait_ms);
+        if (k == 0) return 1;                                  /* nothing for wait_ms */
+        if (k < 0) { if (errno == EINTR) continue; return -1; }
+        ssize_t r = read(0, p, n);
+        if (r < 0 && errno == EINTR) continue;
+        if (r <= 0) return -1;
+        p += r; n -= (size_t)r; wait_ms = PLAY_IDLE_MS;        /* a record begun is read to its end */
+    }
+    return 0;
+}
+
+static int play(void)
+{
+    jclass scc = (*e)->FindClass(e, "android/view/SurfaceControl"), ssc = (*e)->FindClass(e, "android/view/SurfaceSession"),
+           sfc = (*e)->FindClass(e, "android/view/Surface"), dmc = (*e)->FindClass(e, "android/hardware/display/DisplayManagerGlobal"),
+           dic = (*e)->FindClass(e, "android/view/DisplayInfo"), mfc = (*e)->FindClass(e, "android/media/MediaFormat"),
+           mcc = (*e)->FindClass(e, "android/media/MediaCodec"), bic = (*e)->FindClass(e, "android/media/MediaCodec$BufferInfo");
+    if (failed("play classes")) return 4;
+    jobject dm = (*e)->CallStaticObjectMethod(e, dmc, (*e)->GetStaticMethodID(e, dmc, "getInstance", "()Landroid/hardware/display/DisplayManagerGlobal;"));
+    jobject di = !failed("display") && dm ? (*e)->CallObjectMethod(e, dm, (*e)->GetMethodID(e, dmc, "getDisplayInfo", "(I)Landroid/view/DisplayInfo;"), 0) : NULL;
+    if (failed("getDisplayInfo") || !di) return 4;
+    int W = (*e)->GetIntField(e, di, (*e)->GetFieldID(e, dic, "logicalWidth", "I")), H = (*e)->GetIntField(e, di, (*e)->GetFieldID(e, dic, "logicalHeight", "I"));
+    jobject ss = (*e)->NewObject(e, ssc, (*e)->GetMethodID(e, ssc, "<init>", "()V"));
+    jmethodID init = failed("SurfaceSession") ? NULL : (*e)->GetMethodID(e, scc, "<init>", "(Landroid/view/SurfaceSession;Ljava/lang/String;IIII)V");
+    if (failed("SurfaceControl(): this SDK has the Builder only") || !init || !ss) return 4;
+    jobject sc = (*e)->NewObject(e, scc, init, ss, (*e)->NewStringUTF(e, "hassmic-call-video"), W, H, -1 /* OPAQUE */, 4 /* HIDDEN */);
+    if (failed("SurfaceControl") || !sc) return 4;
+    jobject surf = (*e)->NewObject(e, sfc, (*e)->GetMethodID(e, sfc, "<init>", "()V"));
+    if (failed("Surface") || !surf) return 4;
+    (*e)->CallVoidMethod(e, surf, (*e)->GetMethodID(e, sfc, "copyFrom", "(Landroid/view/SurfaceControl;)V"), sc);
+    if (failed("copyFrom")) return 4;
+    jmethodID op = (*e)->GetStaticMethodID(e, scc, "openTransaction", "()V"), cl = (*e)->GetStaticMethodID(e, scc, "closeTransaction", "()V"),
+              m_show = (*e)->GetMethodID(e, scc, "show", "()V"), m_hide = (*e)->GetMethodID(e, scc, "hide", "()V");
+    (*e)->CallStaticVoidMethod(e, scc, op);
+    if (!failed("openTransaction")) {
+        (*e)->CallVoidMethod(e, sc, (*e)->GetMethodID(e, scc, "setLayer", "(I)V"), VIDEO_LAYER); failed("setLayer");
+        (*e)->CallVoidMethod(e, sc, (*e)->GetMethodID(e, scc, "setPosition", "(FF)V"), 0.0f, 0.0f); failed("setPosition");
+        (*e)->CallStaticVoidMethod(e, scc, cl); failed("closeTransaction");
+    }
+
+    jstring avc = (*e)->NewStringUTF(e, "video/avc");
+    jobject fmt = (*e)->CallStaticObjectMethod(e, mfc, (*e)->GetStaticMethodID(e, mfc, "createVideoFormat", "(Ljava/lang/String;II)Landroid/media/MediaFormat;"), avc, 1280, 720);
+    if (failed("createVideoFormat") || !fmt) return 4;
+    (*e)->CallVoidMethod(e, fmt, (*e)->GetMethodID(e, mfc, "setInteger", "(Ljava/lang/String;I)V"), (*e)->NewStringUTF(e, "max-input-size"), PLAY_MAX);
+    if (failed("max-input-size")) return 4;
+    jobject codec = (*e)->CallStaticObjectMethod(e, mcc, (*e)->GetStaticMethodID(e, mcc, "createDecoderByType", "(Ljava/lang/String;)Landroid/media/MediaCodec;"), avc);
+    if (failed("createDecoderByType") || !codec) return 4;
+    (*e)->CallVoidMethod(e, codec, (*e)->GetMethodID(e, mcc, "configure", "(Landroid/media/MediaFormat;Landroid/view/Surface;Landroid/media/MediaCrypto;I)V"), fmt, surf, NULL, 0);
+    if (failed("configure")) return 4;
+    (*e)->CallVoidMethod(e, codec, (*e)->GetMethodID(e, mcc, "setVideoScalingMode", "(I)V"), 2 /* SCALE_TO_FIT_WITH_CROPPING */);
+    failed("setVideoScalingMode");                          /* stretched then, not fatal */
+    (*e)->CallVoidMethod(e, codec, (*e)->GetMethodID(e, mcc, "start", "()V"));
+    if (failed("MediaCodec.start")) return 4;
+    jmethodID deqi = (*e)->GetMethodID(e, mcc, "dequeueInputBuffer", "(J)I"), gib = (*e)->GetMethodID(e, mcc, "getInputBuffer", "(I)Ljava/nio/ByteBuffer;"),
+              qib = (*e)->GetMethodID(e, mcc, "queueInputBuffer", "(IIIJI)V"),
+              deqo = (*e)->GetMethodID(e, mcc, "dequeueOutputBuffer", "(Landroid/media/MediaCodec$BufferInfo;J)I"),
+              rel = (*e)->GetMethodID(e, mcc, "releaseOutputBuffer", "(IZ)V");
+    jobject bi = (*e)->NewObject(e, bic, (*e)->GetMethodID(e, bic, "<init>", "()V"));
+    if (failed("codec methods") || !bi) return 4;
+    say("playing the other side's picture on %dx%d", W, H);
+
+    static uint8_t buf[PLAY_MAX];
+    int rc = 0, keyed = 0, shown = 0; long in = 0, out = 0, dropped = 0; long long t0 = now_ms(), kept = 0;
+    for (;;) {
+        uint8_t h[20];
+        int r = read_full(h, sizeof h, PLAY_IDLE_MS);
+        if (r < 0) break;                                       /* stdin ended: the call's picture is over */
+        if (r > 0) { say("no picture for %d s: hidden", PLAY_IDLE_MS / 1000); rc = 5; break; }
+        uint32_t n = (uint32_t)h[8] | (uint32_t)h[9] << 8 | (uint32_t)h[10] << 16 | (uint32_t)h[11] << 24;
+        long long pts = 0; for (int i = 0; i < 8; i++) pts |= (long long)h[12 + i] << (8 * i);
+        if (memcmp(h, "HMCV", 4) || n > PLAY_MAX) { say("not a record"); rc = 4; break; }
+        if (read_full(buf, n, PLAY_IDLE_MS)) break;
+        int type = h[4];
+        if (type == 2) keyed = 1;
+        if (type == 3 && !keyed) { dropped++; continue; }       /* from a key frame on */
+        jint i = (*e)->CallIntMethod(e, codec, deqi, (jlong)50000);
+        if (failed("dequeueInputBuffer")) { rc = 4; break; }
+        if (i < 0) { dropped++; if (type != 1) keyed = 0; continue; }   /* the decoder is behind: the next key frame */
+        jobject bb = (*e)->CallObjectMethod(e, codec, gib, i);
+        uint8_t *p = !failed("getInputBuffer") && bb ? (*e)->GetDirectBufferAddress(e, bb) : NULL;
+        jlong cap = p ? (*e)->GetDirectBufferCapacity(e, bb) : 0;
+        if (!p || cap < (jlong)n) { say("an input buffer of %lld for %u bytes", (long long)cap, n); rc = 4; break; }
+        memcpy(p, buf, n);
+        (*e)->DeleteLocalRef(e, bb);
+        (*e)->CallVoidMethod(e, codec, qib, i, 0, (jint)n, (jlong)pts, type == 1 ? 2 /* BUFFER_FLAG_CODEC_CONFIG */ : 0);
+        if (failed("queueInputBuffer")) { rc = 4; break; }
+        in++;
+        for (;;) {                                              /* what is decoded, on the screen at once */
+            jint o = (*e)->CallIntMethod(e, codec, deqo, bi, (jlong)0);
+            if (failed("dequeueOutputBuffer")) { rc = 4; goto done; }
+            if (o < 0) break;                                   /* -1 none yet, -2 format, -3 buffers */
+            (*e)->CallVoidMethod(e, codec, rel, o, JNI_TRUE);
+            if (failed("releaseOutputBuffer")) { rc = 4; goto done; }
+            if (!out++) say("first picture %lld ms after the start", now_ms() - t0);
+        }
+        if (out && !shown) {                                    /* shown once there is a picture: no black flash */
+            (*e)->CallStaticVoidMethod(e, scc, op);
+            if (!failed("openTransaction")) { (*e)->CallVoidMethod(e, sc, m_show); failed("show"); (*e)->CallStaticVoidMethod(e, scc, cl); failed("closeTransaction"); }
+            shown = 1; awake(1); kept = now_ms();
+        }
+        if (shown && now_ms() - kept >= 10000) { awake(0); kept = now_ms(); }
+    }
+done:
+    (*e)->CallStaticVoidMethod(e, scc, op);
+    if (!failed("openTransaction")) { (*e)->CallVoidMethod(e, sc, m_hide); failed("hide"); (*e)->CallStaticVoidMethod(e, scc, cl); failed("closeTransaction"); }
+    (*e)->CallVoidMethod(e, codec, (*e)->GetMethodID(e, mcc, "stop", "()V")); failed("MediaCodec.stop");
+    (*e)->CallVoidMethod(e, codec, (*e)->GetMethodID(e, mcc, "release", "()V")); failed("MediaCodec.release");
+    say("picture ended: %ld records in, %ld pictures shown, %ld dropped", in, out, dropped);
+    return rc;
+}
+
 static void *run(void *arg)
 {
     (void)arg; int rc = 3;
@@ -304,6 +436,7 @@ static void *run(void *arg)
     if ((*vm)->AttachCurrentThread(vm, &e, NULL)) exit(2);
     signal(SIGPIPE, SIG_IGN);                   /* hassmic gone: write() fails, the camera is let go below */
     int W = env_int("HMCAM_W", 1280), H = env_int("HMCAM_H", 720), fps = env_int("HMCAM_FPS", 15), kbps = env_int("HMCAM_KBPS", 1500);
+    if (getenv("HMCAM_MODE") && !strcmp(getenv("HMCAM_MODE"), "play")) { rc = play(); say("stopped (%d)", rc); exit(rc); }
 
     jclass lc = (*e)->FindClass(e, "android/os/Looper");
     if (failed("Looper")) exit(2);

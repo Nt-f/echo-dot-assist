@@ -325,6 +325,12 @@ Calls are refused with do not disturb on, with the microphones off, or with anot
 Home Assistant say why. The sound goes straight between the two Echos (UDP 28932, Opus, encrypted): no cloud, no Home
 Assistant in between.
 
+**Video between Echo Shows.** A call between two Echo Shows carries each one's camera to the other's screen, full
+screen, while that Show's **Camera in Home Assistant** setting is on and its lens open (its red dot shows while it
+sends). An Echo without a screen is never sent a picture, and nothing changes for calls with a Dot. A lost bit of
+the picture on the way freezes it until the next whole picture comes (at most a second). The picture goes when the
+call ends, however it ends.
+
 **Echo.** The Echo puts Amazon's audio front end into its call mode, whose echo canceller works on the other side's
 voice. What it leaves would still come back to the other Echo, so an Echo sends its room only while someone there
 talks; while the other side talks it is turned down 25 dB. Two people talking at the same time work only if the
@@ -349,6 +355,10 @@ entity) and press **Drop In**.
   where the camera entity's live view runs seconds behind.
 - **Your microphone starts muted** in every call: the button over the picture (bottom left) turns it on and off, so
   nothing of your room reaches the Echo until you press it.
+- **Your camera on the Echo's screen**: the **Camera** button beside it (Echo Shows that show a call's picture: the
+  Show 5 so far) sends this device's camera to the Echo, full screen there, your own picture small in the card's
+  corner. Off at the start of every call. Needs a browser that encodes H.264 with WebCodecs (Chrome, Edge, Safari,
+  the Companion app); the card says so where it cannot.
 - **Your microphone** needs Home Assistant opened over https (Nabu Casa, a proxy with a certificate) or in the
   Companion app; otherwise the call is listen-only and the card says so. The picture needs a browser with WebCodecs
   (Chrome, Edge, Safari 16.4 and later, the Companion app).

@@ -3385,6 +3385,18 @@ Run in this order. Each step says what it proves.
       `frontend/echo-local-call-card.js` (WebCodecs H.264 onto a canvas, AudioWorklets at 16 kHz both ways, listen-only
       without a secure page).  `tests/fake_web_call.py` (refusals, ringing, hang-ups, lost, the picture),
       `tests/ha_real_camera.py` (the websocket in HA 2026.10.1, the card in headless Chrome: picture drawn, Chrome's
-      fake microphone at peak 20026 on the Echo's Voip stream, Hang up).  Open: on the Show with people on both ends
-      (the echo canceller in call mode against a browser's sound, the latency measured); the browser's camera on the
-      Echo's screen.
+      fake microphone at peak 20026 on the Echo's Voip stream, Hang up).  On the Show 5 with a person on each end
+      (2026-11-04): the card's jitter buffer, the mic muted at the start; the level gate let only speech into the Echo
+      through (a wake word there is -60..-70 dBFS over a room at -69: trace), so the gate and the gain go by RNNoise's
+      speech probability now (corpus at the Show's levels: 74-80 % of speech frames, ~1 % of noise, down to -66
+      dBFS), "already much better"; setting `drop_in_gate` (full/light/off).  Open: the latency measured.
+- [~] Video in Drop In (2026-11-04; docs/video-dropin.md).  The browser's camera on the Echo's screen: the card's
+      Camera button (WebCodecs H.264 640x360/15/500k, Annex B), 'V' records up (web.c `CALL_UP_MAX`), `video.c` ->
+      cam.c `HMCAM_MODE=play` (MediaCodec into a SurfaceFlinger layer at 1999995000, cropped to fill); on checkers both
+      config forms decode (first picture 60-75 ms), Chrome's encoder's output too (28 of 37 records shown, fed faster
+      than real time), the layer gone on stdin's end, 3 s idle and `kill -9`.  `tests/ha_real_camera.py`: Chrome's fake
+      camera -> 44 records at the Echo's stand-in player.  Between Echo Shows: caps byte on invite/accept, "HMV1"
+      fragments on the call's UDP (`CALL_KBPS` 1000, config inline per key frame), one frame put together at a time,
+      a key frame after any loss; `tests/fake_ha_dropin_video.py` (a Dot never sent one, every 7th fragment lost: 11
+      shown, 6 lost, from key frames).  Open: two Shows on one Wi-Fi (nobody has two here yet): the rate, the key frame
+      interval; a self view on the Echo; the card's camera on the user's own Show.

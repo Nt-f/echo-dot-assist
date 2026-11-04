@@ -4,6 +4,9 @@ What changed for people using the Echo, newest first. Details and measurements a
 
 ## 2026-11-04
 
+- **Video in Drop In** (Echo Show): a call between two Echo Shows shows each one's camera on the other's screen, while
+  its camera setting is on. From a dashboard, the Drop In card's new **Camera** button (off at the start of every
+  call) puts your camera on the Echo Show's screen. Echo Local 2026.11.20.
 - **Quiet between words in calls** (settings page, under Drop In): how far the Echo's microphone goes down in a call
   while nobody near it talks. Full (as before), Light, or Off to hear the room all along.
 - **Drop In hears you from across the room on the Echo Show**: whether you are talking is now decided by a speech

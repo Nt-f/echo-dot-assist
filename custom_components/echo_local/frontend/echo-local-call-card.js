@@ -84,20 +84,27 @@ class EchoLocalCallCard extends HTMLElement {
         button.end { background: var(--error-color, #c62828); }
         /* the microphone's switch over the picture, bottom left: muted at the start of every call, so nothing of this
            room reaches the Echo until it is pressed */
-        button.mute { position: absolute; left: 12px; bottom: 12px; display: flex; align-items: center; gap: 6px; padding: 8px 14px;
+        .ctl { position: absolute; left: 12px; bottom: 12px; display: flex; gap: 8px; }
+        .ctl button { display: flex; align-items: center; gap: 6px; padding: 8px 14px;
                       background: rgba(0, 0, 0, .6); color: #fff; backdrop-filter: blur(4px); }
-        button.mute.on { background: var(--success-color, #2e7d32); }
-        button.mute ha-icon { --mdc-icon-size: 20px; }
+        .ctl button.on { background: var(--success-color, #2e7d32); }
+        .ctl button ha-icon { --mdc-icon-size: 20px; }
+        /* this side's own picture while it goes to the Echo's screen: top right, mirrored as a mirror is */
+        video.self { position: absolute; right: 10px; top: 10px; width: 22%; border-radius: 8px; transform: scaleX(-1); background: #000; }
+        video.self[hidden] { display: none; }
         button[hidden] { display: none !important; }
       </style>
       <ha-card>
         <div class="v"><canvas width="1280" height="720"></canvas><div class="msg">Drop In to see and talk to ${name}</div>
-          <button class="mute" hidden><ha-icon icon="mdi:microphone-off"></ha-icon><span>Unmute</span></button></div>
+          <video class="self" muted playsinline hidden></video>
+          <div class="ctl"><button class="mute" hidden><ha-icon icon="mdi:microphone-off"></ha-icon><span>Unmute</span></button>
+            <button class="cam" hidden><ha-icon icon="mdi:video-off"></ha-icon><span>Camera</span></button></div></div>
         <div class="bar"><span class="name">${name}</span>
           <button class="go">Drop In</button><button class="end" hidden>Hang up</button></div>
       </ha-card>`;
     const $ = (s) => this.shadowRoot.querySelector(s);
-    this.$ = { canvas: $('canvas'), msg: $('.msg'), go: $('.go'), end: $('.end'), mute: $('.mute') };
+    this.$ = { canvas: $('canvas'), msg: $('.msg'), go: $('.go'), end: $('.end'), mute: $('.mute'), cam: $('.cam'), self: $('video.self') };
+    this.$.cam.onclick = () => (this.enc ? this.camOff() : this.camOn());
     this.$.go.onclick = () => this.start();
     this.$.end.onclick = () => this.stop('');
     this.$.mute.onclick = () => this.setMuted(!this.muted);
@@ -111,7 +118,58 @@ class EchoLocalCallCard extends HTMLElement {
   }
 
   say(t) { this.$.msg.textContent = t; this.$.msg.hidden = !t; }
-  live(on) { this.$.go.hidden = on; this.$.end.hidden = !on; this.$.mute.hidden = !on; }
+  live(on) {
+    this.$.go.hidden = on; this.$.end.hidden = !on; this.$.mute.hidden = !on;
+    // the camera only where the Echo shows a call's picture (an Echo Show with hassmic's video.c: the entity says so)
+    const a = (this._hass.states[this.config.entity] || { attributes: {} }).attributes;
+    this.$.cam.hidden = !on || !a.shows_video;
+  }
+
+  // This side's camera on the Echo's screen: off at the start of every call, as the microphone.  H.264 Baseline in
+  // Annex B through WebCodecs (its key frames carry SPS/PPS: cam.c's player takes them inline), 640x360 at 15 fps,
+  // ~500 kbit/s, a key frame a second (the Echo's player starts at one); frames skipped while the encoder or the
+  // websocket is behind, never queued up behind the call's sound
+  async camOn() {
+    if (!('VideoEncoder' in window) || !('VideoFrame' in window)) { this.say('This browser cannot send its camera (no WebCodecs encoder)'); return; }
+    const cfg = { codec: 'avc1.42E01F', width: 640, height: 360, bitrate: 500000, framerate: 15, latencyMode: 'realtime', avc: { format: 'annexb' } };
+    try {
+      const ok = await VideoEncoder.isConfigSupported(cfg);
+      if (!ok.supported) { this.say('This browser cannot encode H.264 for the Echo'); return; }
+      this.camStream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 360, frameRate: 15 } });
+    } catch (e) { this.say('No camera here (' + e.name + ')'); return; }
+    if (!this.ws) { this.camStream.getTracks().forEach((t) => t.stop()); this.camStream = null; return; }   // hung up meanwhile
+    const v = this.$.self; v.srcObject = this.camStream; v.hidden = false; await v.play().catch(() => {});
+    this.enc = new VideoEncoder({
+      output: (chunk) => {
+        if (!this.ws || this.ws.readyState !== 1 || this.state !== 'connected') return;
+        const out = new Uint8Array(10 + chunk.byteLength); out[0] = 86; out[1] = chunk.type === 'key' ? 2 : 3;   // 'V'
+        new DataView(out.buffer).setBigUint64(2, BigInt(Math.max(0, Math.round(chunk.timestamp))), true);
+        chunk.copyTo(out.subarray(10));
+        this.ws.send(out);
+      },
+      error: (e) => { this.say('The camera stopped: ' + e.message); this.camOff(); },
+    });
+    this.enc.configure(cfg);
+    let n = 0; const t0 = performance.now();
+    this.camTimer = setInterval(() => {
+      if (!this.enc || this.enc.state !== 'configured' || v.readyState < 2) return;
+      if (this.enc.encodeQueueSize > 2 || (this.ws && this.ws.bufferedAmount > 1 << 20)) return;   // behind: skip one
+      const f = new VideoFrame(v, { timestamp: Math.round((performance.now() - t0) * 1000) });
+      this.enc.encode(f, { keyFrame: n++ % 15 === 0 }); f.close();
+    }, 1000 / 15);
+    this.$.cam.classList.add('on');
+    this.$.cam.querySelector('ha-icon').setAttribute('icon', 'mdi:video');
+  }
+
+  camOff() {
+    clearInterval(this.camTimer); this.camTimer = null;
+    if (this.enc && this.enc.state !== 'closed') this.enc.close();
+    this.enc = null;
+    if (this.camStream) this.camStream.getTracks().forEach((t) => t.stop());
+    this.camStream = null; this.$.self.srcObject = null; this.$.self.hidden = true;
+    this.$.cam.classList.remove('on');
+    this.$.cam.querySelector('ha-icon').setAttribute('icon', 'mdi:video-off');
+  }
 
   async start() {
     if (this.ws) return;
@@ -196,6 +254,7 @@ class EchoLocalCallCard extends HTMLElement {
     const ws = this.ws; this.ws = null;
     if (ws) { try { if (ws.readyState === 1) ws.send(JSON.stringify({ hangup: true })); ws.close(); } catch (e) { /* gone */ } }
     clearInterval(this.keep);
+    this.camOff();
     if (this.stream) this.stream.getTracks().forEach((t) => t.stop());
     if (this.decoder && this.decoder.state !== 'closed') this.decoder.close();
     if (this.ctx) this.ctx.close();
