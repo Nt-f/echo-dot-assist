@@ -31,5 +31,5 @@ int  camera_next(int id, int *type, long long *pts_us, uint8_t **data, size_t *l
 void camera_end(int id);
 /* video.c: cam.c's play mode as a child (records on *in, the other side's picture on this screen), or -1 */
 #include <sys/types.h>
-pid_t camera_player(int *in);
+pid_t camera_player(int *in, int self, int blur_ms);   /* self: the corner's, mirrored; blur_ms: frosted at first */
 #endif

@@ -76,7 +76,10 @@ class EchoLocalCallCard extends HTMLElement {
       <style>
         ha-card { overflow: hidden; }
         .v { position: relative; background: #000; aspect-ratio: 16 / 9; display: flex; align-items: center; justify-content: center; }
-        canvas { width: 100%; height: 100%; object-fit: contain; display: block; }
+        canvas { width: 100%; height: 100%; object-fit: contain; display: block; transition: filter 1s linear; }
+        /* the frosted start, as stock's Drop In: an Echo that did not ring is seen blurred for its first seconds (3 s,
+           then 1 s clearing), so whoever is dropped in on has a moment; one that rang and was answered, at once */
+        canvas.frost { filter: blur(28px) brightness(1.08) saturate(.8); transition: none; }
         .msg { position: absolute; color: #ddd; font: 14px var(--paper-font-body1_-_font-family, sans-serif); text-align: center; padding: 0 16px; }
         .bar { display: flex; gap: 8px; align-items: center; padding: 10px 12px; }
         .name { flex: 1; font-weight: 500; }
@@ -213,7 +216,7 @@ class EchoLocalCallCard extends HTMLElement {
       if (m.error) { this.ended = 'The Echo said no: ' + m.error; return; }
       if (m.state) {
         this.state = m.state;
-        if (m.state === 'ringing') this.say('Ringing: someone presses the button on the Echo…');
+        if (m.state === 'ringing') { this.rang = true; this.$.canvas.classList.remove('frost'); this.say('Ringing: someone presses the button on the Echo…'); }
         else if (m.state === 'connected') this.say(this.listenOnly || (this.gotPicture ? '' : 'Connected: no picture (the Echo\'s camera is off or covered)'));
         else if (m.state === 'idle') this.ended = 'The call ended';
       }
@@ -225,14 +228,19 @@ class EchoLocalCallCard extends HTMLElement {
   }
 
   decoderStart() {
-    this.config_ = null; this.gotPicture = false;
+    this.config_ = null; this.gotPicture = false; this.rang = false;
+    this.$.canvas.classList.add('frost');                        // until it rings, or 3 s after the first picture
     if (!('VideoDecoder' in window)) { this.noVideo = 'This browser cannot show the picture (no WebCodecs)'; return; }
     const g = this.$.canvas.getContext('2d');
     this.decoder = new VideoDecoder({
       output: (f) => {
         if (this.$.canvas.width !== f.displayWidth) { this.$.canvas.width = f.displayWidth; this.$.canvas.height = f.displayHeight; }
         g.drawImage(f, 0, 0); f.close();
-        if (!this.gotPicture) { this.gotPicture = true; this.say(this.listenOnly || ''); }
+        if (!this.gotPicture) {
+          this.gotPicture = true; this.say(this.listenOnly || '');
+          clearTimeout(this.frostTimer);
+          if (!this.rang) this.frostTimer = setTimeout(() => this.$.canvas.classList.remove('frost'), 3000);
+        }
       },
       error: (e) => { this.noVideo = 'The picture failed: ' + e.message; },
     });
@@ -258,6 +266,7 @@ class EchoLocalCallCard extends HTMLElement {
     if (this.stream) this.stream.getTracks().forEach((t) => t.stop());
     if (this.decoder && this.decoder.state !== 'closed') this.decoder.close();
     if (this.ctx) this.ctx.close();
+    clearTimeout(this.frostTimer); this.$.canvas.classList.remove('frost');
     this.stream = this.ctx = this.decoder = this.mic = null; this.keyed = false; this.state = ''; this.ended = ''; this.listenOnly = '';
     this.live(false);
     this.say(why || 'Drop In to see and talk to the Echo');

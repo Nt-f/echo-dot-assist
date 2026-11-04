@@ -148,6 +148,10 @@ enum { CAP_SHOWS = 1, CAP_SENDS = 2 };
 #define VFRAG     1150                  /* a fragment's data: 1150 + 15 + 17 + 16 + UDP/IP stays under 1280 */
 #define VFRAG_MAX 255
 #define VFRAME_MAX (VFRAG * VFRAG_MAX)
+/* The frosted start, as stock's Drop In: the caller sees the picture of an Echo that did not ring blurred for this
+ * long (video.c, cam.c's HMCAM_BLUR_MS: 3 s frosted, the last second clearing), so whoever is dropped in on has a
+ * moment before they are seen; a call answered by a press is seen at once */
+#define FROST_MS  4000
 #define CALL_KBPS 1000                  /* the camera in a call between Echos (the integration's stream: 1500): unmeasured
                                          * on two Shows at once; every fragment of a key frame must arrive */
 const char *const dropin_states[4] = { "idle", "calling", "ringing", "connected" };
@@ -286,6 +290,7 @@ static void go_live(long long now)
     c.state = DROPIN_LIVE; c.live_at = c.rx_at = now; c.tx_seq = 0; c.rx = c.lost = c.late = c.played = 0; c.gap_max = c.arr_at = 0; play_next = 0;
     memset(jb, 0, sizeof jb); jb_any = 0; ref_n = 0; memset(ref, 0, sizeof ref);
     fprintf(stderr, "drop in: connected with %s\n", c.node);
+    if (c.outgoing && !c.rang && !c.ha) video_blur(c.gen, FROST_MS);
     pthread_cond_broadcast(&live_cond);
 }
 
@@ -914,6 +919,7 @@ static void *video_sender(void *arg)
             pthread_mutex_unlock(&dl);
             if (!same || g < 0) { free(d); if (same) crypto_wipe(key, sizeof key); break; }
             if (g == 0) { crypto_wipe(key, sizeof key); continue; }
+            video_self(gen, t, pts, d, len);                             /* what leaves, in this screen's corner */
             if (t == CAM_CONFIG) { if (len <= sizeof config) { memcpy(config, d, len); config_n = len; } free(d); crypto_wipe(key, sizeof key); continue; }
             /* the config ahead of every key frame: the receiver's decoder needs nothing else to start */
             size_t total = len + (t == CAM_KEY ? config_n : 0);
@@ -939,6 +945,7 @@ static void *video_sender(void *arg)
             free(d); crypto_wipe(key, sizeof key);
         }
         camera_end(cam);
+        video_self_stop(gen);                                            /* (the call's end stops it too) */
     }
     return NULL;
 }

@@ -400,7 +400,8 @@ No model `#ifdef`s in shared code: new differences become a board field, a `devi
   invite/accept (`CAP_SHOWS`, `CAP_SENDS`; none from older builds), "HMV1" fragments on the call's UDP and key
   (`video_sender` at `CALL_KBPS`, config inline per key frame; `on_video` one frame at a time, a key frame after a
   loss), the browser's camera up as 'V' records (web.c `CALL_UP_MAX`); both into `video.c` (a queue and a writer
-  thread to cam.c's play mode; `video_stop` in every `end_call`).
+  thread to cam.c's play mode; `video_stop` in every `end_call`); the records that leave also to a self-view (`video_self`: a second player,
+  `HMCAM_SELF`), and the caller frosts an Echo that did not ring (`video_blur`, `FROST_MS`; the card by its states).
 - **Bluetooth**: `ble.c`/`ble_crypto.c` talk raw HCI (`hci.h`) to the controller for the HA Bluetooth proxy (scan, GATT,
   Just Works pairing); Amazon's `btmanagerd` is stopped. A2DP shares the controller; scanning pauses while a phone plays,
   and for 1 s from a wake word round (`ble_quiet` in `main.c` `wake_heard`): the scan's share of the antenna costs
@@ -660,8 +661,10 @@ No model `#ifdef`s in shared code: new differences become a board field, a `devi
   `HASSMIC_FAKE_LENS` (a file, "1" covered).  The eyes (setting `eyes_follow`): cam.c `HMCAM_MODE=face` (Android's
   software FaceDetector on each frame in memory, preview into an ImageReader; no dot; MediaTek's hardware one never ran),
   camera.c `face_thread` while the UI says `faceview 1` and nothing streams, `look x y` to the UI (scene.c, face.c).
-  The other side's picture in a call: cam.c `HMCAM_MODE=play` (records on stdin, MediaCodec's decoder into a layer at
-  `VIDEO_LAYER`, under the band; gone on stdin's end, 3 s idle or a kill), started by `video.c` through camera.c
+  The other side's picture in a call: cam.c `HMCAM_MODE=play` (records on stdin, MediaCodec's decoder into a
+  SurfaceTexture drawn by GLES 2 into a layer at `VIDEO_LAYER`, under the band: crop to fill, `HMCAM_SELF` mirrored in
+  a corner, `HMCAM_BLUR_MS` frosted; `HMCAM_GL=0` the decoder straight into the layer; gone on stdin's end, 3 s idle
+  or a kill), started by `video.c` through camera.c
   `camera_player`; PC: `HASSMIC_FAKE_VIDEO` (tests/fake_video.py; `FAKE_VIDEO_LOG`, `FAKE_VIDEO_DUMP`).
 - **Light band** (`ring_band.c`, the Echo Show's `RING` in device.mk instead of `ring.c`): the same `ring.h` drawn as a
   band along the bottom of the screen, every pattern as the Dots' ring unrolled (12 virtual LEDs blended across the

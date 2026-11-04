@@ -118,9 +118,15 @@ async def main():
             types = [v[0] for v in talk.video]
             check(types[:1] == [api.CAM_CONFIG] and api.CAM_KEY in types and len(types) > 20,
                   f"the camera on: its picture in the call ({len(types)} records, {types[:3]})")
+            slog = os.path.join(state, "video.log.self")
+            sl = open(slog).read() if os.path.exists(slog) else ""
+            check("self=1" in sl and sl.count("rec ") > 20 and "this Show's own picture in the corner" in text(),
+                  f"  and in the Echo's own corner, as it leaves (self-view: {sl.count('rec ')} records)")
+            check(not os.path.exists(os.path.join(state, "video.log")), "  no full-screen player for it: the browser sent no picture")
             await call.hangup()
             check(await until(lambda: "pictures" in text() and "camera: stream" in text() and "ended: the viewer went" in text(), 4),
                   "and the camera stops with the call")
+            check(await until(lambda: fake_video_gone(slog[:-5]), 3), "  the self-view goes with it")
             b.call("POST", "/api/set", b"camera=off\n")
 
             # the browser's picture on the Echo's screen (video.c, cam.c's play mode; the stand-in player logs what it

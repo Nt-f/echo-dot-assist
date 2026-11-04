@@ -1361,8 +1361,9 @@ static void call_api(int fd, const struct req *r)
         while (cam > 0) {
             int t; long long pts; uint8_t *d = NULL; size_t len;
             int g = camera_next(cam, &t, &pts, &d, &len, 0);
-            if (g < 0) { camera_end(cam); cam = -1; cam_try = now_ms(); break; }
+            if (g < 0) { camera_end(cam); cam = -1; cam_try = now_ms(); video_self_stop(gen); break; }
             if (!g) break;
+            video_self(gen, t, pts, d, len);                       /* what leaves, in this screen's corner */
             uint8_t *v = malloc(9 + len);
             if (v) {
                 v[0] = (uint8_t)t; for (int i = 0; i < 8; i++) v[1 + i] = (uint8_t)((unsigned long long)pts >> (8 * i));

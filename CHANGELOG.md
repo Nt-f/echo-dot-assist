@@ -4,6 +4,11 @@ What changed for people using the Echo, newest first. Details and measurements a
 
 ## 2026-11-04
 
+- **Drop In with video starts frosted, as Amazon's does** (Echo Show): when you drop in on an Echo Show that did not
+  ring, its picture is blurred for the first 3 seconds and clears over the next one, so whoever is there has a moment
+  before they are seen. On a Show and in the Drop In card alike; a call answered with the button is seen at once.
+  **Your own picture** is now small in the Show's bottom right corner (mirrored) while it sends its camera in a call.
+  Echo Local 2026.11.20.
 - **Video in Drop In** (Echo Show): a call between two Echo Shows shows each one's camera on the other's screen, while
   its camera setting is on. From a dashboard, the Drop In card's new **Camera** button (off at the start of every
   call) puts your camera on the Echo Show's screen. Echo Local 2026.11.20.

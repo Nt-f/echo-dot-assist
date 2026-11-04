@@ -243,15 +243,18 @@ static pid_t spawn(int *in, int *out, int face)
     return child(getenv("HASSMIC_FAKE_CAMERA"), mine, 7, in, out);
 }
 
-/* video.c: cam.c's play mode, the other side's picture on this screen (HASSMIC_FAKE_VIDEO on the PC).  Its stdout is
- * closed here at once: it writes nothing */
-pid_t camera_player(int *in)
+/* video.c: cam.c's play mode, a call's picture on this screen (HASSMIC_FAKE_VIDEO on the PC): the other side's
+ * (full screen, frosted for its first blur_ms) or, self, this Show's own (a corner, mirrored).  Its stdout is closed
+ * here at once: it writes nothing */
+pid_t camera_player(int *in, int self, int blur_ms)
 {
-    char dex[PATH_MAX], cp[PATH_MAX + 16]; int out;
+    char dex[PATH_MAX], cp[PATH_MAX + 16], bl[32], sf[16]; int out;
     snprintf(cp, sizeof cp, "CLASSPATH=%s", next_to_me("screen.dex", dex, sizeof dex));
+    snprintf(bl, sizeof bl, "HMCAM_BLUR_MS=%d", blur_ms > 0 ? blur_ms : 0);
+    snprintf(sf, sizeof sf, "HMCAM_SELF=%d", !!self);
     static char mode[] = "HMCAM_MODE=play";
-    char *mine[] = { cp, mode };
-    pid_t pid = child(getenv("HASSMIC_FAKE_VIDEO"), mine, 2, in, &out);
+    char *mine[] = { cp, mode, bl, sf };
+    pid_t pid = child(getenv("HASSMIC_FAKE_VIDEO"), mine, 4, in, &out);
     if (pid > 0) close(out);
     return pid;
 }

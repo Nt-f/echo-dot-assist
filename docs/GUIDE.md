@@ -331,6 +331,11 @@ shows while it sends). The camera serves one at a time: while a call has it, Hom
 waits, and a call started while someone watches the live view gets its picture once they stop. An Echo without a screen is never sent a picture, and nothing changes for calls with a Dot. A lost bit of
 the picture on the way freezes it until the next whole picture comes (at most a second). The picture goes when the
 call ends, however it ends.
+- **Frosted at first**: the Show that drops in sees the other one's picture blurred for its first 3 seconds, clearing
+  over the next, unless that Show rang and someone answered it with its button. Whoever is dropped in on has a
+  moment before they are seen, as with Amazon's Drop In.
+- **Your own picture** is small in the bottom right corner while your Show sends its camera, mirrored as a mirror is:
+  it is what the other side gets.
 
 **Echo.** The Echo puts Amazon's audio front end into its call mode, whose echo canceller works on the other side's
 voice. What it leaves would still come back to the other Echo, so an Echo sends its room only while someone there
@@ -353,7 +358,9 @@ entity) and press **Drop In**.
   up" ends it, as does **Hang up** in the card.
 - **The picture** comes while "Camera: Home Assistant and video calls" is on and the lens is open, with the red dot on the Echo's
   screen; without it the call has sound only. A few hundred ms behind (the browser decodes the Echo's video itself),
-  where the camera entity's live view runs seconds behind.
+  where the camera entity's live view runs seconds behind. Frosted for its first 3 seconds unless the Echo rang and
+  was answered with its button, as between Shows; the Echo shows your picture as it comes (you called), and its own
+  small in its corner while it sends.
 - **Your microphone starts muted** in every call: the button over the picture (bottom left) turns it on and off, so
   nothing of your room reaches the Echo until you press it.
 - **Your camera on the Echo's screen**: the **Camera** button beside it (Echo Shows that show a call's picture: the

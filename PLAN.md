@@ -3400,4 +3400,11 @@ Run in this order. Each step says what it proves.
       a key frame after any loss; `tests/fake_ha_dropin_video.py` (a Dot never sent one, every 7th fragment lost: 11
       shown, 6 lost, from key frames).  `video_stop` kills the player itself (a decoder hung without dying would hold
       the writer in write()).  Open: two Shows on one Wi-Fi (nobody has two here yet): the rate, the key frame
-      interval, two app_process VMs per Show in a two-way call (the camera's and the player's: CPU, memory); a self view on the Echo; the card's camera on the user's own Show.
+      interval, three app_process VMs per Show in a two-way call (the camera's and two players': CPU, memory); the card's camera on the user's own Show.
+      Frosted start and self-view (2026-11-04): the player draws through GLES 2 (decoder -> SurfaceTexture -> a quad that
+      crops to fill, mirrors, frosts: 16 taps into a 1/24 texture, 9 taps up, mixed out over the last 1 s of
+      `FROST_MS` 4000); the caller's screen frosts an Echo that did not ring (`video_blur` from `go_live`: outgoing,
+      not `rang`), the card the same by its states.  Self-view: a second player (`HMCAM_SELF=1`, 240x134 bottom right,
+      layer 1999995001) fed the records that leave (`video_self`).  On checkers with the test clip (no camera): frosted
+      at 2.5 s, sharp at 7 s, two decoders at once (both first pictures 120-240 ms, 109 and 94 shown of 113 and 98),
+      `HMCAM_GL=0` keeps a frosted picture hidden for its 4 s.  Not tried: the camera's own stream into the self-view.

@@ -12,7 +12,13 @@ int  video_present(void);
 /* A record of call gen's picture: copied, queued, never waited on (the caller is a network thread).  Behind: frames
  * dropped up to the next key frame */
 void video_show(int gen, int type, long long pts_us, const uint8_t *data, size_t len);
-/* Call gen's picture is over (the call ended, its picture stopped): the player goes, and the picture with it */
+/* This Show's own picture while it sends one (the same records as leave): small in a corner, mirrored */
+void video_self(int gen, int type, long long pts_us, const uint8_t *data, size_t len);
+/* Call gen's other side frosted for its first ms (the caller's screen, the Echo called did not ring); before its records */
+void video_blur(int gen, int ms);
+/* Call gen's picture is over (the call ended, its picture stopped): both players go, and the pictures with them */
 void video_stop(int gen);
+void video_self_stop(int gen);                  /* only this Show's own (its camera stopped mid-call) */
 int  video_shown(void);                         /* records handed to a player since the start: tests, the log */
+int  video_self_shown(void);
 #endif

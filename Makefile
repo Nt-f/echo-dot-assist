@@ -165,7 +165,7 @@ $(OUT)/libhmui.so: $(UI) src/ui/scene.h src/ui/ui.h src/ui/gfx.h build/.build-id
 # loaded by the same screen.dex; device.mk CAMERA where the board has one
 $(OUT)/libhmcam.so: src/cam/cam.c build/.build-id
 	@mkdir -p $(OUT)
-	$(CC) $(CFLAGS) -fPIC -shared $< -o $@ -fuse-ld=lld -Wl,--no-undefined -Wl,-soname,libhmcam.so -landroid
+	$(CC) $(CFLAGS) -fPIC -shared $< -o $@ -fuse-ld=lld -Wl,--no-undefined -Wl,-soname,libhmcam.so -landroid -lEGL -lGLESv2
 
 # not part of "all": raw HCI probe on the Bluetooth controller (stop btmanagerd first, see the file)
 $(OUT)/hciscan: src/tools/hciscan.c

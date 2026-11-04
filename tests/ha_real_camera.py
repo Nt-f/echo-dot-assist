@@ -144,6 +144,7 @@ async def run(tmp):
                 check(r.get("cam_hidden_without") and r.get("cam_shown"), f"the camera button: only where the Echo shows the picture ({r.get('cam_hidden_without')}, {r.get('cam_shown')})")
                 check(r.get("video_recs", 0) >= 10 and r.get("video_first") == "2",
                       f"the browser's camera (Chrome's fake one) through WebCodecs to the Echo's screen: {r.get('video_recs')} records, the first a key frame ({r.get('video_first')}), {r.get('cam_msg')!r}")
+                check(r.get("frost") == [True, False], f"the Echo's picture frosted at first (it did not ring), clear 3 s on ({r.get('frost')})")
                 check(r.get("hung"), "Hang up in the card: the call ends on the Echo")
                 check(r.get("video_stopped"), "and the Echo's player goes with it")
 
@@ -211,6 +212,7 @@ async def card_in_chrome(session, token, eid, echo, vidlog):
             c.hass = window._hass; document.body.appendChild(c); window._card = c;
             await c.start();
             for (let i = 0; i < 80 && !c.gotPicture; i++) await new Promise(r => setTimeout(r, 100));
+            window._frost0 = c.shadowRoot.querySelector('canvas').classList.contains('frost');
             await new Promise(r => setTimeout(r, 1500));
             const cv = c.shadowRoot.querySelector('canvas'), d = cv.getContext('2d').getImageData(0, 0, cv.width, cv.height).data;
             let lit = 0; for (let i = 0; i < d.length; i += 4) if (d[i] + d[i + 1] + d[i + 2] > 120) lit++;
@@ -232,6 +234,7 @@ async def card_in_chrome(session, token, eid, echo, vidlog):
             window._card.live(true); const b = window._card.shadowRoot.querySelector('.cam');
             const shown = !b.hidden; b.click(); await new Promise(r => setTimeout(r, 3000)); return shown; }})()""")
         out["cam_msg"] = await js("window._card.shadowRoot.querySelector('.msg').textContent")
+        out["frost"] = await js("[window._frost0, window._card.shadowRoot.querySelector('canvas').classList.contains('frost')]")
         recs = [l.split() for l in open(vidlog).read().splitlines() if l.startswith("rec")] if os.path.exists(vidlog) else []
         out["video_recs"], out["video_first"] = len(recs), recs[0][1] if recs else None
         await js("window._card.stop('')")

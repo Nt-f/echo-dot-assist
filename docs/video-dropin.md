@@ -74,6 +74,13 @@ nonce = call_id dir vseq 'V'    (audio's nonces have byte 13 zero: the two never
 - **Receiver** (`on_video`): one frame put together at a time; a fragment of a newer frame drops the one unfinished,
   and after any loss only a key frame starts the picture again (no broken pictures on the screen).  The call's end
   logs `pictures: sent, shown, lost on the way`.
+- **Frosted start** (stock's "frosted glass"): the caller's screen blurs an Echo that did not ring, `FROST_MS` 4000
+  from its first picture (3 s frosted, 1 s clearing): dropin.c `go_live` -> `video_blur` -> cam.c `HMCAM_BLUR_MS`.
+  The card does the same by its states (no "ringing" before "connected").  Done by the receiver, both ours: Home
+  Assistant can watch the camera anyway while the setting is on, so this is courtesy, not a lock.  Without GL the
+  player keeps such a picture hidden for its frost rather than show it sharp.
+- **Self-view**: the records that leave go to a second player too (`video_self`, `HMCAM_SELF=1`: a quarter of the
+  width, bottom right, mirrored), from Show to Show and to Home Assistant alike.
 - **Unmeasured**: two Shows sending 720p at 1 Mbit/s each on one Wi-Fi; a key frame's 30-60 fragments must all
   arrive.  `CALL_KBPS` and the key frame interval are what to tune once two Shows can be tried.
 
