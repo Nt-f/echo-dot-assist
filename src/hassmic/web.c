@@ -1279,6 +1279,9 @@ done:
  *     SK = BLAKE2b-256 keyed with K over "hassmic call 1 <down|up>\n" <counter> "\n" <nonce, 16 bytes>
  * down (Echo -> Home Assistant):  'S' <state: dropin_states[]>            on every change; "idle" last
  *                                  'A' <320 samples s16le, 16 kHz>          this side's mic, through Drop In's gate and gain
+ *                                  'V' <type u8> <pts u64 LE, us> <H.264>   the camera (camera.h's records) while the call is
+ *                                                                           connected, the setting "camera" is on and the lens
+ *                                                                           open: one viewer, as a stream; the red dot shows
  * up (Home Assistant -> Echo):    'A' <320 samples s16le>                  to play; sent all along, silence too: the
  *                                                                           stream is the call's keepalive (LOST_MS)
  *                                  'H'                                      hung up
@@ -1286,16 +1289,20 @@ done:
 #define CALL_REC_MAX 4096
 static int call_seal(int fd, const uint8_t sk[32], unsigned long long *seq, uint8_t type, const void *p, size_t n)
 {
-    uint8_t rec[4 + 1 + CALL_REC_MAX + 16], pt[1 + CALL_REC_MAX], n12[12] = { 0 }; crypto_aead_ctx a;
-    if (n > CALL_REC_MAX) return -1;
-    pt[0] = type; if (n) memcpy(pt + 1, p, n);
+    uint8_t small[4 + 1 + CALL_REC_MAX + 16], n12[12] = { 0 }; crypto_aead_ctx a;
     size_t pl = 1 + n;
+    uint8_t *rec = 4 + pl + 16 <= sizeof small ? small : malloc(4 + pl + 16);      /* a key frame: tens of kB */
+    if (!rec) return -1;
+    uint8_t *pt = rec + 4;                              /* sealed in place: crypto_aead_write takes the same buffer */
+    pt[0] = type; if (n) memcpy(pt + 1, p, n);
     for (int i = 0; i < 4; i++) rec[i] = (uint8_t)((pl + 16) >> (8 * i));
     for (int i = 0; i < 8; i++) n12[4 + i] = (uint8_t)(*seq >> (8 * i));
     crypto_aead_init_ietf(&a, sk, n12);
     crypto_aead_write(&a, rec + 4, rec + 4 + pl, rec, 4, pt, pl);
     crypto_wipe(&a, sizeof a); (*seq)++;
-    return send_all(fd, rec, 4 + pl + 16);
+    int r = send_all(fd, rec, 4 + pl + 16);
+    if (rec != small) free(rec);
+    return r;
 }
 
 static void call_key(uint8_t out[32], const uint8_t k[32], const char *dir, const char *ctr, const uint8_t nonce[16])
@@ -1328,7 +1335,7 @@ static void call_api(int fd, const struct req *r)
     int hn = snprintf(h, sizeof h, "HTTP/1.1 200 OK\r\nContent-Type: application/x-hassmic-call\r\nConnection: close\r\nCache-Control: no-store\r\n"
                       "X-HM-Nonce: %s\r\nX-HM-Mac: %s\r\n\r\n", nh, mh);
     const char *end = "Home Assistant went";
-    unsigned long long dseq = 0, useq = 0; int last = -1, frames_in = 0, frames_out = 0;
+    unsigned long long dseq = 0, useq = 0; int last = -1, frames_in = 0, frames_out = 0, cam = -1, pictures = 0; long long cam_try = 0;
     static uint8_t in[2 * (4 + 1 + CALL_REC_MAX + 16)]; size_t have = 0;   /* (one call at a time: dropin_ha_begin) */
     if (send_all(fd, h, (size_t)hn)) goto done;
     for (;;) {
@@ -1337,6 +1344,28 @@ static void call_api(int fd, const struct req *r)
         if (st == DROPIN_IDLE) { end = NULL; break; }             /* ended here: the Echo's button, "hang up", lost */
         int16_t pcm[320]; int fail = 0;
         while (dropin_ha_out(gen, pcm)) { if (call_seal(fd, down, &dseq, 'A', pcm, sizeof pcm)) { fail = 1; break; } frames_out++; }
+        if (fail) break;
+        /* the picture: while connected, tried again every 2 s (the setting switched on, the lens opened, a stream that
+         * had the camera over) */
+        if (st == DROPIN_LIVE && cam < 0 && now_ms() - cam_try > 2000) {
+            const char *cw = ""; cam_try = now_ms();
+            if (camera_present() && (cam = camera_begin(&cw)) < 0 && strcmp(cw, "off") && strcmp(cw, "covered")) fprintf(stderr, "web: no picture in the call: %s\n", cw);
+        }
+        while (cam > 0) {
+            int t; long long pts; uint8_t *d = NULL; size_t len;
+            int g = camera_next(cam, &t, &pts, &d, &len, 0);
+            if (g < 0) { camera_end(cam); cam = -1; cam_try = now_ms(); break; }
+            if (!g) break;
+            uint8_t *v = malloc(9 + len);
+            if (v) {
+                v[0] = (uint8_t)t; for (int i = 0; i < 8; i++) v[1 + i] = (uint8_t)((unsigned long long)pts >> (8 * i));
+                memcpy(v + 9, d, len);
+                if (call_seal(fd, down, &dseq, 'V', v, 9 + len)) fail = 1; else pictures++;
+                free(v);
+            }
+            free(d);
+            if (fail) break;
+        }
         if (fail) break;
         struct pollfd q = { fd, POLLIN, 0 };
         int k2 = poll(&q, 1, 10);
@@ -1367,10 +1396,11 @@ static void call_api(int fd, const struct req *r)
         memmove(in, in + at, have - at); have -= at;
     }
 done:
+    if (cam > 0) camera_end(cam);
     if (end) dropin_ha_end(gen, end);
     if (dropin_ha_state(gen) == DROPIN_IDLE && last != DROPIN_IDLE) call_seal(fd, down, &dseq, 'S', "idle", 4);   /* (it may hear it) */
     crypto_wipe(down, sizeof down); crypto_wipe(up, sizeof up);
-    fprintf(stderr, "web: call from Home Assistant closed: %d frames in, %d out\n", frames_in, frames_out);
+    fprintf(stderr, "web: call from Home Assistant closed: %d frames in, %d out, %d pictures\n", frames_in, frames_out, pictures);
 }
 
 /* Online updates come from GitHub: a line of BODY that switches them on (from off) counts only once this Echo reached

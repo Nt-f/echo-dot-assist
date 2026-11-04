@@ -4,6 +4,9 @@ What changed for people using the Echo, newest first. Details and measurements a
 
 ## 2026-11-04
 
+- **Drop In on an Echo Show from a Home Assistant dashboard**: the card **Echo Drop In** (Echo Local) shows the Echo's
+  picture and plays its sound in the browser, and your microphone talks on the Echo, a few hundred ms behind. The
+  Echo answers it like a Drop In from another Echo. [The guide](docs/GUIDE.md#drop-in-from-home-assistant-echo-show).
 - **The Echo Show's face looks at you** (Eyes follow you, on the settings page's Screen page; off by default): its
   eyes follow the nearest face the camera sees, by the camera's own face detector, on the Echo. No picture leaves
   it, so no camera dot.

@@ -307,8 +307,8 @@ class Echo:
 
 
 class EchoCall:
-    """One call (web.c call_api): recv() the Echo's records, ('S', state) and ('A', 640 bytes of 16 kHz s16le), None at
-    the end; audio() a frame to play there (20 ms, sent all along: the call's keepalive); hangup()."""
+    """One call (web.c call_api): recv() the Echo's records, ('S', state), ('A', 640 bytes of 16 kHz s16le) and
+    ('V', (type, pts us, H.264)) while the camera is on, None at the end; audio() a frame to play there (20 ms, sent all along: the call's keepalive); hangup()."""
     FRAME = 640
 
     def __init__(self, reader, writer, down: bytes, up: bytes):
@@ -321,7 +321,7 @@ class EchoCall:
         try:
             head = await self.reader.readexactly(4)
             n = struct.unpack("<I", head)[0]
-            if n < 1 + 16 or n > 1 + 4096 + 16:
+            if n < 1 + 16 or n > CAM_REC_MAX + 32:          # ('V': a key frame, tens of kB)
                 raise EchoError(f"a call record of {n} bytes")
             pt = self._down.decrypt(b"\0\0\0\0" + struct.pack("<Q", self._dseq), await self.reader.readexactly(n), head)
         except (asyncio.IncompleteReadError, ConnectionError):
@@ -333,6 +333,8 @@ class EchoCall:
         if t == "S":
             self.state = pt[1:].decode(errors="replace")
             return ("S", self.state)
+        if t == "V" and len(pt) >= 10:
+            return ("V", (pt[1], struct.unpack_from("<Q", pt, 2)[0], pt[10:]))
         return (t, pt[1:])
 
     def _send(self, t: bytes, p: bytes = b"") -> None:

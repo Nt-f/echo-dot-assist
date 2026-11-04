@@ -38,6 +38,7 @@ def tone(i, hz=440, amp=8000):
 async def talk(call, secs, frames=None, quiet=False):
     """frames to the Echo every 20 ms for secs (silence when quiet), what comes back meanwhile: (states, audio frames)"""
     states, audio, i = [], 0, 0
+    talk.video = []
     async def rx():
         nonlocal audio
         while True:
@@ -45,6 +46,7 @@ async def talk(call, secs, frames=None, quiet=False):
             if r is None: return
             if r[0] == "S": states.append(r[1])
             elif r[0] == "A": audio += 1
+            elif r[0] == "V": talk.video.append(r[1])
     t = asyncio.ensure_future(rx())
     t0 = time.monotonic()
     try:
@@ -62,7 +64,8 @@ async def main():
     state = tempfile.mkdtemp(); voip = os.path.join(state, "voip.raw")
     env = dict(os.environ, HASSMIC_STATE=state, HASSMIC_CAP=f"{ROOT}/testdata/alexa_espeak.raw", HASSMIC_PLAY=os.path.join(state, "play.raw"),
                HASSMIC_VOIP=voip, HASSMIC_MDNS_FILE=os.path.join(state, "none"), HASSMIC_ARB_ADDR="127.255.255.255",
-               HASSMIC_DROPIN_TIMES="4000 1500")             # lost after 1.5 s without Home Assistant's frames
+               HASSMIC_DROPIN_TIMES="4000 1500",             # lost after 1.5 s without Home Assistant's frames
+               HASSMIC_FAKE_CAMERA=os.path.join(ROOT, "tests", "fake_camera.py"))             # lost after 1.5 s without Home Assistant's frames
     log = os.path.join(state, "log")
     proc = subprocess.Popen([f"{ROOT}/build/hassmic-host", "-P", "esphome", "-p", str(PORT), "-n", "Echo Call", "-z", "0", "-o", "0",
                              "-a", "16997", "-i", "16998", "-W", str(WEB)], env=env, stderr=open(log, "w"))
@@ -86,12 +89,25 @@ async def main():
             v0 = os.path.getsize(voip) if os.path.exists(voip) else 0
             states, audio = await talk(call, 2)
             check(audio > 60, f"the Echo's mic comes back: {audio} frames in 2 s")
+            check(not talk.video, "the camera setting off: no picture in the call")
             pcm = array.array("h", open(voip, "rb").read()[v0:]) if os.path.exists(voip) else array.array("h")
             peak = max((abs(x) for x in pcm), default=0)
             check(len(pcm) > 16000 and peak > 4000, f"the tone played on the Voip stream: {len(pcm) / 16000:.1f} s, peak {peak}")
             await call.hangup()
             check(await until(lambda: "ended with home-assistant" in text() and "Home Assistant hung up" in text(), 4),
                   "hung up from Home Assistant: the call ends on the Echo")
+
+            # the camera on: the call carries its picture (the stand-in camera's records), config first
+            b.call("POST", "/api/set", b"camera=on\n")
+            call = await echo.drop_in(); await call.recv()
+            states, audio = await talk(call, 3)
+            types = [v[0] for v in talk.video]
+            check(types[:1] == [api.CAM_CONFIG] and api.CAM_KEY in types and len(types) > 20,
+                  f"the camera on: its picture in the call ({len(types)} records, {types[:3]})")
+            await call.hangup()
+            check(await until(lambda: "pictures" in text() and "camera: stream" in text() and "ended: the viewer went" in text(), 4),
+                  "and the camera stops with the call")
+            b.call("POST", "/api/set", b"camera=off\n")
 
             # ended on the Echo (the settings page's "end"): Home Assistant is told "idle"
             call = await echo.drop_in(); await call.recv()

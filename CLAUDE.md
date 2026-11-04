@@ -15,7 +15,8 @@ Docs: `README.md` (short user-facing overview with figures; every feature in det
 `scripts/setup.sh`; every Echo on Fire OS or Vega OS and its status in `devices/MODELS.md`), `DEVELOPMENT.md` (architecture, layout, tests, contributing), `PLAN.md` (phases, open issues, every measurement), `CHANGELOG.md`
 (user-visible changes by date), `docs/` (reverse-engineering findings: `FINDINGS.md`, `re-platform.md`, `re-pryon.md`, `re-aed.md`, `re-whisper.md`, `re-vad.md`, `re-a2dp-source.md`, `re-davs-login.md`, `wake-word-end.md` (where the request starts after the wake word: measurements on the speech
 corpus, tables generated into `wake-word-end/`), `re-checkers.md`, `re-athena.md`,
-`sendspin-digest.md`, `kiosk-satellite.md`: Kiosk Satellite next to hassmic on the Shows, `camera.md`: the Shows' camera through Echo Local, H.264 relayed encrypted, and why not ESPHome's camera).
+`sendspin-digest.md`, `kiosk-satellite.md`: Kiosk Satellite next to hassmic on the Shows, `video-dropin.md`: Drop In from a
+Home Assistant dashboard, `camera.md`: the Shows' camera through Echo Local, H.264 relayed encrypted, and why not ESPHome's camera).
 
 ## Build and test
 
@@ -102,7 +103,8 @@ aioesphomeapi, wyoming, aiosendspin, noiseprotocol, aiohttp):
                                              # far end) through Echo Local's api.py: audio both ways, hang-ups, ringing,
                                              # refusals, lost
 .venv/bin/python tests/ha_real_camera.py      # Echo Local's camera entity in a real HA: on/off, a still from the H.264,
-                                             # live view as HLS (PyAV: --setup installs stream's requirements)
+                                             # live view as HLS (PyAV: --setup installs stream's requirements); Drop In
+                                             # through call.py's websocket and the call card in headless Chrome
 .venv/bin/python tests/fake_wifi_join.py      # checkers' setup join (wifi-join.sh) through a fake adb and WifiService
 .venv/bin/python tests/fake_web_mww.py        # microWakeWord: models added/edited/deleted from the page, engine switch,
                                              # real detections on testdata/alexa_espeak.raw, copy as an artifact
@@ -389,7 +391,8 @@ No model `#ifdef`s in shared code: new differences become a board field, a `devi
   types, icons and the action's name stable: released blueprints rely on them; a new result is a new event type.
   From Home Assistant (docs/video-dropin.md): web.c `GET /api/call` (signed; records sealed both ways, keys per call
   and direction) is the far end, `dropin_ha_*`: PCM 16 kHz 20 ms frames instead of Opus/UDP, no arb messages, peer
-  "home-assistant"; Echo Local's `api.py` `Echo.drop_in()` / `EchoCall`.
+  "home-assistant", the camera's records ('V') while connected with the camera on; Echo Local's `api.py` `Echo.drop_in()`
+  / `EchoCall`, `call.py` (the card's websocket, signed path), `frontend/echo-local-call-card.js` (WebCodecs, AudioWorklets).
 - **Bluetooth**: `ble.c`/`ble_crypto.c` talk raw HCI (`hci.h`) to the controller for the HA Bluetooth proxy (scan, GATT,
   Just Works pairing); Amazon's `btmanagerd` is stopped. A2DP shares the controller; scanning pauses while a phone plays,
   and for 1 s from a wake word round (`ble_quiet` in `main.c` `wake_heard`): the scan's share of the antenna costs
