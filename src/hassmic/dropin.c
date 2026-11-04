@@ -105,6 +105,11 @@ static int answer_ms = ANSWER_MS, lost_ms = LOST_MS;
 #define ECHO_MS     600
 #define FAR_DB      -55.0f              /* the far end talks */
 #define SUPPRESS_DB -25.0f              /* the room, and the echo, while this side does not talk */
+/* The setting drop_in_gate: "light" ducks by this much instead, "off" not at all.  What that costs: the room's floor goes
+ * out with the speech gain (the Echo Show 5's -69 dBFS at +33 dB is -36 dBFS of hiss under the whole call, RNNoise's 12 dB
+ * off it included), and what the echo canceller leaves of the far end goes back to it.  For a quiet room, or a call
+ * from a browser with headphones on */
+#define GATE_LIGHT_DB -10.0f
 #define SUPPRESS_OWN_DB -40.0f          /* our own sounds (the connect chime came back at -50 dBFS ducked by 25) */
 #define DOUBLE_TALK_DB 6.0f             /* the near end this much over the echo estimate passes... */
 #define DOUBLE_TALK_N 3                 /* ...for this many frames in a row: an echo's onset is shorter */
@@ -136,6 +141,7 @@ static pthread_mutex_t dl = PTHREAD_MUTEX_INITIALIZER;   /* everything below; ta
 static pthread_cond_t live_cond = PTHREAD_COND_INITIALIZER;
 static atomic_int notify;                                 /* the loop tells the core (core_dropin): callers may hold core_lock */
 static int sock = -1, running, enabled = 1, ask;
+static atomic_int gate_mode;                             /* drop_in_gate: read on the capture thread, per frame */
 static uint16_t my_port;
 static uint8_t self_id[8];
 static struct {
@@ -328,6 +334,12 @@ int dropin_enable(int set)
     int r = enabled;
     pthread_mutex_unlock(&dl);
     return r;
+}
+
+int dropin_gate(int set)
+{
+    if (set >= 0 && set <= 2) gate_mode = set;
+    return gate_mode;
 }
 
 int dropin_ask(int set)
@@ -636,8 +648,9 @@ static void send_frame(const int16_t *pcm, int own)
     /* A gate: open while this side talks (and LISTEN_HANG_MS after, unless the far end plays), else ducked.  Ducked only
      * while the far end played (the first try), the gain lifted the room in its pauses from -72 to -48 dBFS while the
      * rest went out at -70: hiss that came and went with every sentence of the other side (2026-10-08) */
-    if (own) target = powf(10, SUPPRESS_OWN_DB / 20);
-    else if (!near && (farend || now >= near_until)) target = powf(10, SUPPRESS_DB / 20);
+    int gm = gate_mode;
+    if (own) target = powf(10, SUPPRESS_OWN_DB / 20);                  /* our own sounds go down whatever drop_in_gate says */
+    else if (gm != 2 && !near && (farend || now >= near_until)) target = powf(10, (gm == 1 ? GATE_LIGHT_DB : SUPPRESS_DB) / 20);
     /* the gain first: after the ducking it would give the 25 dB back (+24 dB at micAsr's level, measured) */
     gain.hold = own || farend;                          /* the talker's level is learnt while the other side is quiet */
     gain.speech = near;                                 /* ...and from speech only: a room's noise is no quiet talker */

@@ -4,6 +4,8 @@ What changed for people using the Echo, newest first. Details and measurements a
 
 ## 2026-11-04
 
+- **Quiet between words in calls** (settings page, under Drop In): how far the Echo's microphone goes down in a call
+  while nobody near it talks. Full (as before), Light, or Off to hear the room all along.
 - **Drop In hears you from across the room on the Echo Show**: whether you are talking is now decided by a speech
   detector (RNNoise) instead of by loudness. The Show's microphone puts speech at the level of its room's noise, so
   only speech right into the Echo got through, in calls from Home Assistant and from other Echos alike. The noise of

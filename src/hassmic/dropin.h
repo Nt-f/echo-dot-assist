@@ -20,6 +20,8 @@ int  dropin_running(void);
 /* Any lock but dropin's own (core_lock may be held): */
 int  dropin_enable(int set);                    /* the "drop_in" setting: calls in and out; -1 reads */
 int  dropin_ask(int set);                       /* "drop_in_answer": 0 connects at once, 1 waits for the action button */
+int  dropin_gate(int set);                      /* "drop_in_gate": how far the mic goes down between this side's words:
+                                                 * 0 SUPPRESS_DB, 1 GATE_LIGHT_DB, 2 not at all (dropin.c); -1 reads */
 /* Drop in on another Echo of the network, named by its node or its name ("Echo Dot 3 5695c4").  0: calling it; -1 and
  * why in err */
 int  dropin_call(const char *target, char *err, size_t errsz);

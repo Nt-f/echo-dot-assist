@@ -329,6 +329,11 @@ Assistant in between.
 voice. What it leaves would still come back to the other Echo, so an Echo sends its room only while someone there
 talks; while the other side talks it is turned down 25 dB. Two people talking at the same time work only if the
 one here is clearly louder than the echo of the other: as on a speakerphone, take turns.
+Whether someone here talks is decided by a speech detector (RNNoise), not by loudness: the Echo Show's microphone puts
+speech from across the room at its room's own noise level. **Quiet between words in calls** (settings page, under Drop
+In) sets how far the microphone goes down between them: Full (25 dB, the default), Light (10 dB: a little of the room's
+hiss in the pauses), or Off (the room all along, and the other side may hear itself faintly). It takes effect at once,
+in a running call too.
 
 ### Drop In from Home Assistant (Echo Show)
 

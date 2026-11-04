@@ -5,7 +5,7 @@ Echo.drop_in): connected at once, its tone played on the Echo's Voip stream, the
 up from Home Assistant, from the Echo (the settings page's end) and by Home Assistant going; ringing with
 drop_in_answer until the action button; refused while busy and with do not disturb; lost when Home Assistant falls
 silent; unsigned requests refused."""
-import array, asyncio, math, os, signal, subprocess, sys, tempfile, time
+import array, asyncio, math, os, random, signal, subprocess, sys, tempfile, time
 import aiohttp
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -30,6 +30,12 @@ async def until(cond, secs=5):
     return cond()
 
 
+def dropin_idle(b):
+    st = b.call("GET", "/api/state")
+    st = st[2] if isinstance(st, tuple) else st
+    return b'"dropin":{"state":"idle"' in (st if isinstance(st, bytes) else str(st).encode())
+
+
 def tone(i, hz=440, amp=8000):
     """frame i of a sine (20 ms, 16 kHz)"""
     return array.array("h", (int(amp * math.sin(2 * math.pi * hz * (i * 320 + n) / 16000)) for n in range(320))).tobytes()
@@ -38,14 +44,15 @@ def tone(i, hz=440, amp=8000):
 async def talk(call, secs, frames=None, quiet=False):
     """frames to the Echo every 20 ms for secs (silence when quiet), what comes back meanwhile: (states, audio frames)"""
     states, audio, i = [], 0, 0
-    talk.video = []
+    talk.video = []; talk.levels = []
     async def rx():
         nonlocal audio
         while True:
             r = await call.recv()
             if r is None: return
             if r[0] == "S": states.append(r[1])
-            elif r[0] == "A": audio += 1
+            elif r[0] == "A":
+                audio += 1; talk.levels.append(max(abs(x) for x in array.array("h", r[1])))
             elif r[0] == "V": talk.video.append(r[1])
     t = asyncio.ensure_future(rx())
     t0 = time.monotonic()
@@ -62,7 +69,11 @@ async def talk(call, secs, frames=None, quiet=False):
 
 async def main():
     state = tempfile.mkdtemp(); voip = os.path.join(state, "voip.raw")
-    env = dict(os.environ, HASSMIC_STATE=state, HASSMIC_CAP=f"{ROOT}/testdata/alexa_espeak.raw", HASSMIC_PLAY=os.path.join(state, "play.raw"),
+    # the stand-in capture with a quiet room under it (-50 dBFS): between its words there is something to turn down
+    cap = array.array("h", open(f"{ROOT}/testdata/alexa_espeak.raw", "rb").read()); rnd = random.Random(7)
+    cap = array.array("h", (max(-32768, min(32767, x + int(rnd.gauss(0, 100)))) for x in cap))
+    open(os.path.join(state, "cap.raw"), "wb").write(cap.tobytes())
+    env = dict(os.environ, HASSMIC_STATE=state, HASSMIC_CAP=os.path.join(state, "cap.raw"), HASSMIC_PLAY=os.path.join(state, "play.raw"),
                HASSMIC_VOIP=voip, HASSMIC_MDNS_FILE=os.path.join(state, "none"), HASSMIC_ARB_ADDR="127.255.255.255",
                HASSMIC_DROPIN_TIMES="4000 1500",             # lost after 1.5 s without Home Assistant's frames
                HASSMIC_FAKE_CAMERA=os.path.join(ROOT, "tests", "fake_camera.py"))             # lost after 1.5 s without Home Assistant's frames
@@ -108,6 +119,20 @@ async def main():
             check(await until(lambda: "pictures" in text() and "camera: stream" in text() and "ended: the viewer went" in text(), 4),
                   "and the camera stops with the call")
             b.call("POST", "/api/set", b"camera=off\n")
+
+            # drop_in_gate: off, the mic is never turned down between words; full (the default), it is (the stand-in
+            # capture's quiet stretches: no speech in them).  Silence from Home Assistant: no far end to duck for
+            peaks = {}
+            for g in ("off", "full"):
+                b.call("POST", "/api/set", f"drop_in_gate={g}\n".encode())
+                call = await echo.drop_in(); await call.recv()
+                await talk(call, 3, quiet=True)
+                lv = sorted(talk.levels[25:]); peaks[g] = lv[len(lv) // 4] if lv else 0      # a quiet quarter's peak
+                await call.hangup(); await until(lambda: dropin_idle(b), 3)
+            check(peaks["off"] > 4 * max(peaks["full"], 1), f"drop_in_gate off: the room comes through between words, full: turned down ({peaks})")
+            st = b.call("GET", "/api/state"); st = st[2] if isinstance(st, tuple) else st
+            st = st.decode() if isinstance(st, bytes) else str(st)
+            check('"drop_in_gate"' in st and '"full"' in st, "drop_in_gate on the page's state")
 
             # ended on the Echo (the settings page's "end"): Home Assistant is told "idle"
             call = await echo.drop_in(); await call.recv()
