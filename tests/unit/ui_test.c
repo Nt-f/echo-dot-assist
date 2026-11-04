@@ -721,14 +721,18 @@ int main(int argc, char **argv)
     msg("home org.example.app03"); run(100);                      /* (launched while hidden: nothing drawn for it) */
     assert(S->leaving_until > now && !S->leaving_drawn);
     scene_top(S, UI_HOME_PKG, now); run(200); assert(S->leaving_drawn);   /* our home first: a frame of its own, then held */
-    /* pulled over another app, the drawer's Home: its picture goes at once (ours while the home app comes) */
+    /* pulled over another app, the drawer's Home: its picture stays while the home app comes (no face for that
+     * second), and goes once the home app is in front */
     msg("home me.jxl.kiosk_satellite"); scene_top(S, "me.jxl.kiosk_satellite", now); run(100);
     scene_top(S, "org.example.other", now); run(4000);
     drag(W / 2, -8, W / 2, 300, 12, 16); run(600); scene_top(S, UI_HOME_PKG, now); run(300);
     { uint32_t *pic = malloc((size_t)W * H * 4); for (int i = 0; i < W * H; i++) pic[i] = 0xFF808080u; scene_backdrop(S, pic, W, H); }
     run(100); tap(66, 60); run(50);
-    assert(!S->backdrop.px);
+    assert(S->backdrop.px);
     run(600);
+    assert(S->backdrop.px && inc[(H / 2) * W + W / 2] == 0xFF808080u);   /* the app's picture, not the face */
+    scene_top(S, "me.jxl.kiosk_satellite", now); run(100);
+    assert(!S->backdrop.px);
     /* an app takes the front while the drawer is pulled over our own screen: the finger moving on pulls nothing */
     scene_top(S, UI_HOME_PKG, now); run(4500);
     { int sh = shots_asked; scene_touch(S, TOUCH_DOWN, W / 2, 3, now);

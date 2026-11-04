@@ -92,7 +92,9 @@ static void drawer_go(struct scene *s, const char *pkg, const char *how)
     d->go = 1; snprintf(d->go_pkg, sizeof d->go_pkg, "%s", pkg); snprintf(d->go_cls, sizeof d->go_cls, "%s", how ? how : "");
     s->view = V_FACE;                                           /* what shows when that app is gone again */
     s->own_asked = 0;                                           /* (the home app asked for: back when it leaves, tried again) */
-    scene_backdrop(s, NULL, 0, 0);                              /* not the other app's picture while this one comes: ours */
+    /* pulled over an app: its picture stays until the chosen one is in front (scene.c leaving_until), as Android
+     * switches apps; ours (the face) would show for the second the app takes to come.  Over our own screen: ours */
+    if (!d->from_app) scene_backdrop(s, NULL, 0, 0);
 }
 
 void drawer_pull(struct scene *s, int y, int ev)
