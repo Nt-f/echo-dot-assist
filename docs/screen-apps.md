@@ -116,7 +116,7 @@ disturb, Screen off, the volume, and the app switcher (the home app's screens, t
 No rows are taken from the apps for it. The UI process stands between the touch screen and Android
 (`src/ui/touchgate.c`, run by `touch.c` in a thread of its own): it grabs the panel's evdev device and writes every
 touch on to a uinput copy of it, which Android takes for the touch screen. A touch that starts in the middle 80 % of
-the screen's top edge (within 4 % of it) while an app is in front is held back until it shows what it is. If it comes
+the screen's top edge (within 10 % of it: a fingertip below the edge) while an app is in front is held back until it shows what it is. If it comes
 down 5 % of the screen, mostly straight, it is a pull: the drawer's alone, and since the app never saw its start
 nothing has to be cancelled. If it lifts (a tap), goes 3 % sideways, gets a second finger, or rests 300 ms (a long
 press), it goes on to the app from where it began; nothing is held past 600 ms. Every other touch goes on at once,

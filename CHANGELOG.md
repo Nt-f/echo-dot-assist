@@ -4,6 +4,8 @@ What changed for people using the Echo, newest first. Details and measurements a
 
 ## 2026-11-04
 
+- **The drawer comes down from a finger landing a little below the top edge** (up to 48 px on an Echo Show 5), not
+  only from its very edge, over the face and over apps.
 - **The drawer shuts with a swipe up from anywhere on it**, its row of apps included, and a short push is enough (a
   tenth of its height, or a light flick); pulling it down opens it from a third of the way.
 - **Echo Local's panel fits a phone**: cards no wider than the screen, settings under their names where it is narrow;

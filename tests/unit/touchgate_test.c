@@ -122,6 +122,13 @@ int main(void)
     clear(); down(475, 480, "y0");
     check(frames == 1, "the same touch in portrait (the panel's right edge): the app's");
     up("y0");
+    /* not only the very top: a finger landing 40 px below it (of 480) still pulls; 60 px below, the app's at once */
+    clear(); pulls = 0; down(440, 480, "x1"); move(410, 482, "x1");
+    check(frames == 0 && pulls == 1, "landscape: a pull from 40 px below the top, the drawer's");
+    up("x1");
+    clear(); down(420, 480, "x1");
+    check(frames == 1, "landscape: 60 px below the top, the app's at once");
+    up("x1");
 
     printf("touchgate: %s\n", fails ? "FAILED" : "all ok");
     return fails != 0;

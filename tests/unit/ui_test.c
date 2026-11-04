@@ -547,6 +547,9 @@ int main(int argc, char **argv)
     { int x, y; hit_mid(A_DR_APP, 2, &x, &y); drag(x, y, x - 80, y - 10, 8, 30); run(600); assert(drawer_open(S)); }   /* (sideways: the row's) */
     drag(W / 2, 100, W / 2, 50, 10, 40); run(600); assert(!drawer_open(S));   /* 50 px of 338, slowly: shut */
     drag(W / 2, 3, W / 2, 130, 12, 40); run(600); assert(drawer_open(S));     /* 127 px down, slowly: open */
+    drag(W / 2, 100, W / 2, 50, 10, 40); run(600); assert(!drawer_open(S));
+    drag(W / 2, 40, W / 2, 200, 12, 30); run(600); assert(drawer_open(S));    /* from 40 px below the top, not its very edge */
+    drag(W / 2, 150, W / 2, 80, 10, 40); run(600); assert(!drawer_open(S)); pull_drawer(); run(300);
     tap(278, 60); run(100); assert(sent_has("dnd 1"));            /* Home, Music, Do not disturb, Screen off */
     /* a drag goes on whatever the hits become meanwhile: music starts under the volume slider's drag */
     msg("mx"); run(4000); nsent = 0;                              /* (the toasts gone) */

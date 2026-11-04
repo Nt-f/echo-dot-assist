@@ -10,7 +10,7 @@
 #include <strings.h>
 #include <time.h>
 
-#define EDGE_TOP   22                   /* the top edge's grip, in units: a pull from there is the drawer's */
+#define EDGE_TOP   48                   /* the top edge's grip, in units: a pull from there is the drawer's (a fingertip below the edge, not only its very top) */
 #define BACK_PX    140                  /* along the band: Back */
 #define FLING_TAU  325.0f               /* a fling slows as Android's scrollers do: e^(-t/325 ms) */
 

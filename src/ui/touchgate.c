@@ -13,10 +13,12 @@
 #include <sys/sysmacros.h>
 #include <unistd.h>
 
-/* the drawer's part of the top edge: a touch that starts within 4 % of it and in its middle 80 % is held (the corners
- * stay the app's at once: its own menus and buttons up there; a tap anywhere still reaches the app on its lift); a pull once it moved 5 % of that axis inwards, mostly straight; anything else once it went
- * 3 % sideways, or rested 300 ms (a long press of the app's own), or at the latest after 600 ms */
-#define BAND    .04f
+/* the drawer's part of the top edge: a touch that starts within 10 % of it (48 px on the Show 5: a fingertip below the
+ * edge, not only its very top, which 4 % asked for) and in its middle 80 % is held (the corners stay the app's at
+ * once: its own menus and buttons up there; a tap anywhere still reaches the app on its lift); a pull once it moved 5 %
+ * of that axis inwards, mostly straight; anything else once it went 3 % sideways, or rested 300 ms (a long press of the
+ * app's own), or at the latest after 600 ms */
+#define BAND    .10f
 #define ALONG0  .10f
 #define ALONG1  .90f
 #define PULL    .05f
