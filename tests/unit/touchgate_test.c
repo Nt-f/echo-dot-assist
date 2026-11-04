@@ -99,7 +99,7 @@ int main(void)
     check(tg_tick(&g, t, emit, NULL) == 0 && frames == 2, "but no longer than 600 ms");
     up("y0");
 
-    clear(); down(60, 10, "y0");
+    clear(); down(30, 10, "y0");
     check(frames == 1, "at the top but in its corner: the app's at once");
     up("y0");
     clear(); down(240, 10, NULL);
