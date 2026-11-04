@@ -996,9 +996,9 @@ async function loadApps(card) {
       return h('label', { class: 'switch', title: label }, sw, h('span'));
     };
     const del = h('button', { class: 'icon-btn', title: 'Remove', 'aria-label': `Remove ${a.package}`, onclick: () => apkRemove(a.package, card) }, icon('trash'));
-    const what = [a.net ? 'may reach the internet' : 'kept off the internet', a.lan ? 'reachable from your network' : 'not reachable from your network'].join(', ');
+    const what = [a.net ? 'may reach the internet' : 'kept off the internet', a.lan ? 'its ports open to your network' : 'its ports closed'].join(', ');
     return infoRow(a.package, `${what[0].toUpperCase()}${what.slice(1)} · version ${a.version}`, null,
-      [del, h('span', { class: 'help' }, 'Internet'), toggle('net', 'Internet', a.net), h('span', { class: 'help' }, 'Network'), toggle('lan', 'Reachable from your network', a.lan)]);
+      [del, h('span', { class: 'help' }, 'Internet'), toggle('net', 'Internet', a.net), h('span', { class: 'help' }, 'Open ports'), toggle('lan', 'Open ports: devices on your network may connect to this app', a.lan)]);
   });
   appsBox.replaceChildren(...(rows.length ? rows : [h('p', { class: 'help' }, 'No apps installed yet.')]));
   if (!appsBusy) appsMsg.textContent = apkState(d.install || {});

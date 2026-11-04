@@ -120,7 +120,7 @@ What changed for people using the Echo, newest first. Details and measurements a
 - **A timer or an alarm ringing over an app shows.** The face with its Stop comes over the app until nothing rings,
   then the app is back (not over an app that draws the ring itself, as Echo-Wall does: a tap on its ring snoozes,
   a hold stops).
-- **An app on the Echo Show can be reached from your network** (issue #109): each app has a **Network** switch beside
+- **An app on the Echo Show can be reached from your network** (issue #109): each app has an **Open ports** switch (first called **Network**) beside
   its Internet one (settings page, Echo Local's Apps tab). On, the firewall admits the ports that app listens on, from
   your own network only, and follows them when the app moves to another one: Kiosk Satellite's DLNA renderer (its port
   and SSDP discovery on 1900) works, as does any other app that phones or media servers talk to. Off by default.

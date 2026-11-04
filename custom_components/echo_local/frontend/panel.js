@@ -381,9 +381,9 @@ class EchoLocalPanel extends HTMLElement {
           try { await this.ws({ type: 'echo_local/apps/net', echo: this.echo, package: app.package, on }); app.net = on; this.toast(`${app.package}: ${on ? 'may reach the internet' : 'kept off the internet'}`); }
           catch (e) { this.toast('Not changed: ' + ((e && e.message) || e)); this.loadApps(); }
         }),
-        h('span', { class: 'note', title: 'Reachable from your network: the ports this app listens on, from your own network only (a DLNA renderer, a cast receiver)' }, 'Network'),
+        h('span', { class: 'note', title: 'Open ports: devices on your own network may connect to the ports this app listens on (a DLNA renderer that phones play to, a cast receiver). Off: nothing on your network reaches it.' }, 'Open ports'),
         this.switch(!!app.lan, async (on) => {
-          try { await this.ws({ type: 'echo_local/apps/lan', echo: this.echo, package: app.package, on }); app.lan = on; this.toast(`${app.package}: ${on ? 'reachable from your network' : 'not reachable from your network'}`); }
+          try { await this.ws({ type: 'echo_local/apps/lan', echo: this.echo, package: app.package, on }); app.lan = on; this.toast(`${app.package}: ${on ? 'its ports open to your network' : 'its ports closed'}`); }
           catch (e) { this.toast('Not changed: ' + ((e && e.message) || e)); this.loadApps(); }
         }),
         h('button', { class: 'btn small danger', disabled: isScreen || busy, title: isScreen ? 'The screen app: pick another one under Screen first' : '', onclick: async () => {

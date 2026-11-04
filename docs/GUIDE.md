@@ -628,7 +628,7 @@ the app sends the one it has the first time it finds Echo-Wall's integration.
   again** sends it now with a fresh login. An Echo Local entry added anew (after removing the old one) takes over the
   screen the Echo shows by itself and sends it with a login of its own: the old login went with the old entry.
 - *Apps* (Echo Shows): the Android apps you installed beside the home app (a YouTube client such as NewPipe), each
-  with an **Internet** switch (the Echo keeps every app off the internet until you allow it), a **Network** switch (the
+  with an **Internet** switch (the Echo keeps every app off the internet until you allow it), an **Open ports** switch (the
   Echo keeps everything on your network away from an app until you allow it; then only the ports that app listens on,
   from your own network: a DLNA renderer that phones play to, a cast receiver) and **Remove**. **Add an
   app**: an APK from your computer, or a file Home Assistant can read (`/config/www/app.apk`); it must be built for
