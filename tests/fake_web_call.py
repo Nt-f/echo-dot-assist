@@ -14,6 +14,7 @@ from webclient import wait_port, Browser, req
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "custom_components", "echo_local"))
 import api                                                     # noqa: E402
+from fake_video import gone as fake_video_gone                 # noqa: E402
 
 PORT, WEB = 16995, 16996
 
@@ -140,7 +141,7 @@ async def main():
                   f"the browser's picture reaches the screen's player, from its key frame on ({len(recs)} records, the first {recs[:1]})")
             check(not await call.video(2, 0, bytes(api.EchoCall.VIDEO_MAX)), "a record too long for the Echo is not sent")
             await call.hangup()
-            check(await until(lambda: open(vlog).read().rstrip().endswith("stop") and "the other side's picture ended" in text(), 4),
+            check(await until(lambda: fake_video_gone(vlog) and "the other side's picture ended" in text(), 4),
                   "hung up: the player goes, and the picture with it")
             check("1 of the browser's" not in text() and "of the browser's" in text(), "the call's end in the log counts the browser's pictures")
 
@@ -148,7 +149,7 @@ async def main():
             # capture's quiet stretches: no speech in them).  Silence from Home Assistant: no far end to duck for
             peaks = {}
             for g in ("off", "full"):
-                b.call("POST", "/api/set", f"drop_in_gate={g}\n".encode())
+                r = b.set(drop_in_gate=g); check(r.get("applied") == 1, f"drop_in_gate={g} applied ({r})")
                 call = await echo.drop_in(); await call.recv()
                 await talk(call, 8, quiet=True)
                 lv = sorted(talk.levels[25:]); peaks[g] = lv[len(lv) // 10] if lv else 0     # the quietest tenth's peak

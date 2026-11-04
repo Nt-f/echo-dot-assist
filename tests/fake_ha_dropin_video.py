@@ -9,6 +9,7 @@ import asyncio, base64, os, sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import fake_ha_dropin as fd
+import fake_video
 from fake_ha_dropin import Echo, check, until
 
 ROOT = fd.ROOT
@@ -48,7 +49,7 @@ async def main():
         check("the camera's picture to the other Echo" in a.text() and "start" in camtext(a), "  the kitchen's camera runs for it (its red dot on a Show)")
         check(not recs(a) and "start" not in camtext(b), "nothing goes back: the hall's camera is off")
         b.press("end_drop_in")
-        check(await until(lambda: a.dropin()[0] == "idle" and vtext(b).rstrip().endswith("stop"), 4), "hung up: the hall's player goes, and the picture with it")
+        check(await until(lambda: a.dropin()[0] == "idle" and fake_video.gone(b.vlog), 4), "hung up: the hall's player goes, and the picture with it")
         check(await until(lambda: camtext(a).rstrip().endswith("stop"), 4), "  the kitchen's camera stops")
         check(await until(lambda: "pictures:" in a.text() and "pictures:" in b.text(), 2), "  both logs count the pictures")
         await asyncio.sleep(1)

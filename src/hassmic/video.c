@@ -8,8 +8,8 @@
  * frame again, so the picture skips ahead rather than falls behind the call's sound.
  *
  * The picture must never outlive its call (a frozen face on someone's Show): video_stop for every end of a call
- * (dropin.c's end_call), a new call's records end the old one's player first, and cam.c ends by itself after 3 s
- * without frames (PLAY_IDLE_MS). */
+ * (dropin.c's end_call) kills the player at once, whatever the writer is doing; a new call's records end the old one's
+ * player first, and cam.c ends by itself after 3 s without frames (PLAY_IDLE_MS). */
 #include "video.h"
 #include "board.h"
 #include "camera.h"
@@ -34,6 +34,10 @@ static pthread_mutex_t lk = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t cv = PTHREAD_COND_INITIALIZER;
 static struct rec q[QMAX]; static unsigned qh, qt; static size_t qbytes;
 static int cur_gen = -1, need_key = 1, stop_req, started;
+/* The player's pid, for video_stop to kill it itself: a player that stops reading without dying (a decoder hung in the
+ * driver) would hold the writer in write() on a full pipe, where it never sees stop_req, and the picture would stay on
+ * the screen after the call.  Killed, its pipe's read end goes, the write fails, and the writer reaps it */
+static pid_t player = -1;
 static long long last_start;
 static int shown_n;
 
@@ -60,7 +64,7 @@ void video_show(int gen, int type, long long pts_us, const uint8_t *data, size_t
     if (!video_present() || !len || len > QBYTES) return;
     pthread_mutex_lock(&lk);
     if (!started) { pthread_t t; if (!pthread_create(&t, NULL, writer, NULL)) { pthread_detach(t); started = 1; } }
-    if (gen != cur_gen) { drop_all(); cur_gen = gen; need_key = 1; stop_req = 1; }    /* the last call's player goes */
+    if (gen != cur_gen) { drop_all(); cur_gen = gen; need_key = 1; stop_req = 1; if (player > 0) kill(player, SIGKILL); }   /* the last call's player goes */
     if (type == CAM_FRAME && need_key) { pthread_mutex_unlock(&lk); return; }
     if (qh - qt >= QMAX || qbytes + len > QBYTES) {                                   /* behind: skip to a key frame */
         drop_all(); need_key = 1;
@@ -79,7 +83,7 @@ void video_show(int gen, int type, long long pts_us, const uint8_t *data, size_t
 void video_stop(int gen)
 {
     pthread_mutex_lock(&lk);
-    if (gen == cur_gen) { drop_all(); need_key = 1; stop_req = 1; cur_gen = -1; pthread_cond_signal(&cv); }
+    if (gen == cur_gen) { drop_all(); need_key = 1; stop_req = 1; cur_gen = -1; if (player > 0) kill(player, SIGKILL); pthread_cond_signal(&cv); }
     pthread_mutex_unlock(&lk);
 }
 
@@ -100,6 +104,7 @@ static void end_player(pid_t *pid, int *fd)
         usleep(20000);
     }
     fprintf(stderr, "video: the other side's picture ended\n");
+    pthread_mutex_lock(&lk); if (player == *pid) player = -1; pthread_mutex_unlock(&lk);
     *pid = -1;
 }
 
@@ -118,7 +123,14 @@ static void *writer(void *arg)
         if (pid < 0 && r.type != CAM_FRAME && now_ms() - last_start >= RESTART_MS) {
             last_start = now_ms();
             if ((pid = camera_player(&fd)) < 0) fprintf(stderr, "video: no player for the other side's picture\n");
-            else fprintf(stderr, "video: the other side's picture on the screen\n");
+            else {
+                fprintf(stderr, "video: the other side's picture on the screen\n");
+                pthread_mutex_lock(&lk);
+                player = pid;
+                int gone = stop_req;                    /* stopped while it started: the kill above found no pid */
+                pthread_mutex_unlock(&lk);
+                if (gone) kill(pid, SIGKILL);
+            }
         }
         if (pid > 0 && fd >= 0) {
             uint8_t h[20] = { 'H', 'M', 'C', 'V', (uint8_t)r.type };

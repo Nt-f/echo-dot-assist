@@ -170,7 +170,7 @@ static const struct setting table[NSET] = {
     [KIOSK_CAM]   = { "kiosk_camera", "Kiosk Satellite camera", "System", NULL, S_BOOL, 0, 1, 0, 0 },
     /* camera.c: the Echo Show's camera to the Echo Local integration (docs/camera.md).  Not exported: a camera is
      * switched on for one Echo in one room, never by "make like this Echo" */
-    [CAMERA]      = { "camera", "Camera in Home Assistant", "Features", NULL, S_BOOL, 0, 1, 0, 0 },
+    [CAMERA]      = { "camera", "Camera: Home Assistant and video calls", "Features", NULL, S_BOOL, 0, 1, 0, 0 },
     /* camera.c: the face's eyes follow whoever looks at the screen (the hardware face detector, no picture leaves) */
     [EYES]        = { "eyes_follow", "Eyes follow you", "Features", NULL, S_BOOL, 0, 1, 0, 0 },
     [SS_UNPAIRED] = { "sendspin_unpaired", "Music Assistant without pairing", "Music", NULL, S_BOOL, 0, 1, 1, 0 },

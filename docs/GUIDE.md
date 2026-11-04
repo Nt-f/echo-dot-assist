@@ -326,8 +326,9 @@ Home Assistant say why. The sound goes straight between the two Echos (UDP 28932
 Assistant in between.
 
 **Video between Echo Shows.** A call between two Echo Shows carries each one's camera to the other's screen, full
-screen, while that Show's **Camera in Home Assistant** setting is on and its lens open (its red dot shows while it
-sends). An Echo without a screen is never sent a picture, and nothing changes for calls with a Dot. A lost bit of
+screen, while that Show's **Camera: Home Assistant and video calls** setting is on and its lens open (its red dot
+shows while it sends). The camera serves one at a time: while a call has it, Home Assistant's live view of that Echo
+waits, and a call started while someone watches the live view gets its picture once they stop. An Echo without a screen is never sent a picture, and nothing changes for calls with a Dot. A lost bit of
 the picture on the way freezes it until the next whole picture comes (at most a second). The picture goes when the
 call ends, however it ends.
 
@@ -350,7 +351,7 @@ entity) and press **Drop In**.
 - **The Echo takes it like a Drop In from another Echo**: at once, or ringing until someone presses its button
   ("Drop In answers"); Do not disturb, the microphone button and Drop In off refuse it. Its button, "stop" or "hang
   up" ends it, as does **Hang up** in the card.
-- **The picture** comes while "Camera in Home Assistant" is on and the lens is open, with the red dot on the Echo's
+- **The picture** comes while "Camera: Home Assistant and video calls" is on and the lens is open, with the red dot on the Echo's
   screen; without it the call has sound only. A few hundred ms behind (the browser decodes the Echo's video itself),
   where the camera entity's live view runs seconds behind.
 - **Your microphone starts muted** in every call: the button over the picture (bottom left) turns it on and off, so
@@ -952,7 +953,7 @@ view comes as HLS from Home Assistant's own stream integration (tested); WebRTC 
 work the same way, but nobody has tried it yet. It comes through the **Echo Local** integration (the same that brings the
 alarms and the screen's setup), not the ESPHome one, and only to it.
 
-- **Switch it on** under **Features** on the settings page ("Camera in Home Assistant"), or with the camera entity's
+- **Switch it on** under **Features** on the settings page ("Camera: Home Assistant and video calls"), or with the camera entity's
   own on/off in Home Assistant. Echo Local adds the entity once its Echo has a camera; it is "idle" until someone looks.
 - **It runs only while someone looks**: a dashboard showing it live, a recording, a still. The Echo starts the camera
   for them (about 2 s to the first picture) and stops it 10 s after the last one went.

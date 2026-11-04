@@ -237,7 +237,9 @@ async def card_in_chrome(session, token, eid, echo, vidlog):
         await js("window._card.stop('')")
         async def hung(): return echo.text().count("Home Assistant went") + echo.text().count("Home Assistant hung up") >= 2
         out["hung"] = await hr.until(hung, 5)
-        async def vstop(): return os.path.exists(vidlog) and open(vidlog).read().rstrip().endswith("stop")
+        async def vstop():
+            import fake_video
+            return os.path.exists(vidlog) and fake_video.gone(vidlog)
         out["video_stopped"] = await hr.until(vstop, 5)
         return out
     finally:

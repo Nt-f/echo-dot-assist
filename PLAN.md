@@ -3398,5 +3398,6 @@ Run in this order. Each step says what it proves.
       camera -> 44 records at the Echo's stand-in player.  Between Echo Shows: caps byte on invite/accept, "HMV1"
       fragments on the call's UDP (`CALL_KBPS` 1000, config inline per key frame), one frame put together at a time,
       a key frame after any loss; `tests/fake_ha_dropin_video.py` (a Dot never sent one, every 7th fragment lost: 11
-      shown, 6 lost, from key frames).  Open: two Shows on one Wi-Fi (nobody has two here yet): the rate, the key frame
-      interval; a self view on the Echo; the card's camera on the user's own Show.
+      shown, 6 lost, from key frames).  `video_stop` kills the player itself (a decoder hung without dying would hold
+      the writer in write()).  Open: two Shows on one Wi-Fi (nobody has two here yet): the rate, the key frame
+      interval, two app_process VMs per Show in a two-way call (the camera's and the player's: CPU, memory); a self view on the Echo; the card's camera on the user's own Show.
