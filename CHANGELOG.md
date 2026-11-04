@@ -4,6 +4,9 @@ What changed for people using the Echo, newest first. Details and measurements a
 
 ## 2026-11-04
 
+- **Install Echo-Wall from Echo Local.** With Echo-Wall picked as an Echo Show's home app but not on it yet, the Screen
+  tab offers **Install Echo-Wall**: Home Assistant downloads its newest release from GitHub and installs it on the Echo
+  (the Echo itself stays off the internet); the Apps tab shows how it goes.
 - **The drawer comes down from a finger landing a little below the top edge** (up to 48 px on an Echo Show 5), not
   only from its very edge, over the face and over apps.
 - **The drawer shuts with a swipe up from anywhere on it**, its row of apps included, and a short push is enough (a

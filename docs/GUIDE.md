@@ -622,7 +622,8 @@ the app sends the one it has the first time it finds Echo-Wall's integration.
 
 **Echo Local in the sidebar** (administrators): every Echo with a screen on the left; for each, two tabs.
 
-- *Screen*: the home app (any app installed on the Echo), Home Assistant for it or not, its screens in the drawer's
+- *Screen*: the home app (any app installed on the Echo; Echo-Wall picked but not installed: **Install Echo-Wall** fetches
+  its newest release through Home Assistant), Home Assistant for it or not, its screens in the drawer's
   order, the one to start on and go back to, and its settings (one `key=value` a line, for the app; Echo-Wall's photos from Immich are set in its
   own panel now, these still count where that is empty: `immich.url=`, `immich.key=`, `immich.album=`).
   A line at the top says when Home Assistant last sent this to the Echo, or why it could not; **Send to the Echo
