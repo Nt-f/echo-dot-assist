@@ -22,6 +22,8 @@ What changed for people using the Echo, newest first. Details and measurements a
   call's sound first: on an Echo Show 5 it came out louder than the voice. **A phone's camera in the Drop In card** reached the Echo Show on its side;
   it is upright now, and a phone held upright shows whole with bars beside it. **The settings page** was blank after
   the last update (a typo in the camera's help text). Echo Local 2026.11.21.
+- **"Replies in the Echo's own voice" from Home Assistant** (Echo Local 2026.11.22): Echo Local adds a switch for it on
+  each Echo that has a voice of its own, so you no longer need the Echo's settings page to turn it on.
 - **Long AI replies start sooner in the Echo's own voice** (Echo Show with Amazon's voice installed, "Replies in the
   Echo's own voice" on): when your voice assistant's text-to-speech is the Echo itself ("hassmic" in Home Assistant's
   Wyoming integration), the Echo now says each sentence of an AI's reply as soon as it is written, instead of waiting

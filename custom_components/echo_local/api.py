@@ -202,6 +202,15 @@ class Echo:
         """settings as an export has them ("name=value" lines)"""
         return json.loads(await self.call("POST", "/api/set", text.encode()))
 
+    async def settings(self) -> dict[str, str]:
+        """the Echo's settings as its export has them (GET /api/export: "name=value" lines, # comments)"""
+        out = {}
+        for line in (await self.call("GET", "/api/export")).decode("utf-8", "replace").splitlines():
+            if line and not line.startswith("#") and "=" in line:
+                k, _, v = line.partition("=")
+                out[k.strip()] = v.strip()
+        return out
+
     # ---------------------------------------------------------------- the camera (camera.h, docs/camera.md)
 
     async def camera(self) -> dict:

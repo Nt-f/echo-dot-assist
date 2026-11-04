@@ -58,11 +58,22 @@ class EchoLocalCoordinator(DataUpdateCoordinator[dict]):
         try:
             data = await self.echo.alarms()
             data["camera"] = await self._camera()
+            data["settings"] = await self._settings()
             return data
         except EchoAuthError as e:
             raise ConfigEntryAuthFailed(str(e)) from e
         except EchoError as e:
             raise UpdateFailed(str(e)) from e
+
+    async def _settings(self) -> dict:
+        """the Echo's settings (its export), for the switches of the few HA has from Echo Local; the last ones kept
+        when they cannot be read now (an older build answers 404)"""
+        try:
+            return await self.echo.settings()
+        except EchoAuthError:
+            raise
+        except EchoError:
+            return (self.data or {}).get("settings", {})
 
     async def _camera(self) -> dict:
         """the camera's state (camera.py): {} on an Echo without one; the last one kept when it cannot be read now"""
