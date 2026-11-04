@@ -8,18 +8,36 @@
 // it comes: a few hundred ms behind, where HLS is seconds.  Sound: 16 kHz PCM both ways through AudioWorklets.  The
 // microphone needs a secure page (https, or the app); without one the call is listen-only and says so.
 const WORKLET = `
-class Player extends AudioWorkletProcessor {            // the Echo's frames, played as they come (a short queue)
-  constructor() { super(); this.q = []; this.cur = null; this.at = 0;
-    this.port.onmessage = (e) => { this.q.push(e.data); if (this.q.length > 15) this.q.splice(0, this.q.length - 5); }; }
+// The Echo's frames, behind a jitter buffer: they come over TCP through Home Assistant, beside the picture's key frames,
+// in bursts.  Played the moment each came (the first version), every late frame was a hole: the wave cut to zero and
+// back, a pop, many a second.  So: PRE frames (60 ms) before it plays; when it runs dry it fades out over FADE samples
+// and waits for PRE again, then fades in; more than MAX waiting (the two clocks drift, a stall caught up) drops one
+// frame at a time, crossfaded, never a jump of hundreds of ms.
+class Player extends AudioWorkletProcessor {
+  constructor() { super(); this.q = []; this.cur = null; this.at = 0; this.g = 0; this.on = false; this.last = 0;
+    this.port.onmessage = (e) => { this.q.push(e.data); }; }
+  next() {                                               // the next frame; one dropped, crossfaded, when too many wait
+    let f = this.q.shift() || null;
+    if (f && this.q.length > MAX) {
+      const n = this.q.shift(), x = new Int16Array(f.length);
+      for (let i = 0; i < f.length; i++) { const t = i / f.length; x[i] = f[i] * (1 - t) + n[i] * t; }
+      f = x;
+    }
+    return f;
+  }
   process(_, outs) {
     const o = outs[0][0];
+    if (!this.on && this.q.length >= PRE) this.on = true;
     for (let i = 0; i < o.length; i++) {
-      if (!this.cur || this.at >= this.cur.length) { this.cur = this.q.shift() || null; this.at = 0; }
-      o[i] = this.cur ? this.cur[this.at++] / 32768 : 0;
+      if (this.on && (!this.cur || this.at >= this.cur.length)) { this.cur = this.next(); this.at = 0; if (!this.cur) this.on = false; }
+      if (this.on) { this.g = Math.min(1, this.g + 1 / FADE); this.last = this.cur[this.at++] / 32768; }
+      else this.g = Math.max(0, this.g - 1 / FADE);     // dry: the last sample fades out, no step to zero
+      o[i] = this.last * this.g;
     }
     return true;
   }
 }
+const PRE = 3, MAX = 8, FADE = 80;                       // frames (20 ms), frames, samples (5 ms at 16 kHz)
 class Mic extends AudioWorkletProcessor {                // this side's microphone, in 20 ms frames
   constructor() { super(); this.buf = new Int16Array(320); this.n = 0; }
   process(ins) {
@@ -64,19 +82,32 @@ class EchoLocalCallCard extends HTMLElement {
         .name { flex: 1; font-weight: 500; }
         button { border: 0; border-radius: 18px; padding: 8px 16px; font: inherit; cursor: pointer; color: #fff; background: var(--success-color, #2e7d32); }
         button.end { background: var(--error-color, #c62828); }
-        button.mute { background: var(--secondary-background-color, #555); color: var(--primary-text-color); }
-        button[hidden] { display: none; }
+        /* the microphone's switch over the picture, bottom left: muted at the start of every call, so nothing of this
+           room reaches the Echo until it is pressed */
+        button.mute { position: absolute; left: 12px; bottom: 12px; display: flex; align-items: center; gap: 6px; padding: 8px 14px;
+                      background: rgba(0, 0, 0, .6); color: #fff; backdrop-filter: blur(4px); }
+        button.mute.on { background: var(--success-color, #2e7d32); }
+        button.mute ha-icon { --mdc-icon-size: 20px; }
+        button[hidden] { display: none !important; }
       </style>
       <ha-card>
-        <div class="v"><canvas width="1280" height="720"></canvas><div class="msg">Drop In to see and talk to ${name}</div></div>
+        <div class="v"><canvas width="1280" height="720"></canvas><div class="msg">Drop In to see and talk to ${name}</div>
+          <button class="mute" hidden><ha-icon icon="mdi:microphone-off"></ha-icon><span>Unmute</span></button></div>
         <div class="bar"><span class="name">${name}</span>
-          <button class="mute" hidden>Mute</button><button class="go">Drop In</button><button class="end" hidden>Hang up</button></div>
+          <button class="go">Drop In</button><button class="end" hidden>Hang up</button></div>
       </ha-card>`;
     const $ = (s) => this.shadowRoot.querySelector(s);
     this.$ = { canvas: $('canvas'), msg: $('.msg'), go: $('.go'), end: $('.end'), mute: $('.mute') };
     this.$.go.onclick = () => this.start();
     this.$.end.onclick = () => this.stop('');
-    this.$.mute.onclick = () => { this.muted = !this.muted; this.$.mute.textContent = this.muted ? 'Unmute' : 'Mute'; };
+    this.$.mute.onclick = () => this.setMuted(!this.muted);
+  }
+
+  setMuted(m) {
+    this.muted = m;
+    this.$.mute.classList.toggle('on', !m);
+    this.$.mute.querySelector('ha-icon').setAttribute('icon', m ? 'mdi:microphone-off' : 'mdi:microphone');
+    this.$.mute.querySelector('span').textContent = m ? 'Unmute' : 'Mute';
   }
 
   say(t) { this.$.msg.textContent = t; this.$.msg.hidden = !t; }
@@ -84,7 +115,7 @@ class EchoLocalCallCard extends HTMLElement {
 
   async start() {
     if (this.ws) return;
-    this.live(true); this.muted = false; this.say('Calling…');
+    this.live(true); this.setMuted(true); this.say('Calling…');
     try {
       this.ctx = new AudioContext({ sampleRate: 16000 });
       await this.ctx.audioWorklet.addModule(URL.createObjectURL(new Blob([WORKLET], { type: 'application/javascript' })));
@@ -101,6 +132,7 @@ class EchoLocalCallCard extends HTMLElement {
         src.connect(this.mic);
       } catch (e) { this.listenOnly = 'Your microphone is off for this page (' + e.name + '): listening only'; }
     } else this.listenOnly = 'Listening only: the microphone needs Home Assistant over https or the app';
+    if (!this.mic) this.$.mute.hidden = true;                    // listening only: nothing to switch
     if (!this.mic) this.keep = setInterval(() => this.send(new ArrayBuffer(640)), 20);   // silence: the call's keepalive
     this.decoderStart();
     const signed = await this._hass.callWS({ type: 'auth/sign_path', path: `/api/echo_local/call/${this.config.entity}`, expires: 30 });

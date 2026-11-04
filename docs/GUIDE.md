@@ -342,6 +342,8 @@ entity) and press **Drop In**.
 - **The picture** comes while "Camera in Home Assistant" is on and the lens is open, with the red dot on the Echo's
   screen; without it the call has sound only. A few hundred ms behind (the browser decodes the Echo's video itself),
   where the camera entity's live view runs seconds behind.
+- **Your microphone starts muted** in every call: the button over the picture (bottom left) turns it on and off, so
+  nothing of your room reaches the Echo until you press it.
 - **Your microphone** needs Home Assistant opened over https (Nabu Casa, a proxy with a certificate) or in the
   Companion app; otherwise the call is listen-only and the card says so. The picture needs a browser with WebCodecs
   (Chrome, Edge, Safari 16.4 and later, the Companion app).

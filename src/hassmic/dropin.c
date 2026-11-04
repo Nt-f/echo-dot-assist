@@ -155,6 +155,7 @@ static struct { int left; long long at; uint8_t to[8]; uint8_t p[ARB_MSG_MAX]; s
 static uint8_t ended[4][8]; static unsigned ended_n;
 static struct slot { uint32_t seq; int len; uint8_t d[SLOT]; } jb[JB];
 static int16_t ha_out[HAQ][FRAME]; static unsigned ha_out_in, ha_out_out;   /* to Home Assistant (dl) */
+static unsigned ha_out_lost;                            /* frames the channel fell behind on: dropped, oldest first */
 static uint32_t jb_hi, jb_lo; static int jb_any;      /* the newest frame in, the first of the call */
 static struct { long long t; float db; } ref[REF_N];
 static unsigned ref_n;
@@ -265,6 +266,7 @@ static void end_call(const char *why, int tell, int result)
     if (c.state == DROPIN_LIVE) fprintf(stderr, "drop in: ended with %s after %lld s (%s); %u frames in, %u played, %u of them missing "
                                         "(%u came too late), longest gap %lld ms\n", c.node, (now_ms() - c.live_at) / 1000, why, c.rx, c.played,
                                         c.lost, c.late, c.gap_max);
+    if (c.state == DROPIN_LIVE && c.ha) fprintf(stderr, "drop in: %u frames of the mic dropped on the way to Home Assistant\n", ha_out_lost);
     else fprintf(stderr, "drop in: %s %s: %s\n", c.outgoing ? "call to" : "call from", c.node, why);
     if (tell && !c.ha) {
         bye.n = msg(bye.p, M_BYE, why); memcpy(bye.to, c.peer, 8);
@@ -280,7 +282,7 @@ static void fresh_call(const uint8_t peer[8], const char *node, uint32_t ip, int
 {
     memset(&c.id, 0, sizeof c.id);
     c.outgoing = outgoing; c.gen++; c.keyed = 0; c.rang = 0; c.invited = 0; c.ha = 0; c.ha_seq = 0;
-    ha_out_in = ha_out_out = 0;
+    ha_out_in = ha_out_out = ha_out_lost = 0;
     memcpy(c.peer, peer, 8); snprintf(c.node, sizeof c.node, "%s", node); c.ip = ip; c.port = 0;
     ws_random(c.esk, 32); crypto_x25519_public_key(c.epk, c.esk);
     c.since = c.sig_at = now_ms();
@@ -601,6 +603,11 @@ static void send_frame(const int16_t *pcm, int own)
         opus_encoder_ctl(enc, OPUS_SET_PACKET_LOSS_PERC, LOSS_PERC); opus_encoder_ctl(enc, OPUS_SET_COMPLEXITY, 5);
         opus_encoder_ctl(enc, OPUS_SET_SIGNAL, OPUS_SIGNAL_VOICE);
         micgain_init(&gain, MICGAIN_LEVEL); micgain_start(&gain, 1);
+        /* the talker's level only from what the gate could take for one (NEAR_MIN_DB): without it a room's steady noise
+         * 9 dB over the gain's floor (-62 dBFS in micAsr in a quiet room) passed for a quiet talker, the gain climbed
+         * to its top (+36 dB, 12 dB/s), and the next sound over NEAR_MIN_DB opened the gate with all of it: a cough,
+         * a door, the fridge starting came out louder than speech (a call from Home Assistant, 2026-11-04) */
+        gain.talker_min_db = NEAR_MIN_DB;
         es_c = -30; es_g = 1; dt_n = 0; far_hold = -100; floor_db = -70; near_until = 0; listen_on = 0; listen_at = 0; enc_gen = gen;
     }
     int16_t f[FRAME];
@@ -640,7 +647,7 @@ static void send_frame(const int16_t *pcm, int own)
         crypto_wipe(key, sizeof key);
         pthread_mutex_lock(&dl);
         if (c.gen == gen && c.state == DROPIN_LIVE) {
-            if (ha_out_in - ha_out_out >= HAQ) ha_out_out++;
+            if (ha_out_in - ha_out_out >= HAQ) { ha_out_out++; ha_out_lost++; }
             memcpy(ha_out[ha_out_in++ % HAQ], f, sizeof f);
         }
         pthread_mutex_unlock(&dl);

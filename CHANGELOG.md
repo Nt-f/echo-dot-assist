@@ -4,6 +4,10 @@ What changed for people using the Echo, newest first. Details and measurements a
 
 ## 2026-11-04
 
+- **Drop In from Home Assistant sounds smoother**: the card buffers the Echo's sound briefly (60 ms) and fades over
+  gaps, where every late bit of audio was a pop. Your microphone starts **muted** in every call, with its button over
+  the picture. On the Echo, room noise no longer teaches the call's gain a "quiet talker", which lifted the next
+  sound in the room louder than speech. Echo Local 2026.11.19.
 - **Echo Local's cards in Firefox**: the alarm card and the Drop In card said "Configuration error" on every reload
   of a dashboard in Firefox (the first load was fine; Chrome and the app were never affected). Echo Local 2026.11.18.
 - **Drop In on an Echo Show from a Home Assistant dashboard**: the card **Echo Drop In** (Echo Local) shows the Echo's

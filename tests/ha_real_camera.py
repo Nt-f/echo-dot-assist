@@ -135,7 +135,9 @@ async def run(tmp):
             if r is not None:
                 check(r.get("state") == "connected" and r.get("picture") and r.get("lit", 0) > 1000,
                       f"the card in Chrome: connected, the Echo's picture drawn through WebCodecs ({r})")
-                check(r.get("voip_peak", 0) > 1000, f"the browser's microphone (Chrome's fake one, a beep) plays on the Echo: peak {r.get('voip_peak')}")
+                check(r.get("muted") and r.get("mute_shown") and r.get("muted_peak", 1) < 50,
+                      f"the microphone muted at the start, its button over the picture: nothing played on the Echo (peak {r.get('muted_peak')})")
+                check(r.get("unmuted") and r.get("voip_peak", 0) > 1000, f"unmuted, the browser's microphone (Chrome's fake one, a beep) plays on the Echo: peak {r.get('voip_peak')}")
                 check(r.get("hung"), "Hang up in the card: the call ends on the Echo")
 
             await c.ws(type="call_service", domain="camera", service="turn_off", target={"entity_id": eid})
@@ -205,11 +207,18 @@ async def card_in_chrome(session, token, eid, echo):
             await new Promise(r => setTimeout(r, 1500));
             const cv = c.shadowRoot.querySelector('canvas'), d = cv.getContext('2d').getImageData(0, 0, cv.width, cv.height).data;
             let lit = 0; for (let i = 0; i < d.length; i += 4) if (d[i] + d[i + 1] + d[i + 2] > 120) lit++;
-            return {{ state: c.state, picture: c.gotPicture, lit, w: cv.width, msg: c.shadowRoot.querySelector('.msg').textContent, listen: c.listenOnly || '' }};
+            const m = c.shadowRoot.querySelector('.mute');
+            return {{ state: c.state, picture: c.gotPicture, lit, w: cv.width, msg: c.shadowRoot.querySelector('.msg').textContent, listen: c.listenOnly || '',
+                      muted: c.muted, mute_shown: !m.hidden && getComputedStyle(m).display !== 'none' }};
         }})()""") or {}
-        pcm = open(voip, "rb").read()[v0:] if os.path.exists(voip) else b""
         import array
-        out["voip_peak"] = max((abs(x) for x in array.array("h", pcm[:len(pcm) // 2 * 2])), default=0)
+        def peak(a, b): return max((abs(x) for x in array.array("h", open(voip, "rb").read()[a:b][: (b - a) // 2 * 2])), default=0) if os.path.exists(voip) else 0
+        v1 = os.path.getsize(voip) if os.path.exists(voip) else 0
+        out["muted_peak"] = peak(v0, v1)                # muted at the start: the Echo plays nothing of the browser
+        await js("(async () => { window._card.shadowRoot.querySelector('.mute').click(); await new Promise(r => setTimeout(r, 1500)); })()")
+        out["unmuted"] = await js("!window._card.muted")
+        v2 = os.path.getsize(voip) if os.path.exists(voip) else 0
+        out["voip_peak"] = peak(v1, v2)
         await js("window._card.stop('')")
         async def hung(): return echo.text().count("Home Assistant went") + echo.text().count("Home Assistant hung up") >= 2
         out["hung"] = await hr.until(hung, 5)
