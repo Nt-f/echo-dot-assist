@@ -44,7 +44,8 @@ def main():
             dict(n="org.schabi.newpipe", c="/data/app/org.schabi.newpipe-1", f=671628868, ut="a1", v=1015, u=10005),
             dict(n="io.github.nt_f.echowall", c="/data/app/io.github.nt_f.echowall-1", f=0, ut="a2", v=1, u=10008),
             dict(n="com.amazon.webview.chromium", c="/system/app/AmazonWebView", f=-1207386555, ut="a3", v=60807432, u=10001)]))
-    with open(os.path.join(state, "kiosk"), "w") as f: f.write("app io.github.nt_f.echowall\n")
+    # the home app, as screen.c keeps it (state/screen_home): root's apps.sh never removes it
+    with open(os.path.join(state, "screen_home"), "w") as f: f.write("io.github.nt_f.echowall\n")
     with open(os.path.join(fake, "pm"), "w") as f: f.write(PM)
     os.chmod(os.path.join(fake, "pm"), 0o755)
     renv = dict(os.environ, PATH=f"{fake}:{os.environ['PATH']}", APPS_STATE=state, APPS_DIR=adir, PACKAGES_XML=px, READ_AS="env")
