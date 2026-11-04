@@ -640,7 +640,9 @@ No model `#ifdef`s in shared code: new differences become a board field, a `devi
   sealed ChaCha20-Poly1305 with SK from K, counter and nonce.  Echo Local: `api.py` `camera_stream`, `camera.py` (relay on
   127.0.0.1 with a token per start, one upstream for every viewer, 10 s linger; stills through HA's ffmpeg),
   `tsmux.py` (MPEG-TS with the Echo's pts).  PC: `HASSMIC_FAKE_CAMERA` (a program writing cam.c's records),
-  `HASSMIC_FAKE_LENS` (a file, "1" covered).
+  `HASSMIC_FAKE_LENS` (a file, "1" covered).  The eyes (setting `eyes_follow`): cam.c `HMCAM_MODE=face` (the hardware
+  face detector, results off the thread's MessageQueue, preview into an encoder whose output is dropped; no dot),
+  camera.c `face_thread` while the UI says `faceview 1` and nothing streams, `look x y` to the UI (scene.c, face.c).
 - **Light band** (`ring_band.c`, the Echo Show's `RING` in device.mk instead of `ring.c`): the same `ring.h` drawn as a
   band along the bottom of the screen, every pattern as the Dots' ring unrolled (12 virtual LEDs blended across the
   width, the talker's side in the middle; never turned: the Show's beam says too little, docs/re-checkers.md) plus

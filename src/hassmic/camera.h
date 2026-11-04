@@ -15,6 +15,11 @@ int  camera_enable(int on);                     /* the setting; -1 reads.  Off e
 void camera_lens(int covered);                  /* buttons.c: SW_CAMERA_LENS_COVER; covered ends a stream */
 int  camera_covered(void);                      /* 1 covered, 0 open, -1 no shutter switch seen */
 int  camera_streaming(void);
+/* The face's eyes following whoever is there (setting eyes_follow; docs/camera.md): the face detector runs while the
+ * screen shows the face and nothing streams; no picture leaves the camera process, so no red dot */
+void camera_start(void);                        /* main(): the eyes' thread, where there is a camera and a screen */
+int  camera_eyes(int on);                       /* the setting; -1 reads */
+void camera_faceview(int shown);                /* screen.c: the UI's "faceview" */
 size_t camera_json(char *o, size_t cap);        /* {"present":..,"on":..,"covered":..,"streaming":..} for /api/state */
 
 /* web.c: one stream.  camera_begin: a stream id (> 0), or -1 and why ("off", "covered", "busy", "absent", "failed").

@@ -30,6 +30,7 @@
 #define _GNU_SOURCE                     /* pipe2 on glibc */
 #endif
 #include "screen.h"
+#include "camera.h"
 #include "board.h"
 #include "core.h"
 #include "dropin.h"
@@ -456,6 +457,7 @@ static void *commands(void *arg)
 static void on_line(char *l)
 {
     if (!strncmp(l, "log ", 4)) fprintf(stderr, "screen: %s\n", l + 4);
+    else if (!strncmp(l, "faceview ", 9)) camera_faceview(atoi(l + 9));   /* the face can be seen: its eyes may follow */
     else if (!strncmp(l, "app ", 4)) {                          /* <pkg>\t<label>\t<system> */
         char *t1 = strchr(l + 4, '\t'), *t2 = t1 ? strchr(t1 + 1, '\t') : NULL;
         if (t2 && napps_new < (int)(sizeof apps_new / sizeof apps_new[0])) {

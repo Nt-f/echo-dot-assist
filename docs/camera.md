@@ -91,11 +91,18 @@ process runs as: AppOps' `startOperation` refuses a package of another uid. Then
 MediaCodec's `createInputSurface()`, `startPreview`. Measured: native_setup 0.1-0.4 s, startPreview 0.2-0.4 s, first
 H.264 0.5 s after it, 1.9-2.0 s from the request to the first record with the VM's start.
 
+## The eyes (face mode)
+
+Setting `eyes_follow`: while the face is on the screen, cam.c runs with `HMCAM_MODE=face`: MediaTek's hardware face
+detector through Camera1's `startFaceDetection`, its results taken off the thread's own MessageQueue (Camera posts
+them there as `CAMERA_MSG_PREVIEW_METADATA` whether or not a listener is set: no Java class of ours). The preview
+goes into the encoder at 640x480 with its output dropped inside the process (a SurfaceTexture nobody reads stopped
+the preview after two frames); no picture is written out, so no dot. camera.c sends the largest face's centre to the
+UI as `look x y`; a stream from Home Assistant stops it first, the lens cover too.
+
 ## Later
 
-- The face's eyes following the nearest face (`face.c`), from the HAL's face rectangles (Camera1
-  `setFaceDetectionListener`: needs a Java class implementing the listener in the dex; tools/dexasm.py can emit one):
-  cheap, and with no dot (no encoder). Blinking with you needs eye state, which nothing in the firmware gives;
-  Camera1's `Face.leftEye`/`rightEye` are worth one look on the device, a landmark model is not worth porting TFLite for.
+- Blinking with you needs eye state, which nothing in the firmware gives; Camera1's `Face.leftEye`/`rightEye` are
+  worth one look on the device, a landmark model is not worth porting TFLite for.
 - Two-way video for Drop In.
 - The other Shows (cronos, crown, athena): Android 7 / 9, other HALs; `board.camera` once tried.

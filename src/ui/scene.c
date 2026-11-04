@@ -380,6 +380,7 @@ const char *home_app(const struct scene *s) { return home_chosen ? s->home : kio
 
 
 int scene_drawer(const struct scene *s) { return drawer_open(s); }
+int scene_face_shown(const struct scene *s) { return s->view == V_FACE && s->screen_on && !drawer_open(s); }
 
 /* an app on its way and not in front yet (one launched while it was still in front, our home not reported there yet,
  * is in front: no scene_top tells it) */
@@ -846,6 +847,11 @@ void scene_msg(struct scene *s, const char *line, long long now)
     else if (eq(cmd, "oobe")) s->oobe = atoi(a);
     else if (eq(cmd, "h12")) s->h12 = atoi(a);
     else if (eq(cmd, "lux")) s->lux = (float)atoi(a);              /* (whole lux, as hassmic sends them: no nan) */
+    else if (eq(cmd, "look")) {                                /* camera.c: the nearest face, -1000..1000; "-" none */
+        int x, y;
+        if (sscanf(a, "%d %d", &x, &y) == 2) { s->face.lookx = x / 1000.0f; s->face.looky = y / 1000.0f; s->face.look_at = now; }
+        else s->face.look_at = 0;
+    }
     else if (eq(cmd, "name")) snprintf(s->name, sizeof s->name, "%s", a);
     else if (eq(cmd, "act")) snprintf(s->act, sizeof s->act, "%s", a);
     else if (eq(cmd, "web")) snprintf(s->web, sizeof s->web, "%s", a);

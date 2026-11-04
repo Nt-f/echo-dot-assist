@@ -206,7 +206,7 @@ const PAGES = [
   { id: 'models', title: 'Models', icon: 'box', nav: 'All your Echos', always: true, intro: 'Amazon\'s extra wake words and models, microWakeWord\'s models and your light ring designs: fetched, copied between Echos, kept on file.' },
   { id: 'system', title: 'System', icon: 'sliders', nav: 'This Echo\'s system', groups: ['System'], always: true, intro: 'This Echo\'s name and network, updates, backups and troubleshooting.' },
 ];
-const MOVED = { light_band: 'screen', arbitration: 'echos', bluetooth_audio: 'media', bluetooth_speaker: 'media', wake_sound_removal: 'voice' };
+const MOVED = { light_band: 'screen', eyes_follow: 'screen', arbitration: 'echos', bluetooth_audio: 'media', bluetooth_speaker: 'media', wake_sound_removal: 'voice' };
 // The cards of a settings page: [title, settings...].  A setting not named here (a new one, or a model's own) comes
 // last, in a card of its own, so nothing is ever lost from the page
 const LAYOUT = {
@@ -390,6 +390,8 @@ const HELP = {
   request_text: { icon: 'whisper', ha: ['Last heard', 'Last reply'], help: 'Two text sensors in Home Assistant: what speech-to-text understood of your last request, and what the assistant answered. For a dashboard beside the Echo, or an automation on a word it keeps mishearing. Both are cleared when a new request starts, so saying the same thing twice still counts as a change. Home Assistant takes at most 255 characters per state: a longer reply ends in "…".',
     note: 'Home Assistant keeps every request and reply in its history while this is on.' },
   whisper_detection: { icon: 'whisper', ha: ['Last request whispered'], help: 'Tells whether your last request was whispered, before speech-to-text finishes. Use it in your conversation agent\'s prompt to have it answer quietly.' },
+  eyes_follow: { icon: 'eye', help: 'The face on the screen looks at you: its eyes follow the nearest face the camera sees, wherever you stand. Only the camera\'s own face detector runs, on the Echo, and only while the face is on the screen: no picture is taken or kept, nothing goes to Home Assistant or anywhere else, so the red camera dot stays off. Home Assistant watching the camera comes first; the eyes pick up again after. The lens cover stops it.',
+    note: 'The camera runs whenever the face shows while this is on.' },
   camera: { icon: 'eye', ha: ['Camera (Echo Local)'], help: 'The Echo\'s camera as a camera in Home Assistant, for dashboards and recordings. It needs the Echo Local integration: the video goes to Home Assistant alone, encrypted with the key the integration shares with this Echo, never to anything else on your network. The camera runs only while someone in Home Assistant looks, and a red dot in the corner of the screen shows meanwhile, over any app. Close the lens cover and it stops at once, whatever is switched on here. The microphone button does not cover the camera.',
     note: 'A dashboard card that shows the camera\'s picture keeps the camera on as long as the dashboard is open.',
     status: () => {
@@ -464,6 +466,7 @@ const SUB = {
   wake_events: 'An event each time this Echo hears its wake word',
   request_text: 'What was heard and answered, as two text sensors',
   whisper_detection: 'Tells Home Assistant when a request was whispered',
+  eyes_follow: 'The face\'s eyes look at whoever is in front',
   camera: 'The Echo\'s camera in Home Assistant, through Echo Local',
   wifi_motion: 'A motion sensor from changes in the Wi-Fi signal',
   wifi_motion_sensitivity: 'Higher catches more, with more false alarms',

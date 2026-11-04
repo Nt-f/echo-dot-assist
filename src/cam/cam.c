@@ -37,6 +37,7 @@
 #include <pthread.h>
 #include <signal.h>
 #include <stdarg.h>
+#include <stdatomic.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -179,6 +180,114 @@ static void awake(int first)
     failed(first ? "wakeUp" : "userActivity");
 }
 
+/* ---------------------------------------------------------------- faces (HMCAM_MODE=face) */
+
+/* The face's eyes follow whoever looks at the Echo (src/ui/face.c): only MediaTek's hardware face detector
+ * (libcamalgo's FD_CORE, max-num-detected-faces-hw=15) is asked, and no picture leaves this process: the preview goes
+ * into the encoder (640x480, its output dropped here unread, never written anywhere), the one consumer that keeps
+ * taking frames.  A SurfaceTexture nobody reads stopped the preview after two frames (the detector's queue held two,
+ * then nothing; single buffer mode: "setBufferCount(4) returned Invalid argument"), checkers 2026-11-04.  stdout: lines
+ *     faces <n> [<left> <top> <right> <bottom> <score>]...        Camera.Face.rect, -1000..1000 of the picture
+ * Camera posts each result as a message on this thread's Looper (Camera.postEventFromNative: CAMERA_MSG_PREVIEW_METADATA,
+ * the Face[] as its obj) whether or not a listener is set; nobody runs the Looper, so they are taken off its queue
+ * here (MessageQueue.next, hidden): no Java class of ours, no FaceDetectionListener.  MediaTek's detector posts only
+ * while it sees a face (an empty room: nothing at all, 2026-11-04), so silence is no stall.  next() blocks while the
+ * queue is empty: a thread of ours posts a tick every TICK_MS through the same handler, by which the loop drains the
+ * encoder and sees stdin's end. */
+#define MSG_TICK 0x48ec                 /* ours: never one of Camera's (1..0x800) */
+#define MSG_META 0x400                  /* CAMERA_MSG_PREVIEW_METADATA */
+#define TICK_MS  66                     /* a frame at 15 fps: the encoder's output drained as often */
+static jobject tick_handler;
+static atomic_int stop_asked;
+static void *ticker(void *arg)
+{
+    (void)arg; JNIEnv *t;
+    if ((*vm)->AttachCurrentThread(vm, &t, NULL)) return NULL;
+    jclass hc = (*t)->FindClass(t, "android/os/Handler");
+    jmethodID send = hc ? (*t)->GetMethodID(t, hc, "sendEmptyMessage", "(I)Z") : NULL;
+    if (!send) { (*t)->ExceptionClear(t); return NULL; }
+    for (;;) {
+        struct pollfd p = { 0, POLLIN, 0 }; char b[64];
+        if (poll(&p, 1, TICK_MS) > 0) {
+            ssize_t r = read(0, b, sizeof b);
+            if (r == 0 || (r < 0 && errno != EINTR && errno != EAGAIN) || (p.revents & (POLLHUP | POLLERR))) atomic_store(&stop_asked, 1);
+        }
+        (*t)->CallBooleanMethod(t, tick_handler, send, MSG_TICK);
+        (*t)->ExceptionClear(t);
+        if (atomic_load(&stop_asked)) break;
+    }
+    (*vm)->DetachCurrentThread(vm);
+    return NULL;
+}
+
+/* drain: the encoder's output taken and dropped, so that it keeps taking the preview (see faces) */
+static jobject drop_codec, drop_bi; static jmethodID drop_deq, drop_rel;
+static void drain(void)
+{
+    if (!drop_codec) return;
+    for (int k = 0; k < 16; k++) {
+        jint i = (*e)->CallIntMethod(e, drop_codec, drop_deq, drop_bi, (jlong)0);
+        if (failed("dequeueOutputBuffer") || i < 0) return;
+        (*e)->CallVoidMethod(e, drop_codec, drop_rel, i, JNI_FALSE);
+        if (failed("releaseOutputBuffer")) return;
+    }
+}
+
+static int faces(jobject cam, jclass cc, jobject eh, jobject codec, jclass mcc)
+{
+    jclass lc = (*e)->FindClass(e, "android/os/Looper"), bic = (*e)->FindClass(e, "android/media/MediaCodec$BufferInfo");
+    jclass mqc = (*e)->FindClass(e, "android/os/MessageQueue"), msc = (*e)->FindClass(e, "android/os/Message");
+    jclass fc = (*e)->FindClass(e, "android/hardware/Camera$Face"), rc_ = (*e)->FindClass(e, "android/graphics/Rect");
+    if (failed("face classes")) return 3;
+    drop_bi = (*e)->NewGlobalRef(e, (*e)->NewObject(e, bic, (*e)->GetMethodID(e, bic, "<init>", "()V")));
+    drop_deq = (*e)->GetMethodID(e, mcc, "dequeueOutputBuffer", "(Landroid/media/MediaCodec$BufferInfo;J)I");
+    drop_rel = (*e)->GetMethodID(e, mcc, "releaseOutputBuffer", "(IZ)V");
+    if (failed("BufferInfo")) return 4;
+    drop_codec = codec;
+    (*e)->CallVoidMethod(e, cam, (*e)->GetMethodID(e, cc, "startPreview", "()V"));
+    if (failed("startPreview")) return 3;
+    (*e)->CallVoidMethod(e, cam, (*e)->GetMethodID(e, cc, "startFaceDetection", "()V"));
+    if (failed("startFaceDetection")) return 3;
+    say("face detection on");
+    jobject q = (*e)->CallStaticObjectMethod(e, lc, (*e)->GetStaticMethodID(e, lc, "myQueue", "()Landroid/os/MessageQueue;"));
+    if (failed("myQueue") || !q) return 3;
+    jmethodID next = (*e)->GetMethodID(e, mqc, "next", "()Landroid/os/Message;");
+    jfieldID f_what = (*e)->GetFieldID(e, msc, "what", "I"), f_obj = (*e)->GetFieldID(e, msc, "obj", "Ljava/lang/Object;");
+    jfieldID f_rect = (*e)->GetFieldID(e, fc, "rect", "Landroid/graphics/Rect;"), f_score = (*e)->GetFieldID(e, fc, "score", "I");
+    jfieldID f_l = (*e)->GetFieldID(e, rc_, "left", "I"), f_t = (*e)->GetFieldID(e, rc_, "top", "I"),
+             f_r = (*e)->GetFieldID(e, rc_, "right", "I"), f_b = (*e)->GetFieldID(e, rc_, "bottom", "I");
+    if (failed("face members")) return 3;
+    tick_handler = (*e)->NewGlobalRef(e, eh);
+    pthread_t t; if (pthread_create(&t, NULL, ticker, NULL)) return 3;
+    pthread_detach(t);
+    int rc = 0, n_meta = 0;
+    while (!atomic_load(&stop_asked)) {
+        if ((*e)->PushLocalFrame(e, 64)) break;
+        jobject m = (*e)->CallObjectMethod(e, q, next);
+        if (failed("MessageQueue.next") || !m) { (*e)->PopLocalFrame(e, NULL); rc = 5; break; }
+        int what = (*e)->GetIntField(e, m, f_what);
+        drain();
+        if (what == MSG_META) {
+            jobjectArray a = (*e)->GetObjectField(e, m, f_obj);
+            int n = a ? (*e)->GetArrayLength(e, a) : 0; char line[1024]; size_t o = 0;
+            o += (size_t)snprintf(line + o, sizeof line - o, "faces %d", n);
+            for (int i = 0; i < n && i < 8 && o < sizeof line - 64; i++) {
+                jobject f = (*e)->GetObjectArrayElement(e, a, i), r = f ? (*e)->GetObjectField(e, f, f_rect) : NULL;
+                if (!r) continue;
+                o += (size_t)snprintf(line + o, sizeof line - o, " %d %d %d %d %d", (*e)->GetIntField(e, r, f_l), (*e)->GetIntField(e, r, f_t),
+                                      (*e)->GetIntField(e, r, f_r), (*e)->GetIntField(e, r, f_b), (*e)->GetIntField(e, f, f_score));
+            }
+            line[o++] = '\n';
+            if (write_all(line, o)) { (*e)->PopLocalFrame(e, NULL); break; }      /* hassmic stopped reading */
+            n_meta++;
+        } else if (what == 1) { say("the camera reported an error"); (*e)->PopLocalFrame(e, NULL); rc = 5; break; }   /* CAMERA_MSG_ERROR */
+        (*e)->PopLocalFrame(e, NULL);
+    }
+    say("face detection off after %d results", n_meta);
+    (*e)->CallVoidMethod(e, cam, (*e)->GetMethodID(e, cc, "stopFaceDetection", "()V")); failed("stopFaceDetection");
+    return rc;
+}
+
 /* ---------------------------------------------------------------- camera and encoder */
 
 static void *run(void *arg)
@@ -242,6 +351,7 @@ static void *run(void *arg)
     if (failed("MediaCodec.start")) goto out;
     (*e)->CallVoidMethod(e, cam, (*e)->GetMethodID(e, cc, "setPreviewSurface", "(Landroid/view/Surface;)V"), surf);
     if (failed("setPreviewSurface")) goto out;
+    if (getenv("HMCAM_MODE") && !strcmp(getenv("HMCAM_MODE"), "face")) { rc = faces(cam, cc, eh, codec, mcc); goto out; }
     int shown = env_int("HMCAM_DOT", 1);
     if (shown && dot(1)) { say("no dot on the screen: not streaming without it"); rc = 6; goto out; }   /* before the first frame can leave */
     if (shown) awake(1);

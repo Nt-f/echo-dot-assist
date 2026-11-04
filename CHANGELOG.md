@@ -4,6 +4,9 @@ What changed for people using the Echo, newest first. Details and measurements a
 
 ## 2026-11-04
 
+- **The Echo Show's face looks at you** (Eyes follow you, on the settings page's Screen page; off by default): its
+  eyes follow the nearest face the camera sees, by the camera's own face detector, on the Echo. No picture leaves
+  it, so no camera dot.
 - **The Echo Show 5's camera in Home Assistant**, through the Echo Local integration: live on dashboards, recordings,
   stills. Off by default (Features on the settings page, or the camera's own switch in Home Assistant). It runs only
   while someone looks, a red dot in the screen's corner shows meanwhile, the lens cover stops it, and the video goes

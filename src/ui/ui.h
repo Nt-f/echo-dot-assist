@@ -116,7 +116,9 @@ struct music {
     int req_next;
 };
 
-struct face { struct anim ew, lh, rh, gx, gy, mw, mh, ma, cr, cg, cb, br; long long blink_at, sacc_at, poke_at; float sgx, sgy, pokex; };
+/* lookx, looky: where the nearest face is (hassmic's "look", -1..1 of the screen as one faces it), look_at when it
+ * last said so: the eyes follow it for LOOK_MS after (face.c) */
+struct face { struct anim ew, lh, rh, gx, gy, mw, mh, ma, cr, cg, cb, br; long long blink_at, sacc_at, poke_at, look_at; float sgx, sgy, pokex, lookx, looky; };
 /* pos 0 closed .. 1 open, t where it goes; pulling: a finger has it (grab: where on it); from_app: pulled over an app
  * (from), the picture of it under the drawer */
 struct drawer { float pos, t, grab, vy; long long ty; int pulling, from_app, go, was_open;   /* was_open: the pull began on it open */ char from[96], go_pkg[96];

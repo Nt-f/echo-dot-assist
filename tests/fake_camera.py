@@ -3,7 +3,8 @@
 (testdata/camera_testsrc.h264: Baseline like the Echo's encoder, a key frame a second; looped), paced at 15 fps with the Echo's kind of
 pts (a boot clock in us, far from 0), until stdin ends.  The codec config first in a record of its own, as
 MediaCodec gives it.  FAKE_CAMERA_LOG: a file it appends "start"/"stop" to; FAKE_CAMERA_FAIL=1: exits at once (a
-camera another app has)."""
+camera another app has).  HMCAM_MODE=face: "faces" lines (FAKE_CAMERA_FACE: a rectangle, or a file holding one), as
+cam.c's face mode; FAKE_CAMERA_LOG gets "face <HMCAM_DOT>" and "face stop"."""
 import os, select, struct, sys, time
 
 FPS = 15
@@ -47,10 +48,24 @@ def rec(t, pts, data):
 def main():
     log = os.environ.get("FAKE_CAMERA_LOG")
     note = lambda w: log and open(log, "a").write(w + "\n")
-    note("start")
     if os.environ.get("FAKE_CAMERA_FAIL"):
+        note("start")
         print("camera: the camera did not open (-16): another app has it, or it is refused", file=sys.stderr)
         sys.exit(3)
+    if os.environ.get("HMCAM_MODE") == "face":            # the face's eyes: rectangles only, as cam.c's face mode
+        note("face " + os.environ.get("HMCAM_DOT", "?"))
+        face = os.environ.get("FAKE_CAMERA_FACE", "-400 -200 -200 100 98")   # (a file of its own names one that moves)
+        try:
+            while True:
+                r, _, _ = select.select([0], [], [], 0.1)
+                if r and not os.read(0, 64): break
+                f = open(face).read().strip() if os.path.exists(face) else face
+                if f: sys.stdout.write(f"faces {len(f.split()) // 5} {f}\n"); sys.stdout.flush()   # (cam.c: none when nobody is there)
+        except BrokenPipeError:
+            pass
+        note("face stop")
+        return
+    note("start")
     config, aus = units(open(SRC, "rb").read())
     pts, t0, i = 52_495_150_266, time.monotonic(), 0
     rec(1, 0, config)

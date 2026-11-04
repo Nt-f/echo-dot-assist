@@ -3358,3 +3358,15 @@ Run in this order. Each step says what it proves.
       05:18 UTC; not hassmic's doing as far as the code goes: nothing renames onto it), and zygote aborted every app
       start ("Failed to open /dev/null", Echo-Wall "keeps stopping"); `mknod -m 666 /dev/null c 1 3` + `chcon
       u:object_r:null_device:s0` fixed it.  Cause open.
+- [~] The face's eyes follow whoever is there (2026-11-04, checkers; setting `eyes_follow`, off).  cam.c face mode
+      (`HMCAM_MODE=face`, `HMCAM_DOT=0`): MediaTek's hardware face detector through Camera1 `startFaceDetection`, its
+      results taken off the thread's own MessageQueue (`MessageQueue.next`: Camera posts CAMERA_MSG_PREVIEW_METADATA
+      with the Face[] whether or not a listener is set, so no Java class of ours), lines `faces n l t r b score...`.
+      The preview needs a consumer that keeps taking frames: a SurfaceTexture nobody reads stopped it after two
+      (FDBuf's done queue held 2; single buffer mode: setBufferCount(4) refused), so it goes into the encoder at
+      640x480, 200 kbit/s, its output dropped in the process.  The detector says nothing while it sees nobody (a dark
+      empty room: no results at all), so silence is no stall there.  camera.c `face_thread`: runs while the UI says
+      `faceview 1` (face view, our layer in front, screen on, no drawer), nothing streams, the lens is open; a stream
+      stops it first; the largest face's centre to the UI as `look x y` (x turned round: LOOK_FLIP_X, to be checked
+      with someone in front), face.c holds a look 1.5 s.  `tests/fake_web_camera.py` (eyes part, with
+      hassmic-host-screen and a stand-in UI).  Open: seen with a face in front on the Show; LOOK_FLIP_X; its CPU.

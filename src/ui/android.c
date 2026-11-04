@@ -1025,7 +1025,7 @@ static void *ui_main(void *arg)
     p_apps(NULL);                                               /* the page's home app choice: the apps at once */
 
     static uint8_t in[ART_MAX + 4096]; size_t have = 0, art_need = 0, band_need = 0, img_need = 0; int shown = -1, img_size = 0; char img_key[40] = "";
-    long long next_front = 0, wake_watch = 0, frame_at = 0, hold_t0 = 0, next_hold = 0, next_touch = 0; int holding = 0, grip_as = 0;
+    long long next_front = 0, wake_watch = 0, frame_at = 0, hold_t0 = 0, next_hold = 0, next_touch = 0; int holding = 0, grip_as = 0, faceview = -1;
     for (;;) {
         long long now = mono_ms();
         /* the activity in front: often while one asked for is on its way (our last frame stands in for it till then) */
@@ -1057,6 +1057,8 @@ static void *ui_main(void *arg)
             next_hold = now + 100;
             if (drawn(env) || now - hold_t0 > 2500) { holding = 0; layer_show(env, &screen_l, 0); shown = 0; }
         } else if (!holding && vis != shown && (frame_at || !vis)) { layer_show(env, &screen_l, vis); shown = vis; }
+        int fv = shown == 1 && scene_face_shown(s);           /* hassmic's camera.c runs the face detector only while */
+        if (fv != faceview) { faceview = fv; printf("faceview %d\n", fv); fflush(stdout); }   /* the face can be seen */
         int wait = next < 0 ? (int)(next_front - now) : next;
         if (wait > next_front - now) wait = (int)(next_front - now);
         if (holding && wait > next_hold - now) wait = (int)(next_hold - now);

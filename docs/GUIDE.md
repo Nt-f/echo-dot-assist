@@ -939,6 +939,14 @@ alarms and the screen's setup), not the ESPHome one, and only to it.
 
 Why Echo Local and not ESPHome's camera entity, which would have needed no integration: [docs/camera.md](camera.md).
 
+### Eyes that follow you
+
+Off by default: **Eyes follow you** on the settings page (Screen). While the face is on the screen, its eyes look at
+the nearest face the camera sees, and go back to glancing about 1.5 s after nobody is there. Only the camera's own
+face detector runs, on the Echo: no picture is taken or kept and nothing goes anywhere, so the red dot stays off. The
+camera does run whenever the face shows, though, as long as this is on. Home Assistant watching the camera comes
+first; the eyes pick up again after. The lens cover stops it.
+
 ## Settings page
 
 Works in Wyoming mode too; the "Web UI address" entity shows the address.

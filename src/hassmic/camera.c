@@ -13,7 +13,7 @@
 #define _GNU_SOURCE
 #include "camera.h"
 #include "board.h"
-#include "core.h"
+#include "screen.h"
 
 #include <errno.h>
 #include <fcntl.h>
@@ -77,6 +77,118 @@ static void stop_locked(const char *why)
     fprintf(stderr, "camera: stream %d ended: %s\n", cur.id, why);
 }
 
+/* ---------------------------------------------------------------- the face's eyes (setting eyes_follow)
+ * While the screen shows the face (the UI's "faceview 1") and nothing streams, cam.c runs in its face mode: the hardware
+ * face detector's rectangles, one line a result, no picture.  The nearest face (the largest) goes to the UI as "look x y"
+ * (scene.c, face.c), -1000..1000 of the screen as one faces it: the sensor's x turned round (the camera looks out of the
+ * screen, so its left is the viewer's right) - LOOK_FLIP_X, checked on an Echo Show 5.  Nothing of it leaves the Echo:
+ * the rectangles go to the screen alone, not to Home Assistant.  A child that ends by itself is tried again after
+ * FACE_RETRY_MS (another app has the camera, say). */
+#define FACE_RETRY_MS 30000
+static pid_t spawn(int *in, int *out, int face);
+#define LOOK_FLIP_X   1
+static int eyes_on, faceview;
+static struct { pid_t pid; int in, out; long long failed_at; } fc = { 0, -1, -1, 0 };
+
+static void face_stop_locked(const char *why)
+{
+    if (!fc.pid) return;
+    if (fc.in >= 0) { close(fc.in); fc.in = -1; }            /* cam.c: stdin's end; its pipe out is the thread's to close */
+    pid_t p = fc.pid;
+    for (int i = 0; i < 20 && !kill(p, 0); i++) usleep(100000);  /* the camera is free once it is gone */
+    if (!kill(p, 0)) kill(p, SIGKILL);
+    fc.pid = 0;
+    fprintf(stderr, "camera: eyes follow off: %s\n", why);
+}
+
+int camera_eyes(int v)
+{
+    pthread_mutex_lock(&lk);
+    if (v >= 0) { eyes_on = !!v; if (!eyes_on) face_stop_locked("switched off"); }
+    int r = eyes_on;
+    pthread_mutex_unlock(&lk);
+    return r;
+}
+
+void camera_faceview(int v)
+{
+    pthread_mutex_lock(&lk);
+    faceview = !!v;
+    if (!faceview) face_stop_locked("the face is not shown");
+    pthread_mutex_unlock(&lk);
+}
+
+/* "faces n l t r b score ..." -> the largest's centre, or 0 */
+static int nearest(const char *l, int *x, int *y)
+{
+    int n, k, best = -1; long long area = 0;
+    if (sscanf(l, "faces %d%n", &n, &k) != 1) return 0;
+    l += k;
+    for (int i = 0; i < n; i++) {
+        int a, b, c, d, sc;
+        if (sscanf(l, "%d %d %d %d %d%n", &a, &b, &c, &d, &sc, &k) != 5) break;
+        l += k;
+        long long ar = (long long)(c - a) * (d - b);
+        if (ar > area) { area = ar; best = i; *x = (a + c) / 2; *y = (b + d) / 2; }
+    }
+    return best >= 0;
+}
+
+static void *face_thread(void *arg)
+{
+    (void)arg; char buf[2048]; size_t have = 0; int sent_x = 99999, sent_y = 99999; long long sent_at = 0;
+    for (;;) {
+        pthread_mutex_lock(&lk);
+        int want = eyes_on && faceview && lens_now() != 1 && !(cur.id && !cur.ended) && cur.out < 0 &&
+                   (!fc.failed_at || ms() - fc.failed_at > FACE_RETRY_MS);
+        if (want && !fc.pid && fc.out < 0) {
+            int in, out; pid_t pid = spawn(&in, &out, 1);
+            if (pid > 0) { fc.pid = pid; fc.in = in; fc.out = out; have = 0; fprintf(stderr, "camera: eyes follow on\n"); }
+            else fc.failed_at = ms();
+        } else if (!want && fc.pid) face_stop_locked(lens_now() == 1 ? "the lens was covered" : "not wanted now");
+        int fd = fc.out;
+        pthread_mutex_unlock(&lk);
+        if (fd < 0) { usleep(300000); continue; }
+        struct pollfd q = { fd, POLLIN, 0 };
+        int k = poll(&q, 1, 300);
+        if (k == 0 || (k < 0 && errno == EINTR)) continue;
+        ssize_t got = k > 0 ? read(fd, buf + have, sizeof buf - 1 - have) : -1;
+        if (got <= 0) {                                         /* the child is gone: stopped, or ended by itself */
+            pthread_mutex_lock(&lk);
+            close(fc.out); fc.out = -1;
+            if (fc.pid) { fc.pid = 0; if (fc.in >= 0) { close(fc.in); fc.in = -1; } fc.failed_at = ms();
+                          fprintf(stderr, "camera: eyes follow: the camera process ended (its log above says why), again in %d s\n", FACE_RETRY_MS / 1000); }
+            pthread_mutex_unlock(&lk);
+            screen_line("look -");
+            continue;
+        }
+        have += (size_t)got; buf[have] = 0;
+        char *nl, *l = buf;
+        while ((nl = strchr(l, '\n'))) {
+            *nl = 0; int x, y;
+            if (nearest(l, &x, &y)) {
+                x = LOOK_FLIP_X ? -x : x;
+                /* the UI holds a look 1.5 s (face.c LOOK_MS): said again within that, and at once when it moved */
+                if (abs(x - sent_x) > 30 || abs(y - sent_y) > 30 || ms() - sent_at > 500) {
+                    char o[40]; snprintf(o, sizeof o, "look %d %d", x, y); screen_line(o);
+                    sent_x = x; sent_y = y; sent_at = ms();
+                }
+            }
+            l = nl + 1;
+        }
+        have = strlen(l); memmove(buf, l, have + 1);
+        if (have > sizeof buf / 2) have = 0;                     /* (never a line that long) */
+    }
+    return NULL;
+}
+
+void camera_start(void)
+{
+    pthread_t t;
+    if (!camera_present() || !screen_present()) return;
+    if (!pthread_create(&t, NULL, face_thread, NULL)) pthread_detach(t);
+}
+
 int camera_enable(int v)
 {
     pthread_mutex_lock(&lk);
@@ -91,7 +203,7 @@ void camera_lens(int c)
     pthread_mutex_lock(&lk);
     if (covered != c) fprintf(stderr, "camera: lens %s\n", c ? "covered" : "open");
     covered = c;
-    if (c) stop_locked("the lens was covered");
+    if (c) { stop_locked("the lens was covered"); face_stop_locked("the lens was covered"); }
     pthread_mutex_unlock(&lk);
 }
 
@@ -107,20 +219,25 @@ size_t camera_json(char *o, size_t cap)
 }
 
 /* lk held */
-static pid_t spawn(int *in, int *out)
+/* face 0: a stream (HMCAM_DOT=1, pictures leave the Echo: the red dot shows); 1: the face's eyes (cam.c's face mode:
+ * face rectangles only, no picture leaves the process, so no dot) */
+static pid_t spawn(int *in, int *out, int face)
 {
     int pin[2], pout[2]; char dex[PATH_MAX], lib[PATH_MAX], cp[PATH_MAX + 16];
     const char *fake = getenv("HASSMIC_FAKE_CAMERA");
     next_to_me("screen.dex", dex, sizeof dex); next_to_me("libhmcam.so", lib, sizeof lib);
     snprintf(cp, sizeof cp, "CLASSPATH=%s", dex);
-    /* HMCAM_DOT=1: pictures leave the Echo, the red dot shows (cam.c); the face's own use, when it comes, sets 0 */
-    static char dot[] = "HMCAM_DOT=1";
+    static char dot1[] = "HMCAM_DOT=1", dot0[] = "HMCAM_DOT=0", mode[] = "HMCAM_MODE=face", fw[] = "HMCAM_W=640", fh[] = "HMCAM_H=480",
+                fk[] = "HMCAM_KBPS=200", ff[] = "HMCAM_FPS=10";
+    char *mine[] = { cp, face ? dot0 : dot1, mode, fw, fh, fk, ff };
+    size_t nmine = face ? 7 : 2;
     extern char **environ;
     size_t ne = 0; while (environ[ne]) ne++;
-    char **envp = malloc((ne + 3) * sizeof *envp);
+    char **envp = malloc((ne + nmine + 1) * sizeof *envp);
     if (!envp) return -1;
-    size_t m = 0; envp[m++] = cp; envp[m++] = dot;
-    for (size_t i = 0; i < ne; i++) if (strncmp(environ[i], "CLASSPATH=", 10) && strncmp(environ[i], "HMCAM_DOT=", 10)) envp[m++] = environ[i];
+    size_t m = 0;
+    for (size_t i = 0; i < nmine; i++) envp[m++] = mine[i];
+    for (size_t i = 0; i < ne; i++) if (strncmp(environ[i], "CLASSPATH=", 10) && strncmp(environ[i], "HMCAM_", 6)) envp[m++] = environ[i];
     envp[m] = NULL;
     long maxfd = sysconf(_SC_OPEN_MAX);
     if (maxfd < 0 || maxfd > 65536) maxfd = 65536;
@@ -155,7 +272,8 @@ int camera_begin(const char **why)
      * for the new pipe under a reader still polling it */
     else if ((cur.id && !cur.ended) || cur.out >= 0) *why = "busy";
     else {
-        int in, out; pid_t pid = spawn(&in, &out);
+        face_stop_locked("a stream wants the camera");          /* one client of the camera at a time: the stream's */
+        int in, out; pid_t pid = spawn(&in, &out, 0);
         if (pid < 0) *why = "failed";
         else {
             cur.id = id_next++; cur.pid = pid; cur.in = in; cur.out = out; cur.ended = 0; r = cur.id;

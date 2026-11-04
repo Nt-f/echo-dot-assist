@@ -114,6 +114,7 @@ void scene_launch_failed(struct scene *s, const char *pkg, long long now);   /* 
 /* the drawer is out (pulled or open): the grip above the layer is its top then, in its colour (SURF) and without its
  * handle, which the drawer has at its bottom */
 int  scene_drawer(const struct scene *s);
+int  scene_face_shown(const struct scene *s);    /* the face is what one sees (android.c's "faceview": its eyes may follow) */
 int  scene_visible(const struct scene *s);
 /* The next frame: the rectangle to redraw (empty: nothing changed), and in *next_ms when to ask again (-1: only
  * after an event).  Then scene_draw into a buffer whose clip is that rectangle, or a larger one if the buffer did

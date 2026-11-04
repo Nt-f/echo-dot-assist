@@ -74,6 +74,13 @@ int face_mode(struct scene *s)
     return M_IDLE;
 }
 
+/* The eyes following a face (camera.c "look"): as far as the glances go and a little more (0.07 / 0.05 of the
+ * screen), held LOOK_MS after the last word: the detector says nothing while it sees nobody, and a face turned away
+ * for a moment should not send the eyes off */
+#define LOOK_MS 1500
+#define LOOK_X  0.09f
+#define LOOK_Y  0.06f
+
 static void soon(long long *due, long long t, long long now) { if (t > now && (!*due || t < *due)) *due = t; }
 
 /* the soonest something changes by itself: a timed pattern's end, a blink, a glance */
@@ -85,6 +92,7 @@ long long face_due(struct scene *s)
         int m = face_mode(s);
         if (m != M_MUTE && m != M_DND) soon(&due, s->face.blink_at, s->now);
         if (m == M_IDLE || m == M_SETUP) soon(&due, s->face.sacc_at, s->now);
+        if (s->face.look_at) soon(&due, s->face.look_at + LOOK_MS, s->now);     /* the glances again when the face goes */
     }
     return due;
 }
@@ -140,7 +148,11 @@ static int eyes(struct scene *s, int m, float dt, float br)
     case M_SETUP: col = ORANGE; break;
     default: break;
     }
-    if (m == M_IDLE || m == M_SETUP) {                          /* glancing about now and then */
+    int looking = s->face.look_at && s->now - s->face.look_at < LOOK_MS &&
+                  (m == M_IDLE || m == M_SETUP || m == M_LISTEN || m == M_TALK || m == M_CALL || m == M_TIMER);
+    if (looking) {                                              /* at whoever is there (camera.c's face) */
+        gx += LOOK_X * s->face.lookx; gy += LOOK_Y * s->face.looky;
+    } else if (m == M_IDLE || m == M_SETUP) {                   /* glancing about now and then */
         if (s->now >= s->face.sacc_at) {
             int centre = frand(s) < 0.35f;
             s->face.sgx = centre ? 0 : (frand(s) - 0.5f) * 0.14f; s->face.sgy = centre ? 0 : (frand(s) - 0.5f) * 0.1f;

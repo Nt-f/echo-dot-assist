@@ -50,6 +50,7 @@
 #include "ringdesign.h"
 #include "ledq.h"
 #include "screen.h"
+#include "camera.h"
 #include "davs.h"
 #include "dropin.h"
 #include "micdenoise.h"
@@ -3579,6 +3580,7 @@ int main(int argc, char **argv)
     rd_start();                         /* designs asked for before this start: still installing, or back */
     kiosk_load();                                             /* the home app's config (kiosk.h), set from Home Assistant */
     screen_start();                                 /* a model with a screen: its UI process (screen.h) */
+    camera_start();                                 /* the face's eyes on the camera (camera.h), where there are both */
     audio_earcon_started = earcon_started;
     led("-u", "scone-setup");           /* a restart inside the pairing window: the window is gone, its chaser would loop on */
     led("-u", "factory-reset");         /* a reset asked for before this start is done (main.sh) */
