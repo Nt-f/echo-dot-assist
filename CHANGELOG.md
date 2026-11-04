@@ -2,6 +2,15 @@
 
 What changed for people using the Echo, newest first. Details and measurements are in [PLAN.md](PLAN.md).
 
+## 2026-11-04
+
+- **Switching apps from the drawer no longer flashes the face.** Picking an app in the drawer pulled over another left
+  hassmic's face on the screen for the second the new app took to start; the app you came from now stays until the
+  new one is up, as on Android.
+- **Echo-Wall's Home is arranged in Echo Local.** With Echo-Wall as an Echo's home app, Echo Local's sidebar panel has
+  a Home tab for that Echo: Echo-Wall's own editor, with its live preview. Echo-Wall's separate sidebar entry goes away
+  beside Echo Local. Without Echo-Wall's integration installed, the Screen tab links to it in HACS.
+
 ## 2026-11-03
 
 - **Uninstalling from an Echo Show no longer leaves "OOBE has stopped" on the screen.** The install takes Amazon's apps
