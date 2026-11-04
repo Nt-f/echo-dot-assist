@@ -576,8 +576,7 @@ No model `#ifdef`s in shared code: new differences become a board field, a `devi
   sets and unsets queued one behind the other go in one ledctrl (`LEDQ_BATCH`: it takes repeated -s/-u).  The
   beam: `com.amazon.ledd BeamDirection` via liblipc (dlopen), polled while listening (`hassmic_hold_N` when it moves).  PC: `HASSMIC_LED_ROOT` (for /system/etc), `HASSMIC_FAKE_LED` (ledctrl calls into a file),
   `HASSMIC_FAKE_BEAM`.
-- **Screen UI** (`src/ui/`, `screen.c`, `screen.h`; device.mk `SCREEN`, else `screen_none.c`; every Show; this fork's
-  additions: the touch gate, the drawer's app row, the home app contract): the
+- **Screen UI** (`src/ui/`, `screen.c`, `screen.h`; device.mk `SCREEN`, else `screen_none.c`; every Show): the
   Echo Show's own screen, small beside any app (Kiosk Satellite, View Assist...).  `src/ui/ui.h` lists the parts:
   `scene.c` (display list with a clip per item, diffed by id into one dirty rectangle; text cache by hash; image cache
   by key and shown size, asked of the platform once; touches: taps, long presses, HIT_DRAG sliders, scrollers with
@@ -653,7 +652,7 @@ TTS/media URLs from HA/MA). `otad`/`ace_otad` (firmware updates) must never get 
 16384–32767, so every listening port (26053 ESPHome, 16700 Wyoming, 28928 Sendspin, 28929 OTA, 28931 settings page, UDP 28930 arbitration)
 must stay in that range (UDP 28932 Drop In too). Exceptions: UDP 2330 (Kiosk Satellite's fixed port), which `lockdown.sh` admits only while
 `state/config` says `arbitration_mode=kiosk` (`kiosk_state`), and, where device.conf has `KIOSK_PACKAGE` (and the board `kiosk`, for the settings), the app's own TCP 2324 and 6053 from private addresses while it is installed; its uid may also reach the internet unless `kiosk_internet` is off (`KSUID`); and on the Shows the ports of any other app of the owner's whose
-"Network" is on (`state/apps` `lan <package>`, `lockdown.sh` `lan_ports`/`rules_in`: chain `hassmic_in`, the app's uid's
+"Open ports" is on (`state/apps` `lan <package>`, `lockdown.sh` `lan_ports`/`rules_in`: chain `hassmic_in`, the app's uid's
 listening TCP and bound UDP sockets from `/proc/net`, from private and link-local sources only; issue #109). Ping (ICMP echo request) is admitted from the private
 and link-local ranges of `LOCAL4` only. A stock rule hassmic comes to depend on (INPUT or OUTPUT) goes into `keep`, worded as `iptables -S`
 prints it.
