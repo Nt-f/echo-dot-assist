@@ -943,8 +943,9 @@ Why Echo Local and not ESPHome's camera entity, which would have needed no integ
 
 Off by default: **Eyes follow you** on the settings page (Screen). While the face is on the screen, its eyes look at
 the nearest face the camera sees, and go back to glancing about 1.5 s after nobody is there. Only the camera's own
-face detector runs, on the Echo: no picture is taken or kept and nothing goes anywhere, so the red dot stays off. The
-camera does run whenever the face shows, though, as long as this is on. Home Assistant watching the camera comes
+face detector runs, on the Echo: each frame is looked at in memory and let go, no picture is kept and nothing goes
+anywhere, so the red dot stays off. The camera does run whenever the face shows in a lit room (not in the dark,
+where it could not see you anyway), about a quarter of one processor core, as long as this is on. Home Assistant watching the camera comes
 first; the eyes pick up again after. The lens cover stops it.
 
 ## Settings page

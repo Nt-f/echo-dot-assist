@@ -3369,4 +3369,12 @@ Run in this order. Each step says what it proves.
       `faceview 1` (face view, our layer in front, screen on, no drawer), nothing streams, the lens is open; a stream
       stops it first; the largest face's centre to the UI as `look x y` (x turned round: LOOK_FLIP_X, to be checked
       with someone in front), face.c holds a look 1.5 s.  `tests/fake_web_camera.py` (eyes part, with
-      hassmic-host-screen and a stand-in UI).  Open: seen with a face in front on the Show; LOOK_FLIP_X; its CPU.
+      hassmic-host-screen and a stand-in UI).
+      MediaTek's hardware detector never ran for us: its start went to the adapter ("BaseCamAdapter::sendCommand bad
+      command(0x6)"), FDClient "FD was not running" at the stop, its queue's two frames never taken, with someone in
+      front for 20 s, recording hint on or off.  Now Android's software FaceDetector: preview into an ImageReader
+      (YV12, preview-format yuv420p), the luma halved to 320x240 grey in a buffer of ours, findFaces 3 times a second
+      (80 ms a frame on checkers: ~24 % of a core while the face shows); no picture kept or sent.  At 1 lux (night)
+      nobody is found, at 110 lux 12 of 39 frames had the face, its centre followed to one side (x -35 -> -730);
+      the eyes skip rooms under 5 lux (core_lux).  Open: LOOK_FLIP_X and the vertical offset (faces sat at y -650..-100:
+      the camera above the screen), seen on the Show by the user.

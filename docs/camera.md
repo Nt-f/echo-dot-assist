@@ -93,12 +93,16 @@ H.264 0.5 s after it, 1.9-2.0 s from the request to the first record with the VM
 
 ## The eyes (face mode)
 
-Setting `eyes_follow`: while the face is on the screen, cam.c runs with `HMCAM_MODE=face`: MediaTek's hardware face
-detector through Camera1's `startFaceDetection`, its results taken off the thread's own MessageQueue (Camera posts
-them there as `CAMERA_MSG_PREVIEW_METADATA` whether or not a listener is set: no Java class of ours). The preview
-goes into the encoder at 640x480 with its output dropped inside the process (a SurfaceTexture nobody reads stopped
-the preview after two frames); no picture is written out, so no dot. camera.c sends the largest face's centre to the
-UI as `look x y`; a stream from Home Assistant stops it first, the lens cover too.
+Setting `eyes_follow`: while the face is on the screen and the room is lit (5 lux or more), cam.c runs with
+`HMCAM_MODE=face`: the preview goes into an ImageReader (YV12), each frame's brightness is halved to 320x240 grey into
+one buffer of the process (overwritten by the next) and handed to Android's own face detector
+(`android.media.FaceDetector`), three times a second; only the faces' places are written out, no picture is kept or
+sent, so no dot. camera.c sends the largest face's centre to the UI as `look x y`; a stream from Home Assistant stops it
+first, the lens cover too. Measured on checkers: 80 ms of CPU a frame (~24 % of a core while the face shows); at 1
+lux nobody is found, at 110 lux a face in a third of the frames.
+
+MediaTek's hardware detector (Camera1 `startFaceDetection`, `max-num-detected-faces-hw=15`) did not run for a client
+of ours: its start went to the adapter ("bad command(0x6)"), FDClient said "FD was not running" at the stop.
 
 ## Later
 

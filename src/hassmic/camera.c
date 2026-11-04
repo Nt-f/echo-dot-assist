@@ -14,6 +14,7 @@
 #include "camera.h"
 #include "board.h"
 #include "screen.h"
+#include "core.h"
 
 #include <errno.h>
 #include <fcntl.h>
@@ -78,13 +79,14 @@ static void stop_locked(const char *why)
 }
 
 /* ---------------------------------------------------------------- the face's eyes (setting eyes_follow)
- * While the screen shows the face (the UI's "faceview 1") and nothing streams, cam.c runs in its face mode: the hardware
- * face detector's rectangles, one line a result, no picture.  The nearest face (the largest) goes to the UI as "look x y"
+ * While the screen shows the face (the UI's "faceview 1"), the room is lit and nothing streams, cam.c runs in its face
+ * mode: Android's software face detector on each frame in memory, its faces' places one line a result, no picture.  The nearest face (the largest) goes to the UI as "look x y"
  * (scene.c, face.c), -1000..1000 of the screen as one faces it: the sensor's x turned round (the camera looks out of the
  * screen, so its left is the viewer's right) - LOOK_FLIP_X, checked on an Echo Show 5.  Nothing of it leaves the Echo:
  * the rectangles go to the screen alone, not to Home Assistant.  A child that ends by itself is tried again after
  * FACE_RETRY_MS (another app has the camera, say). */
 #define FACE_RETRY_MS 30000
+#define EYES_MIN_LUX  5
 static pid_t spawn(int *in, int *out, int face);
 #define LOOK_FLIP_X   1
 static int eyes_on, faceview;
@@ -139,13 +141,16 @@ static void *face_thread(void *arg)
     (void)arg; char buf[2048]; size_t have = 0; int sent_x = 99999, sent_y = 99999; long long sent_at = 0;
     for (;;) {
         pthread_mutex_lock(&lk);
-        int want = eyes_on && faceview && lens_now() != 1 && !(cur.id && !cur.ended) && cur.out < 0 &&
+        /* the room's light (core_lux, NAN without a sensor): a face detector sees nobody in the dark (1 lux at night on
+         * checkers, someone in front: no face), so the camera stays off there */
+        float lux = core_lux(); int lit = lux != lux || lux >= EYES_MIN_LUX;
+        int want = eyes_on && faceview && lit && lens_now() != 1 && !(cur.id && !cur.ended) && cur.out < 0 &&
                    (!fc.failed_at || ms() - fc.failed_at > FACE_RETRY_MS);
         if (want && !fc.pid && fc.out < 0) {
             int in, out; pid_t pid = spawn(&in, &out, 1);
             if (pid > 0) { fc.pid = pid; fc.in = in; fc.out = out; have = 0; fprintf(stderr, "camera: eyes follow on\n"); }
             else fc.failed_at = ms();
-        } else if (!want && fc.pid) face_stop_locked(lens_now() == 1 ? "the lens was covered" : "not wanted now");
+        } else if (!want && fc.pid) face_stop_locked(lens_now() == 1 ? "the lens was covered" : !lit ? "too dark to see a face" : "not wanted now");
         int fd = fc.out;
         pthread_mutex_unlock(&lk);
         if (fd < 0) { usleep(300000); continue; }
