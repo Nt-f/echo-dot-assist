@@ -650,7 +650,13 @@ static void send_frame(const int16_t *pcm, int own)
         opus_encoder_ctl(enc, OPUS_SET_BITRATE, BITRATE); opus_encoder_ctl(enc, OPUS_SET_INBAND_FEC, 1);
         opus_encoder_ctl(enc, OPUS_SET_PACKET_LOSS_PERC, LOSS_PERC); opus_encoder_ctl(enc, OPUS_SET_COMPLEXITY, 5);
         opus_encoder_ctl(enc, OPUS_SET_SIGNAL, OPUS_SIGNAL_VOICE);
-        micgain_init(&gain, MICGAIN_LEVEL); micgain_start(&gain, 1);
+        /* The talker's level to start from: the last wake word's, as the pipeline does.  micgain's default (-50 dBFS,
+         * +24 dB) is a Dot's; the Echo Show 5 puts a talker at -60 dBFS (its wake words for three days, 2026-11-02..04),
+         * so every call went out 10 dB quiet until the gain had learnt from speech, which it does only on the frames
+         * RNNoise is sure of (a third of a talker's at that level).  Too low a guess costs nothing: the gain falls at once
+         * on louder speech, and the gate holds the room down meanwhile */
+        float kdb = core_keyword_db();
+        micgain_init(&gain, MICGAIN_LEVEL); micgain_start(&gain, kdb <= 0 && kdb > -80 ? kdb : 1);
         if (dn) md_reset(dn, DENOISE_DB); else dn = md_new(DENOISE_DB);
         es_c = -30; es_g = 1; dt_n = 0; far_hold = -100; floor_db = -70; near_until = 0; listen_on = 0; listen_at = 0; enc_gen = gen;
     }

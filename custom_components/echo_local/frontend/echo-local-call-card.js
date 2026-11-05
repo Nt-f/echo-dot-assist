@@ -153,11 +153,19 @@ class EchoLocalCallCard extends HTMLElement {
       error: (e) => { this.say('The camera stopped: ' + e.message); this.camOff(); },
     });
     this.enc.configure(cfg);
+    // Each frame drawn upright into the encoder's 640x360 first: a phone's camera hands VideoFrame(video) the sensor's
+    // pixels with the turn only as metadata (WebCodecs' rotation), which the encoder leaves out, so the Echo showed a
+    // phone's picture on its side; drawImage applies it.  A portrait camera goes in whole, with bars beside it.
+    const cv = document.createElement('canvas'); cv.width = cfg.width; cv.height = cfg.height;
+    const g = cv.getContext('2d', { alpha: false });
     let n = 0; const t0 = performance.now();
     this.camTimer = setInterval(() => {
-      if (!this.enc || this.enc.state !== 'configured' || v.readyState < 2) return;
+      if (!this.enc || this.enc.state !== 'configured' || v.readyState < 2 || !v.videoWidth) return;
       if (this.enc.encodeQueueSize > 2 || (this.ws && this.ws.bufferedAmount > 1 << 20)) return;   // behind: skip one
-      const f = new VideoFrame(v, { timestamp: Math.round((performance.now() - t0) * 1000) });
+      const k = Math.min(cv.width / v.videoWidth, cv.height / v.videoHeight), w = v.videoWidth * k, h = v.videoHeight * k;
+      g.fillStyle = '#000'; g.fillRect(0, 0, cv.width, cv.height);
+      g.drawImage(v, (cv.width - w) / 2, (cv.height - h) / 2, w, h);
+      const f = new VideoFrame(cv, { timestamp: Math.round((performance.now() - t0) * 1000) });
       this.enc.encode(f, { keyFrame: n++ % 15 === 0 }); f.close();
     }, 1000 / 15);
     this.$.cam.classList.add('on');
