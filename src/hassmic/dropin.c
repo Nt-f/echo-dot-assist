@@ -142,6 +142,14 @@ static int answer_ms = ANSWER_MS, lost_ms = LOST_MS;
  * 2026-10-08).  A reply 0.5 s after the other side stops passes at -48 dBFS in micAsr, a quiet one after a second */
 #define FAR_FALL    0.4f
 #define LISTEN_HANG_MS 1500
+/* A high-pass ahead of everything in the call (RNNoise, levels, gain, what goes out): 4th-order Butterworth at 200 Hz,
+ * -18 dB at 120 Hz.  The Echo Show 5's front end passes everything over 80 Hz (AFE.cfg's HPF), and a mains hum came
+ * through it: 109..125 Hz, the room at -59 dBFS with it, -69 without (high-passed at 200 Hz), coming and going within
+ * minutes.  A talker at normal voice there is -63 dBFS over 200 Hz (2026-11-05, 25 s recorded), so the gain at its
+ * +36 dB top sent the hum out at -23 dBFS and the voice at -27: what Home Assistant heard was mostly hum, and the gain
+ * learnt the hum's level as the talker's.  Under 200 Hz a call loses only a low voice's fundamental (telephony cuts at
+ * 300); RNNoise's speech frames (corpus, 0.7) 90 -> 86 % at -55 dBFS over the hum */
+#define HPF_HZ      200.0
 
 enum { M_INVITE = 1, M_ACCEPT, M_RINGING, M_REFUSE, M_BYE };
 enum { CAP_SHOWS = 1, CAP_SENDS = 2 };
@@ -206,6 +214,32 @@ static long long now_ms(void)
 {
     struct timespec ts; clock_gettime(CLOCK_MONOTONIC, &ts);
     return (long long)ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
+}
+
+static struct { float b0, b1, b2, a1, a2, x1, x2, y1, y2; } hpf[2];   /* the capture thread's: two biquads */
+
+static void hpf_reset(void)
+{
+    static const double q[2] = { 0.54119610, 1.30656296 };              /* Butterworth's 4th order as two sections */
+    double w = 2 * M_PI * HPF_HZ / RATE, c = cos(w);
+    for (int k = 0; k < 2; k++) {
+        double al = sin(w) / (2 * q[k]), a0 = 1 + al;
+        hpf[k].b0 = (float)((1 + c) / 2 / a0); hpf[k].b1 = (float)(-(1 + c) / a0); hpf[k].b2 = hpf[k].b0;
+        hpf[k].a1 = (float)(-2 * c / a0); hpf[k].a2 = (float)((1 - al) / a0);
+        hpf[k].x1 = hpf[k].x2 = hpf[k].y1 = hpf[k].y2 = 0;
+    }
+}
+
+static void hpf_run(const int16_t *in, int16_t *out, size_t n)
+{
+    for (size_t i = 0; i < n; i++) {
+        float v = in[i];
+        for (int k = 0; k < 2; k++) {
+            float y = hpf[k].b0 * v + hpf[k].b1 * hpf[k].x1 + hpf[k].b2 * hpf[k].x2 - hpf[k].a1 * hpf[k].y1 - hpf[k].a2 * hpf[k].y2;
+            hpf[k].x2 = hpf[k].x1; hpf[k].x1 = v; hpf[k].y2 = hpf[k].y1; hpf[k].y1 = y; v = y;
+        }
+        out[i] = (int16_t)(v > 32767 ? 32767 : v < -32768 ? -32768 : lrintf(v));
+    }
 }
 
 static float level_db(const int16_t *s, size_t n)
@@ -659,8 +693,10 @@ static void send_frame(const int16_t *pcm, int own)
         micgain_init(&gain, MICGAIN_LEVEL); micgain_start(&gain, kdb <= 0 && kdb > -80 ? kdb : 1);
         if (dn) md_reset(dn, DENOISE_DB); else dn = md_new(DENOISE_DB);
         es_c = -30; es_g = 1; dt_n = 0; far_hold = -100; floor_db = -70; near_until = 0; listen_on = 0; listen_at = 0; enc_gen = gen;
+        hpf_reset();
     }
-    int16_t f[FRAME];
+    int16_t f[FRAME], hp[FRAME];
+    hpf_run(pcm, hp, FRAME); pcm = hp;                 /* the hum out first (HPF_HZ says why) */
     float m = level_db(pcm, FRAME), target = 1, vad = 0; long long now = now_ms(); int farend, near;
     /* RNNoise in its two 10 ms frames: the louder one's probability (a syllable's onset in either opens it); its output
      * goes out, 12 ms behind, which nothing here needs to know: the levels below are the mic's own */

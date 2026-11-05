@@ -6,7 +6,8 @@ What changed for people using the Echo, newest first. Details and measurements a
 
 - **Drop In: you are heard at a normal voice from the first word** (Echo Show especially): a call started the Echo's
   microphone gain from a Dot's level, 10 dB under what an Echo Show 5 needs, and it caught up only slowly. It now
-  starts from your last wake word's level. **A phone's camera in the Drop In card** reached the Echo Show on its side;
+  starts from your last wake word's level. A low hum in the room (mains, a fridge: under 200 Hz) is taken out of the
+  call's sound first: on an Echo Show 5 it came out louder than the voice. **A phone's camera in the Drop In card** reached the Echo Show on its side;
   it is upright now, and a phone held upright shows whole with bars beside it. **The settings page** was blank after
   the last update (a typo in the camera's help text). Echo Local 2026.11.21.
 - **Drop In with video starts frosted, as Amazon's does** (Echo Show): when you drop in on an Echo Show that did not
