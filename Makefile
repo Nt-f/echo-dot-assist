@@ -251,6 +251,7 @@ UNIT_TESTS += errsay
 UNIT_TESTS += apps
 UNIT_TESTS += lockdown
 UNIT_TESTS += touchgate
+UNIT_TESTS += web_syntax
 unit: $(addprefix unit-,$(UNIT_TESTS))
 
 # errsay.c: Home Assistant's pipeline errors as the sentences the Echo says
@@ -325,6 +326,10 @@ unit-a2dp_codecs:
 	cc -O2 -Wall -Isrc/hassmic tests/unit/a2dp_codecs_test.c src/hassmic/a2dp_codecs.c src/hassmic/sbc.c src/third_party/freeaptx.c -lm -ldl -lopus -o build/a2dp_codecs_test && build/a2dp_codecs_test
 unit-sbc:
 	if command -v sbcenc >/dev/null; then tests/unit/sbc_ref.sh; else echo "sbc: sbcenc/sbcdec (package sbc) missing, skipped"; fi
+# every script of the page parses: one stray quote in a help text and the page is blank (app.js, 2026-11-04)
+unit-web_syntax:
+	if command -v node >/dev/null; then for f in web/*.js; do node --check $$f || exit 1; done; elif [ -n "$$CI" ]; then echo "web syntax: node missing"; exit 1; else echo "web syntax: node missing, skipped"; fi
+
 unit-web_crypto:
 	if command -v node >/dev/null; then .venv/bin/python tests/unit/web_crypto_test.py; elif [ -n "$$CI" ]; then echo "web crypto: node missing"; exit 1; else echo "web crypto: node missing, skipped"; fi
 unit-kiosk:
