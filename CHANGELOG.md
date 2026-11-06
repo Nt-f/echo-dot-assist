@@ -2,6 +2,13 @@
 
 What changed for people using the Echo, newest first. Details and measurements are in [PLAN.md](PLAN.md).
 
+## 2026-11-05
+
+- **The Drop In card over plain http** (Home Assistant opened as `http://`, Firefox and Chrome alike) said "No sound
+  here" and played nothing. It now plays the Echo's sound and says that the picture and your microphone need Home
+  Assistant over https or the app (browsers allow neither on an http page). **Your microphone in Firefox** works
+  in the card now; before, a call from Firefox was listen-only even over https. Echo Local 2026.11.22.
+
 ## 2026-11-04
 
 - **Drop In: you are heard at a normal voice from the first word** (Echo Show especially): a call started the Echo's
