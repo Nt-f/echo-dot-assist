@@ -156,6 +156,7 @@ int       music_open(unsigned rate, unsigned channels) { return s_open(&music, r
 long long music_queued_us(void) { return s_queued_us(&music); }
 int       music_write(const void *data, size_t len) { return s_write(&music, data, len); }
 void      music_close(void) { s_close(&music); }
+long long music_prime_us(void) { return 0; }                /* the queue is a model at playback speed: no burst */
 int       bt_open(unsigned rate, unsigned channels) { return s_open(&bt, rate, channels, MIXER_PLAY_MUSIC); }
 long long bt_queued_us(void) { return s_queued_us(&bt); }
 int       bt_write(const void *data, size_t len) { return s_write(&bt, data, len); }
@@ -282,7 +283,9 @@ int audio_a2dp_route(int on, uint64_t addr, const char *name)
     char *get[] = { "/system/bin/lipc-get-prop", "-s", "com.doppler.audiod", "OutputDevice", NULL };
     long long t = mono_us();
     core_run(set, out, sizeof out);
-    for (int i = 0; i < 20; i++) {                      /* the mixer's playback thread switches a moment later */
+    /* the mixer's playback thread switches a moment later.  Asked once at least (the line below logs its answer), then
+     * until 5 s from the start of the set: a lipc that hangs takes core_run's 20 s each time */
+    for (int i = 0; i < 20 && (i == 0 || mono_us() - t < 5000000); i++) {
         core_run(get, out, sizeof out);
         if (!strncmp(out, on ? "BT##" : "SPEAKER##", on ? 4 : 9)) break;
         usleep(100000);

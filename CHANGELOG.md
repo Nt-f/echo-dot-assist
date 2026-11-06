@@ -8,6 +8,11 @@ What changed for people using the Echo, newest first. Details and measurements a
   here" and played nothing. It now plays the Echo's sound and says that the picture and your microphone need Home
   Assistant over https or the app (browsers allow neither on an http page). **Your microphone in Firefox** works
   in the card now; before, a call from Firefox was listen-only even over https. Echo Local 2026.11.22.
+- **Echo Dot 3: the unlock can leave the Echo unusable; the setup now warns before it.** On two Echo Dot 3s the
+  unlock (kamakiri) ran through without an error, yet left the Echo locked and unusable, and no way on from there has
+  been found (issue #112). Echos that were updated recently may become unusable; the full extent is currently unknown.
+  Until the cause is known, the setup says so and asks before it unlocks; the default answer is not to. If fastboot
+  turns out locked after the unlock, it points to the issue before anyone runs the unlock again.
 
 ## 2026-11-04
 
@@ -71,6 +76,19 @@ What changed for people using the Echo, newest first. Details and measurements a
 - **Echo-Wall's Home is arranged in Echo Local.** With Echo-Wall as an Echo's home app, Echo Local's sidebar panel has
   a Home tab for that Echo: Echo-Wall's own editor, with its live preview. Echo-Wall's separate sidebar entry goes away
   beside Echo Local. Without Echo-Wall's integration installed, the Screen tab links to it in HACS.
+- **Echo Show 5, Show 5 2nd gen and Show 8 (1st gen): the screen turns off on time.** hassmic sets how soon the
+  screen turns off (5 minutes, 1 minute while muted or on Do not disturb, as stock) with Android's `settings`, which
+  on these Echos is a shell script without a `#!` line: started directly it failed, and the setting was never made.
+  hassmic now runs such a script through the shell, as a shell would. A tool that hangs now holds up the part of
+  hassmic that asked for 20 seconds at most and is then stopped, and what a tool prints as an error reaches the log.
+- **Echo Shows: the screen's face comes up right after the install** (issue #122). Installed by the setup, the
+  screen's own UI never started: the screen stayed black but for the light band, until the first update arrived.
+  Android lets the screen's program load its library only from a few folders, and the system partition, where the
+  install puts hassmic, is not one of them (updates live in `/data`, which is); hassmic now tells it where to look,
+  in a way Android does not ignore. Seen on an Echo Show 5 2nd gen, checked on an Echo Show 5.
+- **Echo Show 5 and Show 5 2nd gen: the screen at a fixed brightness**, as on the Show 8s. Android's automatic
+  brightness took the screen down to almost nothing in a dim room. Where Kiosk Satellite is installed, it sets the
+  brightness, as before: its own adaptive brightness or the level chosen in it (on every Echo Show).
 
 ## 2026-11-03
 

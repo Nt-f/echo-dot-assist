@@ -17,16 +17,21 @@ PKGS="$ALEXA_PACKAGES $SETUP_PACKAGES $UPDATE_PACKAGES"
 # all of it pm, settings and wpa_cli below), and at every start but the first there is nothing to do.  So the package
 # manager's own files first (plain XML up to Android 11): a package not in packages.xml is not installed, one with
 # enabled 2/3/4 in package-restrictions.xml is what "pm list packages -d" calls disabled.  Absence only counts when
-# packages.xml has "android" in it (a file half written, or another format, says nothing).  Anything not shown done
-# there goes to pm as before: the files can only save calls, never one that is needed.
+# packages.xml ends in </packages>: the package manager writes it again in place after many a change, and a file half
+# written lacks packages without saying so ("android" is a quarter of the way in on checkers, Alexa's updated apps in
+# /data/app after it); another format says nothing either.  Anything not shown done there goes to pm as before: the
+# files can only save calls, never one that is needed.  Not quite: package-restrictions.xml is written 10 s after a
+# change, so a pm enable within 10 s before this run would still read as disabled; nothing runs alexa-on.sh that close
+# (stock-online's is a boot before), and the next start puts it right.  Names as fixed strings: a dot is no wildcard.
 PM=/data/system/packages.xml PMR=/data/system/users/0/package-restrictions.xml
 pm_done() {
-    grep -q '<package name="android"' $PM 2>/dev/null || return 1
+    grep -q '^</packages>' $PM 2>/dev/null || return 1
     for p in $PKGS; do
         case "$p" in */*) grep -qx "$p" $DISABLED 2>/dev/null && continue; return 1;; esac
-        grep -q "<package name=\"$p\"" $PM || continue
-        grep "<pkg name=\"$p\"" $PMR 2>/dev/null | grep -q 'enabled="[234]"' || return 1
+        grep -qF "<package name=\"$p\"" $PM || continue
+        grep -F "<pkg name=\"$p\"" $PMR 2>/dev/null | grep -q 'enabled="[234]"' || return 1
     done
+    return 0
 }
 if [ -n "$(echo $PKGS)" ] && command -v pm > /dev/null && ! pm_done; then
     NL='
@@ -51,14 +56,20 @@ fi
 # (checkers after a wipe: both 0, Amazon's com.amazon.ds2.oobe.efd in front, 2026-10-13).  What they were is written
 # down (SETTINGS, "namespace key value"): alexa-on.sh puts it back, and the wizard with it.
 # The same way, ANDROID_SETTINGS of device.conf ("namespace/key=value" each): Android's own settings for a satellite.
+# The brightness level is left to Kiosk Satellite while it is installed: it writes it itself (WRITE_SETTINGS, main.sh
+# kiosk_grants), from the light sensor by default (120 to 155 at 20 to 45 lux within seconds, checkers 2026-11-04) or
+# at a level of its own, and ours would only fight it at each start.  The manual mode stays: its adaptive brightness
+# runs under it.  The app's folder, as kiosk_tick looks: pm is a whole runtime.
 SETTINGS=/data/local/hassmic/alexa-settings
 if command -v settings > /dev/null; then
     want=; [ -n "$(echo $SETUP_PACKAGES)" ] && want="global/device_provisioned=1 secure/user_setup_complete=1"
+    kiosk=; [ -n "$KIOSK_PACKAGE" ] && [ -n "$(ls -d /data/app/$KIOSK_PACKAGE-* 2>/dev/null)" ] && kiosk=1
     for t in $want $ANDROID_SETTINGS; do
         ns=${t%%/*} kv=${t#*/}; k=${kv%%=*} val=${kv#*=}
+        [ -n "$kiosk" ] && [ "$ns/$k" = system/screen_brightness ] && continue
         # SettingsProvider's own file first (plain XML up to Android 11; it writes within 200 ms of a change): already
         # the value, no Java call (~2 s each, checkers).  Anything else asks settings as before
-        grep -q "name=\"$k\" value=\"$val\"" /data/system/users/0/settings_$ns.xml 2>/dev/null && continue
+        grep -qF "name=\"$k\" value=\"$val\"" /data/system/users/0/settings_$ns.xml 2>/dev/null && continue
         v=$(settings get $ns $k 2>/dev/null | tr -d '\r')
         [ "$v" = "$val" ] && continue
         grep -q "^$ns $k " $SETTINGS 2>/dev/null || echo "$ns $k ${v:-null}" >> $SETTINGS
